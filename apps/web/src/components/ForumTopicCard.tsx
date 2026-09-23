@@ -3,6 +3,7 @@ import type { ForumTopicSummary } from "@scl/shared";
 import { Icon } from "./Icon";
 import { ForumContextBadge } from "./ForumContextBadge";
 import { formatDateTime } from "../lib/format";
+import { useLocale } from "../i18n/LocaleContext";
 
 interface ForumTopicCardProps {
   topic: ForumTopicSummary;
@@ -14,6 +15,7 @@ const totalReactions = (t: ForumTopicSummary) => Object.values(t.reactions.count
 
 /** One row in a topic list: title, author/category/project/date, a short excerpt, comment/reaction counts. */
 export function ForumTopicCard({ topic, showCategory = true }: ForumTopicCardProps) {
+  const { locale, t } = useLocale();
   const reactions = totalReactions(topic);
   return (
     <li>
@@ -49,15 +51,15 @@ export function ForumTopicCard({ topic, showCategory = true }: ForumTopicCardPro
             </>
           )}
           {" · "}
-          {formatDateTime(topic.lastActivityAt)}
+          {formatDateTime(topic.lastActivityAt, locale)}
         </p>
         {topic.excerpt && <p className="topic-row__excerpt">{topic.excerpt}</p>}
         <div className="topic-row__stats">
           <span>
-            <Icon name="file" size={14} /> {topic.commentCount} {topic.commentCount === 1 ? "comment" : "comments"}
+            <Icon name="file" size={14} /> {t(topic.commentCount === 1 ? "forum.commentCountOne" : "forum.commentCountOther", { count: topic.commentCount })}
           </span>
           <span>
-            <Icon name="check" size={14} /> {reactions} {reactions === 1 ? "reaction" : "reactions"}
+            <Icon name="check" size={14} /> {t(reactions === 1 ? "forum.reactionCountOne" : "forum.reactionCountOther", { count: reactions })}
           </span>
         </div>
       </article>

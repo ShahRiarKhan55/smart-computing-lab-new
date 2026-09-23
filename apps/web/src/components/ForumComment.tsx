@@ -6,6 +6,7 @@ import { ForumBody } from "./ForumBody";
 import { ForumReactionBar } from "./ForumReactionBar";
 import { ApiError } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+import { useLocale } from "../i18n/LocaleContext";
 
 interface ForumCommentProps {
   comment: ForumCommentType;
@@ -18,6 +19,7 @@ interface ForumCommentProps {
 
 /** One flat comment (Phase 11 keeps comments one level deep — no reply threading). */
 export function ForumComment({ comment, canReact, onReact, onEdit, onRequestDelete }: ForumCommentProps) {
+  const { locale, t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function ForumComment({ comment, canReact, onReact, onEdit, onRequestDele
       await onEdit(draft);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setBusy(false);
     }
@@ -57,16 +59,16 @@ export function ForumComment({ comment, canReact, onReact, onEdit, onRequestDele
               <span className="comment__author">{comment.author.name}</span>
             )}
             <span className="comment__time">
-              {formatDateTime(comment.createdAt)}
-              {comment.editedAt && " · edited"}
-              {isHidden && " · hidden by a moderator"}
+              {formatDateTime(comment.createdAt, locale)}
+              {comment.editedAt && ` · ${t("forum.edited")}`}
+              {isHidden && ` · ${t("forum.hiddenByModerator")}`}
             </span>
           </div>
 
           {editing ? (
             <div className="form-group">
               <label htmlFor={`comment-edit-${comment.id}`} className="sr-only">
-                Edit comment
+                {t("forum.editCommentSr")}
               </label>
               <textarea id={`comment-edit-${comment.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} maxLength={5000} disabled={busy} />
               {error && (
@@ -76,7 +78,7 @@ export function ForumComment({ comment, canReact, onReact, onEdit, onRequestDele
               )}
               <div className="comment__actions">
                 <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={busy || draft.trim() === ""}>
-                  {busy ? "Saving…" : "Save"}
+                  {busy ? t("common.saving") : t("common.save")}
                 </button>
                 <button
                   type="button"
@@ -88,7 +90,7 @@ export function ForumComment({ comment, canReact, onReact, onEdit, onRequestDele
                   }}
                   disabled={busy}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>
@@ -103,12 +105,12 @@ export function ForumComment({ comment, canReact, onReact, onEdit, onRequestDele
                 <div className="comment__actions">
                   {comment.canEdit && (
                     <button type="button" className="btn btn--link btn--sm" onClick={() => setEditing(true)}>
-                      Edit
+                      {t("common.edit")}
                     </button>
                   )}
                   {comment.canDelete && (
                     <button type="button" className="btn btn--link btn--sm" onClick={onRequestDelete}>
-                      Delete
+                      {t("common.delete")}
                     </button>
                   )}
                 </div>

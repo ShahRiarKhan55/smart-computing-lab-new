@@ -19,12 +19,14 @@ import { ForumModerationControls } from "../../components/ForumModerationControl
 import { ForumMoveTopicModal } from "../../components/ForumMoveTopicModal";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
 import { formatDateTime } from "../../lib/format";
+import { useLocale } from "../../i18n/LocaleContext";
 
 /** /community/forum/topic/:id — the original post, reactions, and a flat comment thread. */
 export function ForumTopicPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const policy = usePolicy();
+  const { locale, t } = useLocale();
   const [params, setParams] = useSearchParams();
   const commentsPage = /^\d{1,5}$/.test(params.get("page") ?? "") ? Number(params.get("page")) : 1;
 
@@ -42,9 +44,9 @@ export function ForumTopicPage() {
   if (loading && (!topic || topic.id !== id)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Community" }, { label: "Forum", to: "/community/forum" }, { label: "Loading…" }]} title="Loading…" />
+        <PageHeader crumbs={[{ label: t("nav.community") }, { label: t("nav.forum"), to: "/community/forum" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
-          <LoadingState label="Loading topic…" variant="text" />
+          <LoadingState label={t("forum.loadingTopic")} variant="text" />
         </div>
       </>
     );
@@ -52,11 +54,14 @@ export function ForumTopicPage() {
   if (status === 404 || (!topic && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Community" }, { label: "Forum", to: "/community/forum" }, { label: "Not found" }]} title="Topic not found" />
+        <PageHeader
+          crumbs={[{ label: t("nav.community") }, { label: t("nav.forum"), to: "/community/forum" }, { label: t("common.notFoundCrumb") }]}
+          title={t("forum.topicNotFoundTitle")}
+        />
         <div className="container">
-          <ErrorState message={status === 404 ? "This topic could not be found." : (error ?? "Could not load this topic.")} onRetry={status === 404 ? undefined : reload} />
+          <ErrorState message={status === 404 ? t("forum.topicNotFoundMsg") : (error ?? t("forum.couldNotLoadTopic"))} onRetry={status === 404 ? undefined : reload} />
           <Link to="/community/forum" className="btn btn--secondary btn--sm">
-            <Icon name="arrow-left" size={14} /> Forum
+            <Icon name="arrow-left" size={14} /> {t("nav.forum")}
           </Link>
         </div>
       </>
@@ -70,7 +75,7 @@ export function ForumTopicPage() {
       if (!projects) setProjects(await apiFetch<ProjectSummary[]>("/projects"));
       if (!people) setPeople(await apiFetch<TeamMember[]>("/team"));
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load the form.");
+      setActionError(err instanceof ApiError ? err.message : t("common.couldNotLoadForm"));
     }
   }
 
@@ -79,7 +84,7 @@ export function ForumTopicPage() {
     try {
       if (!categories) setCategories(await apiFetch<ForumCategory[]>("/forum/categories"));
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load categories.");
+      setActionError(err instanceof ApiError ? err.message : t("forum.couldNotLoadCategories"));
     }
   }
 
@@ -89,7 +94,7 @@ export function ForumTopicPage() {
       await apiFetch(`/forum/posts/${topic!.id}/${action}`, { method: "POST" });
       reload();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setActionError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     }
   }
 
@@ -109,8 +114,8 @@ export function ForumTopicPage() {
     <>
       <PageHeader
         crumbs={[
-          { label: "Community" },
-          { label: "Forum", to: "/community/forum" },
+          { label: t("nav.community") },
+          { label: t("nav.forum"), to: "/community/forum" },
           { label: topic.category.name, to: `/community/forum/category/${topic.category.slug}` },
           { label: topic.title },
         ]}
@@ -120,12 +125,12 @@ export function ForumTopicPage() {
       <div className="container">
         {(topic.canEdit || topic.canDelete || topic.canModerate) && (
           <AdminBar
-            text={topic.canModerate ? "Moderate this topic." : "You wrote this topic: edit or delete it."}
+            text={topic.canModerate ? t("forum.moderateThisTopic") : t("forum.editOrDeleteOwn")}
             actions={
               <>
                 {topic.canEdit && (
                   <button className="btn btn--secondary btn--sm" type="button" onClick={() => ensureLists().then(() => setEditOpen(true))}>
-                    Edit
+                    {t("common.edit")}
                   </button>
                 )}
                 <ForumModerationControls
@@ -138,7 +143,7 @@ export function ForumTopicPage() {
                 />
                 {topic.canDelete && !topic.canModerate && (
                   <button className="btn btn--danger btn--sm" type="button" onClick={() => setDeleteTopicOpen(true)}>
-                    Delete
+                    {t("common.delete")}
                   </button>
                 )}
               </>
@@ -151,7 +156,7 @@ export function ForumTopicPage() {
           <ForumContextBadge pinned={topic.pinned} locked={topic.locked} status={topic.status} />
           {topic.project && (
             <span className="detail-meta__item">
-              <Icon name="folder" size={14} /> Project:{" "}
+              <Icon name="folder" size={14} /> {t("forum.projectLabel")}{" "}
               <Link to={`/projects/${topic.project.id}`} className="link">
                 {topic.project.title}
               </Link>
@@ -168,20 +173,21 @@ export function ForumTopicPage() {
             topic.author.name
           )}
           {" · "}
-          {formatDateTime(topic.createdAt)}
-          {topic.editedAt && ` · edited ${formatDateTime(topic.editedAt)}`}
+          {formatDateTime(topic.createdAt, locale)}
+          {topic.editedAt && ` · ${t("forum.editedAt", { date: formatDateTime(topic.editedAt, locale) })}`}
         </p>
 
         <ForumBody text={topic.body} />
 
         <p className="text-sm text-muted">
-          {totalReactions} {totalReactions === 1 ? "reaction" : "reactions"} · {topic.commentCount} {topic.commentCount === 1 ? "comment" : "comments"}
+          {t(totalReactions === 1 ? "forum.reactionCountOne" : "forum.reactionCountOther", { count: totalReactions })} ·{" "}
+          {t(topic.commentCount === 1 ? "forum.commentCountOne" : "forum.commentCountOther", { count: topic.commentCount })}
         </p>
         <ForumReactionBar reactions={topic.reactions} canReact={policy.canReactForum} onToggle={reactToPost} />
 
         <section aria-labelledby="topic-comments" className="detail-section">
           <h2 id="topic-comments" className="section-header__title">
-            Comments ({topic.commentCount})
+            {t("forum.commentsHeading", { count: topic.commentCount })}
           </h2>
           <ForumCommentList
             comments={topic.comments}
@@ -198,7 +204,7 @@ export function ForumTopicPage() {
 
           {topic.locked ? (
             <p className="forum-note forum-note--locked">
-              <Icon name="lock" size={14} /> This topic is locked: new comments are not accepted.
+              <Icon name="lock" size={14} /> {t("forum.topicLockedNote")}
             </p>
           ) : policy.canCommentForum ? (
             <ForumCommentComposer
@@ -211,7 +217,7 @@ export function ForumTopicPage() {
             />
           ) : (
             <p className="forum-note">
-              <Link to="/login">Log in</Link> to join the discussion.
+              <Link to="/login">{t("nav.login")}</Link> {t("forum.toJoinDiscussion")}
             </p>
           )}
         </section>
@@ -244,8 +250,8 @@ export function ForumTopicPage() {
 
       <ConfirmDeleteModal
         open={deleteTopicOpen}
-        title="Delete topic"
-        message={`Delete "${topic.title}"? Its comments go with it. This cannot be undone.`}
+        title={t("forum.deleteTopicTitle")}
+        message={t("forum.deleteTopicMessage", { title: topic.title })}
         onClose={() => setDeleteTopicOpen(false)}
         onConfirm={async () => {
           await apiFetch(`/forum/posts/${topic.id}`, { method: "DELETE" });
@@ -255,8 +261,8 @@ export function ForumTopicPage() {
 
       <ConfirmDeleteModal
         open={deleteCommentId !== null}
-        title="Delete comment"
-        message="Delete this comment? This cannot be undone."
+        title={t("forum.deleteCommentTitle")}
+        message={t("forum.deleteCommentMessage")}
         onClose={() => setDeleteCommentId(null)}
         onConfirm={async () => {
           await apiFetch(`/forum/comments/${deleteCommentId}`, { method: "DELETE" });

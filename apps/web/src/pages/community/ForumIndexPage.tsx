@@ -14,9 +14,11 @@ import { ForumCategoryCard } from "../../components/ForumCategoryCard";
 import { ForumTopicList } from "../../components/ForumTopicList";
 import { ForumComposer } from "../../components/ForumComposer";
 import { ForumCategoryFormModal } from "../../components/ForumCategoryFormModal";
+import { useT } from "../../i18n/LocaleContext";
 
 /** /community/forum — categories (from the database, never hard-coded) + latest activity. */
 export function ForumIndexPage() {
+  const t = useT();
   const policy = usePolicy();
   const navigate = useNavigate();
   const { data: categories, loading, error, reload } = useApiResource<ForumCategory[]>("/forum/categories");
@@ -34,32 +36,28 @@ export function ForumIndexPage() {
       if (!people) setPeople(await apiFetch<TeamMember[]>("/team"));
       setComposerOpen(true);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load the form.");
+      setActionError(err instanceof ApiError ? err.message : t("common.couldNotLoadForm"));
     }
   }
 
   return (
     <>
-      <PageHeader
-        eyebrow="Community"
-        title="Forum"
-        description="Research discussions, technical questions and lab announcements, organised by category."
-      />
+      <PageHeader eyebrow={t("nav.community")} title={t("forum.pageTitle")} description={t("forum.pageDescription")} />
 
       <div className="container">
         {(policy.canCreateForumTopic || policy.canManageForumCategories) && (
           <AdminBar
-            text={policy.canManageForumCategories ? "Manage categories, or start a new topic." : "Start a discussion."}
+            text={policy.canManageForumCategories ? t("forum.manageOrNewTopic") : t("forum.startDiscussion")}
             actions={
               <>
                 {policy.canCreateForumTopic && (
                   <button className="btn btn--primary btn--sm" type="button" onClick={openComposer}>
-                    + New topic
+                    + {t("forum.newTopic")}
                   </button>
                 )}
                 {policy.canManageForumCategories && (
                   <button className="btn btn--secondary btn--sm" type="button" onClick={() => setCategoryFormOpen(true)}>
-                    + New category
+                    + {t("forum.newCategory")}
                   </button>
                 )}
               </>
@@ -68,16 +66,16 @@ export function ForumIndexPage() {
         )}
         {actionError && <ErrorState message={actionError} />}
 
-        {loading && !categories && <LoadingState label="Loading the forum…" />}
+        {loading && !categories && <LoadingState label={t("forum.loading")} />}
         {error && <ErrorState message={error} onRetry={reload} />}
 
         {categories && (
           <>
             <section aria-labelledby="forum-categories">
-              <SectionHeader id="forum-categories" title="Categories" />
+              <SectionHeader id="forum-categories" title={t("forum.categoriesHeading")} />
               {categories.length === 0 ? (
-                <EmptyState title={policy.user ? "No categories yet." : "No public categories yet."}>
-                  {policy.canManageForumCategories ? "Create the first one above." : "Check back soon, or log in to see lab-only categories."}
+                <EmptyState title={policy.user ? t("forum.emptyCategories") : t("forum.emptyCategoriesGuest")}>
+                  {policy.canManageForumCategories ? t("forum.createFirstAbove") : t("forum.checkBackOrLogin")}
                 </EmptyState>
               ) : (
                 <div className="grid">
@@ -89,8 +87,8 @@ export function ForumIndexPage() {
             </section>
 
             <section aria-labelledby="forum-latest">
-              <SectionHeader id="forum-latest" title="Latest activity" />
-              <ForumTopicList topics={latest?.topics ?? []} emptyTitle="No topics yet." />
+              <SectionHeader id="forum-latest" title={t("forum.latestActivity")} />
+              <ForumTopicList topics={latest?.topics ?? []} emptyTitle={t("forum.emptyTopics")} />
             </section>
           </>
         )}
@@ -111,7 +109,7 @@ export function ForumIndexPage() {
 
       <ForumCategoryFormModal
         open={categoryFormOpen}
-        title="New category"
+        title={t("forum.newCategory")}
         onClose={() => setCategoryFormOpen(false)}
         onSubmit={async (fields) => {
           await apiFetch("/forum/categories", { method: "POST", body: JSON.stringify(fields) });

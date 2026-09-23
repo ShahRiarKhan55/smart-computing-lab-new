@@ -1,9 +1,16 @@
 import { Link } from "react-router-dom";
-import type { ProjectSummary } from "@scl/shared";
+import type { ProjectSummary, TranslationKey } from "@scl/shared";
 import { Avatar } from "./Avatar";
 import { StatusBadge } from "./Badge";
 import { VisibilityBadge } from "./VisibilityField";
-import { formatProjectDates } from "../lib/format";
+import { formatMonthYear } from "../lib/format";
+import { useLocale } from "../i18n/LocaleContext";
+
+const ROLE_LABEL_KEY: Record<string, TranslationKey> = {
+  LEAD: "projects.role.LEAD",
+  MEMBER: "projects.role.MEMBER",
+  COLLABORATOR: "projects.role.COLLABORATOR",
+};
 
 /** What a card needs; a group page only knows the first four, the full list knows the rest. */
 export type ProjectCardData = Pick<ProjectSummary, "id" | "title" | "summary" | "status"> &
@@ -12,7 +19,10 @@ export type ProjectCardData = Pick<ProjectSummary, "id" | "title" | "summary" | 
 const SHOWN_MEMBERS = 6;
 
 export function ProjectCard({ project }: { project: ProjectCardData }) {
-  const dates = formatProjectDates(project.startDate ?? null, project.endDate ?? null);
+  const { locale, t } = useLocale();
+  const start = project.startDate ?? null;
+  const end = project.endDate ?? null;
+  const dates = start && end ? `${formatMonthYear(start, locale)} – ${formatMonthYear(end, locale)}` : start ? t("dates.since", { date: formatMonthYear(start, locale) }) : end ? t("dates.until", { date: formatMonthYear(end, locale) }) : "";
   const members = project.members ?? [];
   const areas = project.areas ?? [];
   return (
@@ -42,12 +52,12 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
         </div>
       )}
       {members.length > 0 && (
-        <div className="avatar-row card__foot" role="group" aria-label="Project members">
+        <div className="avatar-row card__foot" role="group" aria-label={t("projects.membersAria")}>
           {members.slice(0, SHOWN_MEMBERS).map((m) => (
-            <Avatar key={m.teamMemberId} size="sm" initials={m.initials} to={`/team/${m.teamMemberId}`} name={`${m.name} (${m.role.toLowerCase()})`} />
+            <Avatar key={m.teamMemberId} size="sm" initials={m.initials} to={`/team/${m.teamMemberId}`} name={`${m.name} (${t(ROLE_LABEL_KEY[m.role] ?? "projects.role.MEMBER").toLowerCase()})`} />
           ))}
           {members.length > SHOWN_MEMBERS && (
-            <span className="avatar avatar--sm avatar--more" title={`${members.length - SHOWN_MEMBERS} more members`}>
+            <span className="avatar avatar--sm avatar--more" title={t("projects.moreMembers", { count: members.length - SHOWN_MEMBERS })}>
               +{members.length - SHOWN_MEMBERS}
             </span>
           )}

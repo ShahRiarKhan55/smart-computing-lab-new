@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { useT } from "../i18n/LocaleContext";
 
 export interface MentionCandidate {
   id: string;
@@ -19,6 +20,7 @@ interface ForumMentionPickerProps {
  * it — see lib/forumMentions.ts).
  */
 export function ForumMentionPicker({ people, onPick }: ForumMentionPickerProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -41,12 +43,12 @@ export function ForumMentionPicker({ people, onPick }: ForumMentionPickerProps) 
   return (
     <div className="mention-picker" ref={ref}>
       <button type="button" className="btn btn--secondary btn--sm" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="listbox">
-        <Icon name="user" size={14} /> Mention someone
+        <Icon name="user" size={14} /> {t("forum.mentionSomeone")}
       </button>
       {open && (
-        <div className="mention-picker__list" role="listbox" aria-label="Mention a team member">
+        <div className="mention-picker__list" role="listbox" aria-label={t("forum.mentionATeamMember")}>
           {people.length === 0 ? (
-            <p className="mention-picker__item">No team members to mention.</p>
+            <p className="mention-picker__item">{t("forum.noTeamMembersToMention")}</p>
           ) : (
             people.map((p) => (
               <button

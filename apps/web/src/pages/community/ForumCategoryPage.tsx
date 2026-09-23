@@ -14,9 +14,11 @@ import { ForumComposer } from "../../components/ForumComposer";
 import { ForumCategoryFormModal } from "../../components/ForumCategoryFormModal";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
 import { VisibilityBadge } from "../../components/VisibilityField";
+import { useT } from "../../i18n/LocaleContext";
 
 /** /community/forum/category/:slug — one category's topics, paginated (?page=). */
 export function ForumCategoryPage() {
+  const t = useT();
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -38,9 +40,9 @@ export function ForumCategoryPage() {
   if (loading && !category) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Community" }, { label: "Forum", to: "/community/forum" }, { label: "Loading…" }]} title="Loading…" />
+        <PageHeader crumbs={[{ label: t("nav.community") }, { label: t("nav.forum"), to: "/community/forum" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
-          <LoadingState label="Loading category…" variant="text" />
+          <LoadingState label={t("forum.loadingCategory")} variant="text" />
         </div>
       </>
     );
@@ -48,11 +50,14 @@ export function ForumCategoryPage() {
   if (status === 404 || (!category && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Community" }, { label: "Forum", to: "/community/forum" }, { label: "Not found" }]} title="Category not found" />
+        <PageHeader
+          crumbs={[{ label: t("nav.community") }, { label: t("nav.forum"), to: "/community/forum" }, { label: t("common.notFoundCrumb") }]}
+          title={t("forum.categoryNotFoundTitle")}
+        />
         <div className="container">
-          <ErrorState message={status === 404 ? "This category could not be found." : (error ?? "Could not load this category.")} onRetry={status === 404 ? undefined : reload} />
+          <ErrorState message={status === 404 ? t("forum.categoryNotFoundMsg") : (error ?? t("forum.couldNotLoadCategory"))} onRetry={status === 404 ? undefined : reload} />
           <Link to="/community/forum" className="btn btn--secondary btn--sm">
-            <Icon name="arrow-left" size={14} /> All categories
+            <Icon name="arrow-left" size={14} /> {t("forum.allCategories")}
           </Link>
         </div>
       </>
@@ -67,7 +72,7 @@ export function ForumCategoryPage() {
       if (!people) setPeople(await apiFetch<TeamMember[]>("/team"));
       setComposerOpen(true);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load the form.");
+      setActionError(err instanceof ApiError ? err.message : t("common.couldNotLoadForm"));
     }
   }
 
@@ -77,7 +82,7 @@ export function ForumCategoryPage() {
   return (
     <>
       <PageHeader
-        crumbs={[{ label: "Community" }, { label: "Forum", to: "/community/forum" }, { label: category.name }]}
+        crumbs={[{ label: t("nav.community") }, { label: t("nav.forum"), to: "/community/forum" }, { label: category.name }]}
         title={category.name}
         description={category.description}
       />
@@ -85,21 +90,21 @@ export function ForumCategoryPage() {
       <div className="container">
         {(policy.canCreateForumTopic || category.canManage) && (
           <AdminBar
-            text={category.canManage ? "Manage this category, or start a new topic." : "Start a discussion in this category."}
+            text={category.canManage ? t("forum.manageThisCategory") : t("forum.startDiscussionInCategory")}
             actions={
               <>
                 {policy.canCreateForumTopic && !category.isLocked && (
                   <button className="btn btn--primary btn--sm" type="button" onClick={openComposer}>
-                    + New topic
+                    + {t("forum.newTopic")}
                   </button>
                 )}
                 {category.canManage && (
                   <>
                     <button className="btn btn--secondary btn--sm" type="button" onClick={() => setEditOpen(true)}>
-                      Edit category
+                      {t("forum.editCategory")}
                     </button>
                     <button className="btn btn--danger btn--sm" type="button" onClick={() => setDeleteOpen(true)}>
-                      Delete
+                      {t("common.delete")}
                     </button>
                   </>
                 )}
@@ -113,37 +118,35 @@ export function ForumCategoryPage() {
           <VisibilityBadge visibility={category.visibility} />
           {category.isLocked && (
             <span className="badge badge--warn badge--upper">
-              <Icon name="lock" size={11} /> Locked — no new topics
+              <Icon name="lock" size={11} /> {t("forum.lockedNoNewTopics")}
             </span>
           )}
         </div>
 
         {topicsLoading && !topicsRes ? (
-          <LoadingState label="Loading topics…" variant="text" />
+          <LoadingState label={t("forum.loadingTopics")} variant="text" />
         ) : (
           <>
-            <ForumTopicList topics={topicsRes?.topics ?? []} showCategory={false} emptyTitle="No topics in this category yet." />
+            <ForumTopicList topics={topicsRes?.topics ?? []} showCategory={false} emptyTitle={t("forum.noTopicsInCategory")} />
             {totalPages > 1 && (
-              <nav className="search-pager" aria-label="Topic pages">
+              <nav className="search-pager" aria-label={t("forum.topicPagesAria")}>
                 {page > 1 ? (
                   <button type="button" className="btn btn--secondary btn--sm" onClick={() => goToPage(page - 1)}>
-                    <Icon name="arrow-left" size={14} /> Previous
+                    <Icon name="arrow-left" size={14} /> {t("common.previous")}
                   </button>
                 ) : (
                   <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-                    <Icon name="arrow-left" size={14} /> Previous
+                    <Icon name="arrow-left" size={14} /> {t("common.previous")}
                   </span>
                 )}
-                <span className="search-pager__pos">
-                  Page {page} of {totalPages}
-                </span>
+                <span className="search-pager__pos">{t("common.pageOf", { page, total: totalPages })}</span>
                 {page < totalPages ? (
                   <button type="button" className="btn btn--secondary btn--sm" onClick={() => goToPage(page + 1)}>
-                    Next <Icon name="arrow-right" size={14} />
+                    {t("common.next")} <Icon name="arrow-right" size={14} />
                   </button>
                 ) : (
                   <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-                    Next <Icon name="arrow-right" size={14} />
+                    {t("common.next")} <Icon name="arrow-right" size={14} />
                   </span>
                 )}
               </nav>
@@ -168,7 +171,7 @@ export function ForumCategoryPage() {
 
       <ForumCategoryFormModal
         open={editOpen}
-        title="Edit category"
+        title={t("forum.editCategory")}
         initial={category}
         onClose={() => setEditOpen(false)}
         onSubmit={async (fields) => {
@@ -180,8 +183,8 @@ export function ForumCategoryPage() {
 
       <ConfirmDeleteModal
         open={deleteOpen}
-        title="Delete category"
-        message={`Delete "${category.name}"? This only works while it holds no topics.`}
+        title={t("forum.deleteCategoryTitle")}
+        message={t("forum.deleteCategoryMessage", { name: category.name })}
         onClose={() => setDeleteOpen(false)}
         onConfirm={async () => {
           await apiFetch(`/forum/categories/${category.id}`, { method: "DELETE" });

@@ -3,6 +3,7 @@ import { createForumCategorySchema, type ForumCategory, type Visibility } from "
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { ApiError } from "../lib/api";
+import { useT } from "../i18n/LocaleContext";
 
 export interface ForumCategoryFormFields {
   name: string;
@@ -25,6 +26,7 @@ function toFormState(initial?: ForumCategory | null) {
 
 /** Lab manager/admin only (Category CRUD — §7/§16 of the Phase 11 spec). */
 export function ForumCategoryFormModal({ open, title, initial, onClose, onSubmit }: ForumCategoryFormModalProps) {
+  const t = useT();
   const [values, setValues] = useState(() => toFormState(initial));
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "LAB_ONLY");
   const [isLocked, setIsLocked] = useState(initial?.isLocked ?? false);
@@ -46,7 +48,7 @@ export function ForumCategoryFormModal({ open, title, initial, onClose, onSubmit
     setError(null);
     const validation = createForumCategorySchema.safeParse({ ...values, visibility, isLocked });
     if (!validation.success) {
-      setError(validation.error.issues[0]?.message ?? "Please check the form.");
+      setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
       return;
     }
     setSubmitting(true);
@@ -54,7 +56,7 @@ export function ForumCategoryFormModal({ open, title, initial, onClose, onSubmit
       await onSubmit({ name: values.name, description: values.description, visibility, isLocked });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSubmitting(false);
     }
@@ -69,24 +71,24 @@ export function ForumCategoryFormModal({ open, title, initial, onClose, onSubmit
       )}
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-group">
-          <label htmlFor="cat_name">Name</label>
+          <label htmlFor="cat_name">{t("forum.categoryName")}</label>
           <input id="cat_name" value={values.name} onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))} maxLength={120} required data-autofocus />
         </div>
         <div className="form-group">
-          <label htmlFor="cat_description">Description</label>
+          <label htmlFor="cat_description">{t("forum.categoryDescription")}</label>
           <textarea id="cat_description" value={values.description} onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))} maxLength={2000} rows={3} />
         </div>
         <VisibilityField id="cat_visibility" value={visibility} onChange={setVisibility} />
         <label className="check-row">
           <input type="checkbox" checked={isLocked} onChange={(e) => setIsLocked(e.target.checked)} />
-          <span>Locked (no new topics)</span>
+          <span>{t("forum.lockedCheckboxLabel")}</span>
         </label>
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save"}
+            {submitting ? t("common.saving") : t("common.save")}
           </button>
           <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>

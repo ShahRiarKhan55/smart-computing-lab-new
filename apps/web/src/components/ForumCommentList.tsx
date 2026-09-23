@@ -2,6 +2,7 @@ import type { ForumComment as ForumCommentType, ForumReactionKind, PaginationMet
 import { ForumComment } from "./ForumComment";
 import { EmptyState } from "./EmptyState";
 import { Icon } from "./Icon";
+import { useT } from "../i18n/LocaleContext";
 
 interface ForumCommentListProps {
   comments: ForumCommentType[];
@@ -15,7 +16,8 @@ interface ForumCommentListProps {
 
 /** Flat comment list + simple pager, reusing the same .search-pager pattern as global search. */
 export function ForumCommentList({ comments, pagination, canReact, onReact, onEdit, onRequestDelete, onPageChange }: ForumCommentListProps) {
-  if (pagination.total === 0) return <EmptyState title="No comments yet." compact />;
+  const t = useT();
+  if (pagination.total === 0) return <EmptyState title={t("forum.emptyComments")} compact />;
 
   return (
     <>
@@ -32,26 +34,24 @@ export function ForumCommentList({ comments, pagination, canReact, onReact, onEd
         ))}
       </ol>
       {pagination.totalPages > 1 && (
-        <nav className="search-pager" aria-label="Comment pages">
+        <nav className="search-pager" aria-label={t("forum.commentPagesAria")}>
           {pagination.page > 1 ? (
             <button type="button" className="btn btn--secondary btn--sm" onClick={() => onPageChange(pagination.page - 1)}>
-              <Icon name="arrow-left" size={14} /> Previous
+              <Icon name="arrow-left" size={14} /> {t("common.previous")}
             </button>
           ) : (
             <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-              <Icon name="arrow-left" size={14} /> Previous
+              <Icon name="arrow-left" size={14} /> {t("common.previous")}
             </span>
           )}
-          <span className="search-pager__pos">
-            Page {pagination.page} of {pagination.totalPages}
-          </span>
+          <span className="search-pager__pos">{t("common.pageOf", { page: pagination.page, total: pagination.totalPages })}</span>
           {pagination.page < pagination.totalPages ? (
             <button type="button" className="btn btn--secondary btn--sm" onClick={() => onPageChange(pagination.page + 1)}>
-              Next <Icon name="arrow-right" size={14} />
+              {t("common.next")} <Icon name="arrow-right" size={14} />
             </button>
           ) : (
             <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-              Next <Icon name="arrow-right" size={14} />
+              {t("common.next")} <Icon name="arrow-right" size={14} />
             </span>
           )}
         </nav>

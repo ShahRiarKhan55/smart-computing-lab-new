@@ -10,6 +10,7 @@ import {
   type Publication,
   type ResearchArea,
   type TeamMember,
+  type TranslationKey,
 } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
@@ -31,9 +32,14 @@ import { LinkItemsModal, type LinkableItem } from "../components/LinkItemsModal"
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { VisibilityBadge } from "../components/VisibilityField";
 import { ForumTopicList } from "../components/ForumTopicList";
-import { formatProjectDates } from "../lib/format";
+import { formatMonthYear } from "../lib/format";
+import { useLocale } from "../i18n/LocaleContext";
 
-const ROLE_LABELS: Record<string, string> = { LEAD: "Lead", MEMBER: "Member", COLLABORATOR: "Collaborator" };
+const ROLE_LABEL_KEY: Record<string, TranslationKey> = {
+  LEAD: "projects.role.LEAD",
+  MEMBER: "projects.role.MEMBER",
+  COLLABORATOR: "projects.role.COLLABORATOR",
+};
 
 type Panel = "edit" | "members" | "areas" | "publications" | "news" | "delete" | null;
 
@@ -41,6 +47,8 @@ export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const policy = usePolicy();
+  const { locale, t } = useLocale();
+  const ROLE_LABELS: Record<string, string> = { LEAD: t("projects.role.LEAD"), MEMBER: t("projects.role.MEMBER"), COLLABORATOR: t("projects.role.COLLABORATOR") };
   const { data: project, loading, error, status, reload } = useApiResource<ProjectDetail>(`/projects/${id}`);
   const { data: groups } = useApiResource<GroupSummary[]>("/groups");
   // Independent of the project fetch above (same pattern as the forum category page): the forum
@@ -62,9 +70,9 @@ export function ProjectDetailPage() {
   if (loading && (!project || project.id !== id)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Projects", to: "/projects" }, { label: "Loading…" }]} title="Loading…" />
+        <PageHeader crumbs={[{ label: t("projects.pageTitle"), to: "/projects" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
-          <LoadingState label="Loading project…" variant="text" />
+          <LoadingState label={t("projects.loadingProject")} variant="text" />
         </div>
       </>
     );
@@ -73,11 +81,11 @@ export function ProjectDetailPage() {
   if (status === 404 || (!project && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Projects", to: "/projects" }, { label: "Not found" }]} title="Project not found" />
+        <PageHeader crumbs={[{ label: t("projects.pageTitle"), to: "/projects" }, { label: t("common.notFoundCrumb") }]} title={t("projects.notFoundTitle")} />
         <div className="container">
-          <ErrorState message={status === 404 ? "This project could not be found." : (error ?? "Could not load this project.")} onRetry={status === 404 ? undefined : reload} />
+          <ErrorState message={status === 404 ? t("projects.notFoundMsg") : (error ?? t("projects.couldNotLoadThis"))} onRetry={status === 404 ? undefined : reload} />
           <Link to="/projects" className="btn btn--secondary btn--sm">
-            <Icon name="arrow-left" size={14} /> All projects
+            <Icon name="arrow-left" size={14} /> {t("projects.allProjects")}
           </Link>
         </div>
       </>
@@ -95,7 +103,7 @@ export function ProjectDetailPage() {
       if (next === "news" && !news) setNews(await apiFetch<NewsItem[]>("/news"));
       setPanel(next);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load the list.");
+      setActionError(err instanceof ApiError ? err.message : t("common.couldNotLoadList"));
     }
   }
 
@@ -104,37 +112,39 @@ export function ProjectDetailPage() {
     reload();
   };
   const close = () => setPanel(null);
-  const dates = formatProjectDates(project.startDate, project.endDate);
+  const start = project.startDate;
+  const end = project.endDate;
+  const dates = start && end ? `${formatMonthYear(start, locale)} – ${formatMonthYear(end, locale)}` : start ? t("dates.since", { date: formatMonthYear(start, locale) }) : end ? t("dates.until", { date: formatMonthYear(end, locale) }) : "";
   const asItems = <T,>(list: T[] | null, label: (x: T) => string, key: (x: T) => string): LinkableItem[] => (list ?? []).map((x) => ({ id: key(x), label: label(x) }));
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Projects", to: "/projects" }, { label: project.title }]} title={project.title} description={project.summary} />
+      <PageHeader crumbs={[{ label: t("projects.pageTitle"), to: "/projects" }, { label: project.title }]} title={project.title} description={project.summary} />
 
       <div className="container">
         {project.canEdit && (
           <AdminBar
-            text={policy.isManager ? `${policy.isAdmin ? "Admin" : "Lab manager"}: manage this project.` : "You lead this project: edit its details, team and links."}
+            text={policy.isManager ? t("projects.manageThisSuffix", { role: policy.roleLabel }) : t("projects.leadThis")}
             actions={
               <>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => open("edit")}>
-                  Edit project
+                  {t("projects.editProject")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => open("members")}>
-                  Members
+                  {t("projects.membersLabel")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => open("areas")}>
-                  Research areas
+                  {t("projects.researchAreasLabel")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => open("publications")}>
-                  Publications
+                  {t("projects.publicationsLabel")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => open("news")}>
-                  News
+                  {t("projects.newsLabel")}
                 </button>
                 {policy.canDeleteContent && (
                   <button className="btn btn--danger btn--sm" type="button" onClick={() => setPanel("delete")}>
-                    Delete
+                    {t("common.delete")}
                   </button>
                 )}
               </>
@@ -156,7 +166,7 @@ export function ProjectDetailPage() {
               )}
               {project.group && (
                 <span className="detail-meta__item">
-                  <Icon name="users" size={14} /> Group:{" "}
+                  <Icon name="users" size={14} /> {t("common.group")}{" "}
                   <Link to={`/groups/${project.group.id}`} className="link">
                     {project.group.name}
                   </Link>
@@ -166,34 +176,34 @@ export function ProjectDetailPage() {
             {project.description && (
               <section aria-labelledby="project-about">
                 <h2 className="sr-only" id="project-about">
-                  About this project
+                  {t("projects.pageTitle")}
                 </h2>
                 <p className="prose">{project.description}</p>
               </section>
             )}
           </div>
 
-          <aside className="detail-layout__aside" aria-label="Project team and research areas">
+          <aside className="detail-layout__aside" aria-label={t("projects.teamHeading")}>
             <section className="panel" aria-labelledby="project-team">
               <h2 className="panel__title" id="project-team">
-                Team
+                {t("projects.teamHeading")}
               </h2>
               {project.members.length === 0 ? (
-                <p className="text-sm text-muted">No members added yet.</p>
+                <p className="text-sm text-muted">{t("projects.noMembersYet")}</p>
               ) : (
                 <div className="panel__list">
                   {project.members.map((m) => (
-                    <PersonLink key={m.teamMemberId} id={m.teamMemberId} name={m.name} initials={m.initials} detail={ROLE_LABELS[m.role] ?? m.role} />
+                    <PersonLink key={m.teamMemberId} id={m.teamMemberId} name={m.name} initials={m.initials} detail={t(ROLE_LABEL_KEY[m.role] ?? "projects.role.MEMBER")} />
                   ))}
                 </div>
               )}
             </section>
             <section className="panel" aria-labelledby="project-areas">
               <h2 className="panel__title" id="project-areas">
-                Research areas
+                {t("projects.researchAreasLabel")}
               </h2>
               {project.areas.length === 0 ? (
-                <p className="text-sm text-muted">No research areas linked yet.</p>
+                <p className="text-sm text-muted">{t("projects.noAreasYet")}</p>
               ) : (
                 <div className="chips">
                   {project.areas.map((a) => (
@@ -208,9 +218,9 @@ export function ProjectDetailPage() {
 
           <div className="detail-layout__b">
             <section className="detail-section" aria-labelledby="project-pubs">
-              <SectionHeader compact id="project-pubs" title={`Publications (${project.publications.length})`} />
+              <SectionHeader compact id="project-pubs" title={t("projects.publicationsHeading", { count: project.publications.length })} />
               {project.publications.length === 0 ? (
-                <EmptyState title="No publications linked yet." compact />
+                <EmptyState title={t("projects.noPubsLinked")} compact />
               ) : (
                 <div className="pub-list">
                   {project.publications.map((p) => (
@@ -221,9 +231,9 @@ export function ProjectDetailPage() {
             </section>
 
             <section className="detail-section" aria-labelledby="project-news">
-              <SectionHeader compact id="project-news" title={`News (${project.news.length})`} />
+              <SectionHeader compact id="project-news" title={t("projects.newsHeading", { count: project.news.length })} />
               {project.news.length === 0 ? (
-                <EmptyState title="No news linked yet." compact />
+                <EmptyState title={t("projects.noNewsLinked")} compact />
               ) : (
                 <div className="grid">
                   {project.news.map((n) => (
@@ -238,10 +248,10 @@ export function ProjectDetailPage() {
                 <SectionHeader
                   compact
                   id="project-gallery"
-                  title="Gallery"
+                  title={t("projects.galleryHeading")}
                   action={
                     <Link to={`/gallery?project=${project.id}`} className="btn btn--secondary btn--sm">
-                      View all
+                      {t("common.viewAll")}
                     </Link>
                   }
                 />
@@ -257,7 +267,7 @@ export function ProjectDetailPage() {
 
             {discussions && discussions.topics.length > 0 && (
               <section className="detail-section" aria-labelledby="project-forum">
-                <SectionHeader compact id="project-forum" title="Community Discussions" />
+                <SectionHeader compact id="project-forum" title={t("projects.communityDiscussions")} />
                 <ForumTopicList topics={discussions.topics} />
               </section>
             )}
@@ -267,7 +277,7 @@ export function ProjectDetailPage() {
 
       <ProjectFormModal
         open={panel === "edit"}
-        title="Edit project"
+        title={t("projects.editTitle")}
         initial={project}
         canManageSettings={policy.isManager}
         groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
@@ -280,8 +290,8 @@ export function ProjectDetailPage() {
 
       <MembersModal
         open={panel === "members"}
-        title="Project members"
-        description="Choose who works on this project and their role. Project leads can edit this project."
+        title={t("projects.membersModalTitle")}
+        description={t("projects.membersModalDesc")}
         people={asItems(team, (m) => `${m.name} — ${m.role}`, (m) => m.id)}
         roles={PROJECT_MEMBER_ROLES}
         roleLabels={ROLE_LABELS}
@@ -292,8 +302,8 @@ export function ProjectDetailPage() {
 
       <LinkItemsModal
         open={panel === "areas"}
-        title="Research areas"
-        description="Which research areas does this project belong to?"
+        title={t("projects.areasModalTitle")}
+        description={t("projects.areasModalDesc")}
         items={asItems(areas, (a) => `${a.icon} ${a.title}`, (a) => a.id)}
         selectedIds={project.areas.map((a) => a.id)}
         onClose={close}
@@ -302,8 +312,8 @@ export function ProjectDetailPage() {
 
       <LinkItemsModal
         open={panel === "publications"}
-        title="Project publications"
-        description="Check every publication that came out of this project."
+        title={t("projects.pubsModalTitle")}
+        description={t("projects.pubsModalDesc")}
         items={asItems(pubs, (p) => `${p.title} (${p.year})`, (p) => p.id)}
         selectedIds={project.publications.map((p) => p.id)}
         onClose={close}
@@ -312,8 +322,8 @@ export function ProjectDetailPage() {
 
       <LinkItemsModal
         open={panel === "news"}
-        title="Project news"
-        description="Check the news items about this project. A news item can belong to one project at a time."
+        title={t("projects.newsModalTitle")}
+        description={t("projects.newsModalDesc")}
         items={asItems(news, (n) => `${n.title} (${n.date})`, (n) => n.id)}
         selectedIds={project.news.map((n) => n.id)}
         onClose={close}
@@ -322,8 +332,8 @@ export function ProjectDetailPage() {
 
       <ConfirmDeleteModal
         open={panel === "delete"}
-        title="Delete project"
-        message={`Delete "${project.title}"? Its team, area and publication links are removed; linked news items are kept. This cannot be undone.`}
+        title={t("projects.deleteTitle")}
+        message={t("projects.deleteMessageFull", { title: project.title })}
         onClose={close}
         onConfirm={async () => {
           await apiFetch(`/projects/${project.id}`, { method: "DELETE" });
