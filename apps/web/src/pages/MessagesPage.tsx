@@ -5,9 +5,11 @@ import { PageHeader } from "../components/PageHeader";
 import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
 import { ConversationList } from "../components/ConversationList";
+import { useT } from "../i18n/LocaleContext";
 
 /** /messages — the current user's own conversations, and nothing else (Phase 12 §11/§12). */
 export function MessagesPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const page = /^\d{1,5}$/.test(params.get("page") ?? "") ? Number(params.get("page")) : 1;
 
@@ -15,10 +17,10 @@ export function MessagesPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Account" title="Messages" description="Private conversations with other lab members." />
+      <PageHeader eyebrow={t("nav.account")} title={t("messages.pageTitle")} description={t("messages.pageDescription")} />
       <div className="container container--narrow">
         {loading && !data ? (
-          <LoadingState label="Loading conversations…" variant="list" />
+          <LoadingState label={t("messages.loadingConversations")} variant="list" />
         ) : error && !data ? (
           <ErrorState message={error} onRetry={reload} />
         ) : (

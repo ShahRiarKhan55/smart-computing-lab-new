@@ -1,6 +1,7 @@
 import type { Message, PaginationMeta } from "@scl/shared";
 import { MessageBubble } from "./MessageBubble";
 import { EmptyState } from "./EmptyState";
+import { useT } from "../i18n/LocaleContext";
 
 interface MessageListProps {
   messages: Message[];
@@ -13,8 +14,13 @@ interface MessageListProps {
 /** Chronological message history (oldest first) with a "load older messages" affordance instead
  *  of ever fetching the whole thread at once (Phase 12 §13/§46). */
 export function MessageList({ messages, pagination, onEdit, onRequestDelete, onLoadOlder }: MessageListProps) {
+  const t = useT();
   if (messages.length === 0 && pagination.page === 1) {
-    return <EmptyState title="No messages yet." compact>Say hello — messages appear here once you start the conversation.</EmptyState>;
+    return (
+      <EmptyState title={t("messages.emptyBody")} compact>
+        {t("messages.sayHello")}
+      </EmptyState>
+    );
   }
 
   return (
@@ -22,7 +28,7 @@ export function MessageList({ messages, pagination, onEdit, onRequestDelete, onL
       {pagination.page < pagination.totalPages && (
         <div className="message-list__load-older">
           <button type="button" className="btn btn--secondary btn--sm" onClick={onLoadOlder}>
-            Load older messages
+            {t("messages.loadOlder")}
           </button>
         </div>
       )}

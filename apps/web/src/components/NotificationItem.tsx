@@ -2,46 +2,57 @@ import { Link } from "react-router-dom";
 import type { Notification } from "@scl/shared";
 import { Avatar } from "./Avatar";
 import { formatDateTime } from "../lib/format";
+import { useLocale } from "../i18n/LocaleContext";
+import type { TranslationKey } from "@scl/shared";
+
+const ACTION_LABEL_KEY: Record<string, TranslationKey> = {
+  hidden: "notifications.action.hidden",
+  deleted: "notifications.action.deleted",
+  locked: "notifications.action.locked",
+  moderated: "notifications.action.moderated",
+};
 
 /** Human-readable text for a notification, from its type + small safe payload — never the
  *  underlying private content (Phase 12 §25/§29: a forum excerpt or message body never
  *  appears here, only a title snapshot for forum events). */
-function describe(n: Notification): string {
-  const actorName = n.actor?.name ?? "Someone";
-  const title = typeof n.payload.title === "string" && n.payload.title ? ` "${n.payload.title}"` : "";
+function describe(n: Notification, t: (key: TranslationKey, vars?: Record<string, string | number>) => string): string {
+  const actorName = n.actor?.name ?? t("notifications.someone");
+  const rawTitle = typeof n.payload.title === "string" && n.payload.title ? n.payload.title : "";
+  const title = rawTitle ? ` ${t("notifications.quotedTitle", { title: rawTitle })}` : "";
   switch (n.type) {
     case "MESSAGE_RECEIVED":
-      return `${actorName} sent you a message.`;
+      return t("notifications.sentMessage", { actor: actorName });
     case "FORUM_MENTION":
-      return `${actorName} mentioned you in a forum discussion${title}.`;
+      return t("notifications.mentionedYou", { actor: actorName, title });
     case "FORUM_COMMENT":
-      return `${actorName} replied to your discussion${title}.`;
+      return t("notifications.repliedToDiscussion", { actor: actorName, title });
     case "FORUM_REACTION":
-      return `${actorName} reacted to your forum post${title}.`;
+      return t("notifications.reactedToPost", { actor: actorName, title });
     case "FORUM_MODERATION": {
-      const action = typeof n.payload.action === "string" ? n.payload.action : "moderated";
-      return `Your forum topic${title} was ${action} by a moderator.`;
+      const actionKey = typeof n.payload.action === "string" ? (ACTION_LABEL_KEY[n.payload.action] ?? "notifications.action.moderated") : "notifications.action.moderated";
+      return t("notifications.topicModerated", { title, action: t(actionKey) });
     }
     case "PUBLICATION_LINKED":
-      return `A publication was linked to your profile${title}.`;
+      return t("notifications.publicationLinked", { title });
     case "PROJECT_ACTIVITY":
-      return `There's activity on a project you're part of${title}.`;
+      return t("notifications.projectActivity", { title });
     default:
-      return "You have a new notification.";
+      return t("notifications.generic");
   }
 }
 
 export function NotificationItem({ notification, onMarkRead }: { notification: Notification; onMarkRead: (id: string) => void }) {
-  const body = describe(notification);
+  const { locale, t } = useLocale();
+  const body = describe(notification, t);
   const content = (
     <>
       <Avatar size="sm" initials={notification.actor?.initials ?? "SCL"} photoUrl={notification.actor?.photoUrl || undefined} />
       <div className="notification-item__body">
         <p className="notification-item__text">
-          {!notification.read && <span className="sr-only">Unread: </span>}
+          {!notification.read && <span className="sr-only">{t("notifications.unreadSr")}</span>}
           {body}
         </p>
-        <span className="notification-item__time">{formatDateTime(notification.createdAt)}</span>
+        <span className="notification-item__time">{formatDateTime(notification.createdAt, locale)}</span>
       </div>
       {!notification.read && <span className="notification-item__dot" aria-hidden="true" />}
     </>

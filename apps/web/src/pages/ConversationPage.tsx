@@ -10,6 +10,7 @@ import { Icon } from "../components/Icon";
 import { MessageList } from "../components/MessageList";
 import { MessageComposer } from "../components/MessageComposer";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
+import { useT } from "../i18n/LocaleContext";
 
 const MESSAGES_LIMIT = 30;
 
@@ -20,6 +21,7 @@ const MESSAGES_LIMIT = 30;
  */
 export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
+  const t = useT();
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
@@ -46,7 +48,7 @@ export function ConversationPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Something went wrong.");
+        setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
         setStatus(err instanceof ApiError ? err.status : null);
       })
       .finally(() => {
@@ -56,6 +58,7 @@ export function ConversationPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function loadOlder() {
@@ -66,7 +69,7 @@ export function ConversationPage() {
       setMessages((prev) => [...data.messages, ...prev]);
       setPagination(data.messagesPagination);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load older messages.");
+      setActionError(err instanceof ApiError ? err.message : t("messages.couldNotLoadOlder"));
     }
   }
 
@@ -90,9 +93,9 @@ export function ConversationPage() {
   if (loading && !conversation) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Messages", to: "/messages" }, { label: "Loading…" }]} title="Loading…" />
+        <PageHeader crumbs={[{ label: t("messages.pageTitle"), to: "/messages" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container container--narrow">
-          <LoadingState label="Loading conversation…" variant="list" />
+          <LoadingState label={t("messages.loadingConversation")} variant="list" />
         </div>
       </>
     );
@@ -101,11 +104,11 @@ export function ConversationPage() {
   if (status === 404 || (!conversation && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Messages", to: "/messages" }, { label: "Not found" }]} title="Conversation not found" />
+        <PageHeader crumbs={[{ label: t("messages.pageTitle"), to: "/messages" }, { label: t("common.notFoundCrumb") }]} title={t("messages.conversationNotFoundTitle")} />
         <div className="container container--narrow">
-          <ErrorState message={status === 404 ? "This conversation could not be found." : (error ?? "Could not load this conversation.")} />
+          <ErrorState message={status === 404 ? t("messages.conversationNotFoundMsg") : (error ?? t("messages.couldNotLoadConversation"))} />
           <Link to="/messages" className="btn btn--secondary btn--sm">
-            <Icon name="arrow-left" size={14} /> Messages
+            <Icon name="arrow-left" size={14} /> {t("messages.pageTitle")}
           </Link>
         </div>
       </>
@@ -116,7 +119,7 @@ export function ConversationPage() {
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Messages", to: "/messages" }, { label: conversation.other.name }]} title={conversation.other.name} />
+      <PageHeader crumbs={[{ label: t("messages.pageTitle"), to: "/messages" }, { label: conversation.other.name }]} title={conversation.other.name} />
       <div className="container container--narrow">
         <div className="conversation-header">
           <Avatar size="md" initials={conversation.other.initials} photoUrl={conversation.other.photoUrl || undefined} to={conversation.other.teamMemberId ? `/team/${conversation.other.teamMemberId}` : undefined} name={conversation.other.name} />
@@ -135,8 +138,8 @@ export function ConversationPage() {
 
       <ConfirmDeleteModal
         open={deleteId !== null}
-        title="Delete message"
-        message="Delete this message? This cannot be undone."
+        title={t("messages.deleteTitle")}
+        message={t("messages.deleteMessage")}
         onClose={() => setDeleteId(null)}
         onConfirm={async () => {
           await deleteMessage();

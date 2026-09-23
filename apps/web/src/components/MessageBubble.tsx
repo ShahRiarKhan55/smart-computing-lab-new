@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Message } from "@scl/shared";
 import { ApiError } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+import { useLocale } from "../i18n/LocaleContext";
 
 interface MessageBubbleProps {
   message: Message;
@@ -16,6 +17,7 @@ interface MessageBubbleProps {
  * preserves the line breaks already in the string.
  */
 export function MessageBubble({ message, onEdit, onRequestDelete }: MessageBubbleProps) {
+  const { locale, t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.body);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export function MessageBubble({ message, onEdit, onRequestDelete }: MessageBubbl
       await onEdit(draft);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setBusy(false);
     }
@@ -40,7 +42,7 @@ export function MessageBubble({ message, onEdit, onRequestDelete }: MessageBubbl
         {editing ? (
           <div className="form-group">
             <label htmlFor={`message-edit-${message.id}`} className="sr-only">
-              Edit message
+              {t("messages.editMessageSr")}
             </label>
             <textarea id={`message-edit-${message.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={4000} disabled={busy} />
             {error && (
@@ -50,7 +52,7 @@ export function MessageBubble({ message, onEdit, onRequestDelete }: MessageBubbl
             )}
             <div className="comment__actions">
               <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={busy || draft.trim() === ""}>
-                {busy ? "Saving…" : "Save"}
+                {busy ? t("common.saving") : t("common.save")}
               </button>
               <button
                 type="button"
@@ -62,26 +64,26 @@ export function MessageBubble({ message, onEdit, onRequestDelete }: MessageBubbl
                 }}
                 disabled={busy}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>
         ) : (
-          <p className="message-bubble__text">{message.deleted ? "Message deleted" : message.body}</p>
+          <p className="message-bubble__text">{message.deleted ? t("messages.messageDeleted") : message.body}</p>
         )}
 
         <div className="message-bubble__meta">
-          <span>{formatDateTime(message.createdAt)}</span>
-          {message.editedAt && !message.deleted && <span> · edited</span>}
+          <span>{formatDateTime(message.createdAt, locale)}</span>
+          {message.editedAt && !message.deleted && <span> · {t("messages.edited")}</span>}
         </div>
 
         {!editing && message.mine && !message.deleted && (
           <div className="comment__actions">
             <button type="button" className="btn btn--link btn--sm" onClick={() => setEditing(true)}>
-              Edit
+              {t("common.edit")}
             </button>
             <button type="button" className="btn btn--link btn--sm" onClick={onRequestDelete}>
-              Delete
+              {t("common.delete")}
             </button>
           </div>
         )}
