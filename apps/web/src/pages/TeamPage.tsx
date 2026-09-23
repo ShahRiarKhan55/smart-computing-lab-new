@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CATEGORY_LABELS, CATEGORY_ORDER, type TeamMember } from "@scl/shared";
+import { CATEGORY_ORDER, type TeamMember } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch } from "../lib/api";
@@ -12,6 +12,7 @@ import { EmptyState } from "../components/EmptyState";
 import { TeamMemberFormModal } from "../components/TeamMemberFormModal";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
+import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
 export function TeamPage() {
   const t = useT();
@@ -29,7 +30,7 @@ export function TeamPage() {
   })).filter((g) => g.items.length > 0);
 
   async function handleDelete(member: TeamMember) {
-    if (!window.confirm(`Remove ${member.name} from the team?`)) return;
+    if (!window.confirm(t("team.removeConfirm", { name: member.name }))) return;
     setActionError(null);
     try {
       await apiFetch(`/team/${member.id}`, { method: "DELETE" });
@@ -46,8 +47,8 @@ export function TeamPage() {
       <div className="container">
         {policy.canCreateTeamMember && (
           <AdminBar
-            text={`${policy.roleLabel}: add new members here.${policy.canManageUsers ? " To give someone login access, use the Admin dashboard." : ""}`}
-            actionLabel="+ Add team member"
+            text={`${t("team.addNewMembersHere", { role: policy.roleLabel })}${policy.canManageUsers ? t("team.giveLoginAccessHint") : ""}`}
+            actionLabel={`+ ${t("team.addTeamMember")}`}
             onAction={() => setEditing({ open: true, member: null })}
           />
         )}
@@ -61,7 +62,7 @@ export function TeamPage() {
           <section key={group.cat} aria-labelledby={`team-${group.cat}`}>
             <div className="group-heading">
               <h2 id={`team-${group.cat}`}>
-                {CATEGORY_LABELS[group.cat]} <span className="group-heading__count">({group.items.length})</span>
+                {t(CATEGORY_LABEL_KEY[group.cat])} <span className="group-heading__count">({group.items.length})</span>
               </h2>
             </div>
             <div className="grid grid--tight">

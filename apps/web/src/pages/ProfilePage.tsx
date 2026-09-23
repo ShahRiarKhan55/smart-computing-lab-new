@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { CATEGORY_LABELS, updateOwnProfileSchema, type TeamMember } from "@scl/shared";
+import { updateOwnProfileSchema, type TeamMember } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
@@ -11,6 +11,8 @@ import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
+import { useT } from "../i18n/LocaleContext";
+import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
 interface ProfileValues {
   name: string;
@@ -36,19 +38,16 @@ function toValues(member: TeamMember): ProfileValues {
 
 export function ProfilePage() {
   const { user } = useAuth();
+  const t = useT();
   const { data: member, loading, error, status, reload } = useApiResource<TeamMember>("/profile");
 
   return (
     <>
-      <PageHeader
-        eyebrow={`Signed in as ${user?.email ?? ""}`}
-        title="My Profile"
-        description="Update how you appear on the public Team page."
-      />
+      <PageHeader eyebrow={t("profile.signedInAs", { email: user?.email ?? "" })} title={t("profile.pageTitle")} description={t("profile.pageDescription")} />
       <div className="container">
-        {loading && !member && <LoadingState label="Loading your profile…" variant="text" />}
+        {loading && !member && <LoadingState label={t("profile.loadingYours")} variant="text" />}
         {/* 404 just means no team profile is linked yet — a status, not a failure. */}
-        {status === 404 && <EmptyState title={error ?? "No team profile is linked to this account yet."} />}
+        {status === 404 && <EmptyState title={error ?? t("profile.noLinkedProfile")} />}
         {error && status !== 404 && <ErrorState message={error} onRetry={reload} />}
         {member && <ProfileForm initial={member} />}
       </div>
@@ -57,6 +56,7 @@ export function ProfilePage() {
 }
 
 function ProfileForm({ initial }: { initial: TeamMember }) {
+  const t = useT();
   const [saved, setSaved] = useState(initial);
   const [values, setValues] = useState<ProfileValues>(() => toValues(initial));
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -107,9 +107,9 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
       setSuccess(true);
     } catch (err) {
       if (err instanceof ApiError) {
-        setFormError(err.status === 401 ? "Your session has expired. Please log in again." : err.message);
+        setFormError(err.status === 401 ? t("profile.sessionExpired") : err.message);
       } else {
-        setFormError("Could not reach the server. Please try again.");
+        setFormError(t("error.network"));
       }
     } finally {
       setSaving(false);
@@ -141,68 +141,68 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
       <div>
         {success && (
           <div className="form-success" role="status">
-            <Icon name="check" size={16} /> Profile updated.
+            <Icon name="check" size={16} /> {t("profile.updated")}
           </div>
         )}
         {formError && <ErrorState message={formError} />}
 
-        <form className="form-card" onSubmit={handleSubmit} noValidate aria-label="Edit your profile">
+        <form className="form-card" onSubmit={handleSubmit} noValidate aria-label={t("profile.editAria")}>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="f_name">Full name</label>
+              <label htmlFor="f_name">{t("profile.fullName")}</label>
               <input {...field("name")} maxLength={120} required autoComplete="name" />
               {fieldError("name")}
             </div>
             <div className="form-group">
-              <label htmlFor="f_initials">Initials (shown on avatar)</label>
+              <label htmlFor="f_initials">{t("profile.initialsLabel")}</label>
               <input {...field("initials")} maxLength={10} required />
               {fieldError("initials")}
             </div>
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="f_role">Role / title</label>
+              <label htmlFor="f_role">{t("profile.roleTitle")}</label>
               <input {...field("role")} maxLength={120} required autoComplete="organization-title" />
               {fieldError("role")}
             </div>
             <div className="form-group">
-              <label htmlFor="f_department">Department / focus area</label>
+              <label htmlFor="f_department">{t("profile.department")}</label>
               <input {...field("department")} maxLength={200} />
               {fieldError("department")}
             </div>
           </div>
           <div className="form-group">
-            <label htmlFor="f_bio">Short bio</label>
+            <label htmlFor="f_bio">{t("profile.shortBio")}</label>
             <textarea {...field("bio")} maxLength={2000} />
             {fieldError("bio")}
           </div>
           <div className="form-group">
-            <label htmlFor="f_photoUrl">Photo URL (optional — leave blank to show initials)</label>
+            <label htmlFor="f_photoUrl">{t("profile.photoUrl")}</label>
             <input {...field("photoUrl")} placeholder="https://..." inputMode="url" />
             {fieldError("photoUrl")}
           </div>
 
           <div className="form-actions">
             <button className="btn btn--primary form-submit" type="submit" disabled={saving || !dirty} aria-busy={saving}>
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? t("common.saving") : t("profile.saveChanges")}
             </button>
             <button className="btn btn--secondary" type="button" onClick={reset} disabled={saving || !dirty}>
-              Reset
+              {t("profile.reset")}
             </button>
           </div>
         </form>
       </div>
 
-      <aside className="detail-layout__aside" aria-label="Profile preview">
+      <aside className="detail-layout__aside" aria-label={t("member.researcherSummaryAria")}>
         <section className="panel profile-summary">
           <Avatar size="xl" initials={values.initials || saved.initials} photoUrl={saved.photoUrl} />
           <div>
             <p className="profile-summary__role">{values.name || saved.name}</p>
             <p className="profile-summary__dept">{values.role}</p>
           </div>
-          <p className="card-note">Category: {CATEGORY_LABELS[saved.category]} (changed only by the admin)</p>
+          <p className="card-note">{t("profile.categoryNote", { category: t(CATEGORY_LABEL_KEY[saved.category]) })}</p>
           <Link to={`/team/${saved.id}`} className="btn btn--secondary btn--sm">
-            View your public profile <Icon name="arrow-right" size={14} />
+            {t("profile.viewPublic")} <Icon name="arrow-right" size={14} />
           </Link>
         </section>
       </aside>

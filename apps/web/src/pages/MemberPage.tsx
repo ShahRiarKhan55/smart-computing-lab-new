@@ -19,11 +19,13 @@ import { HistoryFormModal } from "../components/HistoryFormModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import type { LinkableItem } from "../components/LinkItemsModal";
+import { useT } from "../i18n/LocaleContext";
 
 export function MemberPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const policy = usePolicy();
+  const t = useT();
   const { data: profile, loading, error, status, reload } = useApiResource<MemberProfile>(`/member/${id}`);
 
   const [messaging, setMessaging] = useState(false);
@@ -42,9 +44,9 @@ export function MemberPage() {
   if (loading) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Team", to: "/team" }, { label: "Loading…" }]} title="Loading…" />
+        <PageHeader crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
-          <LoadingState label="Loading profile…" variant="text" />
+          <LoadingState label={t("member.loadingProfile")} variant="text" />
         </div>
       </>
     );
@@ -53,11 +55,11 @@ export function MemberPage() {
   if (status === 404 || (!profile && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Team", to: "/team" }, { label: "Not found" }]} title="Profile not found" />
+        <PageHeader crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: t("common.notFoundCrumb") }]} title={t("member.notFoundTitle")} />
         <div className="container">
-          <ErrorState message={error ?? "This team member could not be found."} onRetry={status === 404 ? undefined : reload} />
+          <ErrorState message={error ?? t("member.notFoundMsg")} onRetry={status === 404 ? undefined : reload} />
           <Link to="/team" className="btn btn--secondary btn--sm">
-            <Icon name="arrow-left" size={14} /> All researchers
+            <Icon name="arrow-left" size={14} /> {t("member.allResearchers")}
           </Link>
         </div>
       </>
@@ -67,9 +69,9 @@ export function MemberPage() {
   if (!profile) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Team", to: "/team" }, { label: "No profile" }]} title="No profile specified" />
+        <PageHeader crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: t("member.noProfileTitle") }]} title={t("member.noProfileTitle")} />
         <div className="container">
-          <EmptyState title="No member id was given." />
+          <EmptyState title={t("member.noProfileMsg")} />
         </div>
       </>
     );
@@ -93,7 +95,7 @@ export function MemberPage() {
       });
       navigate(`/messages/${conversation.id}`);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not start a conversation.");
+      setActionError(err instanceof ApiError ? err.message : t("member.couldNotStartConversation"));
       setMessaging(false);
     }
   }
@@ -104,7 +106,7 @@ export function MemberPage() {
       try {
         setAllPubs(await apiFetch<Publication[]>("/publications"));
       } catch (err) {
-        setActionError(err instanceof ApiError ? err.message : "Could not load publications.");
+        setActionError(err instanceof ApiError ? err.message : t("member.couldNotLoadPublications"));
         return;
       }
     }
@@ -117,7 +119,7 @@ export function MemberPage() {
       try {
         setAllNews(await apiFetch<NewsItem[]>("/news"));
       } catch (err) {
-        setActionError(err instanceof ApiError ? err.message : "Could not load news.");
+        setActionError(err instanceof ApiError ? err.message : t("member.couldNotLoadNews"));
         return;
       }
     }
@@ -130,7 +132,7 @@ export function MemberPage() {
   return (
     <>
       <PageHeader
-        crumbs={[{ label: "Team", to: "/team" }, { label: profile.name }]}
+        crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: profile.name }]}
         title={profile.name}
         description={[profile.role, profile.department].filter(Boolean).join(" · ")}
       />
@@ -140,24 +142,20 @@ export function MemberPage() {
 
         {canEdit && (
           <AdminBar
-            text={
-              isOwner
-                ? "This is your profile — add history, or link your publications and news."
-                : `${policy.roleLabel}: manage this member's profile, history, and linked publications/news.`
-            }
+            text={isOwner ? t("member.ownProfileNote") : t("member.manageThisSuffix", { role: policy.roleLabel })}
             actions={
               <>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => setEditOpen(true)}>
-                  Edit profile
+                  {t("member.editProfile")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={openLinkPubs}>
-                  Link publications
+                  {t("member.linkPublications")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={openLinkNews}>
-                  Link news
+                  {t("member.linkNews")}
                 </button>
                 <button className="btn btn--primary btn--sm" type="button" onClick={() => setHistoryModal({ open: true, entry: null })}>
-                  + Add history entry
+                  + {t("member.addHistoryEntry")}
                 </button>
               </>
             }
@@ -167,14 +165,14 @@ export function MemberPage() {
         <div className="detail-layout detail-layout--aside-first">
           <div className="detail-layout__main">
             <section className="detail-section" aria-labelledby="member-bio">
-              <SectionHeader compact id="member-bio" title="Biography" />
-              {profile.bio ? <p className="prose">{profile.bio}</p> : <EmptyState title="No bio added yet." compact />}
+              <SectionHeader compact id="member-bio" title={t("member.biography")} />
+              {profile.bio ? <p className="prose">{profile.bio}</p> : <EmptyState title={t("member.noBioYet")} compact />}
             </section>
 
             <section className="detail-section" aria-labelledby="member-history">
-              <SectionHeader compact id="member-history" title="History" />
+              <SectionHeader compact id="member-history" title={t("member.history")} />
               {profile.history.length === 0 ? (
-                <EmptyState title="No history added yet." compact />
+                <EmptyState title={t("member.noHistoryYet")} compact />
               ) : (
                 <div>
                   {profile.history.map((h) => (
@@ -186,10 +184,22 @@ export function MemberPage() {
                       </div>
                       {canEdit && (
                         <div className="pub-item__actions">
-                          <button className="icon-btn" title="Edit" aria-label={`Edit ${h.title}`} type="button" onClick={() => setHistoryModal({ open: true, entry: h })}>
+                          <button
+                            className="icon-btn"
+                            title={t("common.edit")}
+                            aria-label={t("member.editEntry", { title: h.title })}
+                            type="button"
+                            onClick={() => setHistoryModal({ open: true, entry: h })}
+                          >
                             <Icon name="edit" />
                           </button>
-                          <button className="icon-btn icon-btn--danger" title="Delete" aria-label={`Delete ${h.title}`} type="button" onClick={() => setHistoryDelete(h)}>
+                          <button
+                            className="icon-btn icon-btn--danger"
+                            title={t("common.delete")}
+                            aria-label={t("member.deleteEntry", { title: h.title })}
+                            type="button"
+                            onClick={() => setHistoryDelete(h)}
+                          >
                             <Icon name="trash" />
                           </button>
                         </div>
@@ -201,9 +211,9 @@ export function MemberPage() {
             </section>
 
             <section className="detail-section" aria-labelledby="member-pubs">
-              <SectionHeader compact id="member-pubs" title={`Publications (${profile.publications.length})`} />
+              <SectionHeader compact id="member-pubs" title={t("member.publicationsHeading", { count: profile.publications.length })} />
               {profile.publications.length === 0 ? (
-                <EmptyState title="No publications linked yet." compact />
+                <EmptyState title={t("member.noPubsLinked")} compact />
               ) : (
                 <div className="pub-list">
                   {profile.publications.map((p) => (
@@ -214,9 +224,9 @@ export function MemberPage() {
             </section>
 
             <section className="detail-section" aria-labelledby="member-news">
-              <SectionHeader compact id="member-news" title={`News (${profile.news.length})`} />
+              <SectionHeader compact id="member-news" title={t("member.newsHeading", { count: profile.news.length })} />
               {profile.news.length === 0 ? (
-                <EmptyState title="No news linked yet." compact />
+                <EmptyState title={t("member.noNewsLinked")} compact />
               ) : (
                 <div className="grid">
                   {profile.news.map((n) => (
@@ -227,8 +237,8 @@ export function MemberPage() {
             </section>
           </div>
 
-          <aside className="detail-layout__aside" aria-label="Researcher summary">
-            <section className="panel profile-summary" aria-label="Profile">
+          <aside className="detail-layout__aside" aria-label={t("member.researcherSummaryAria")}>
+            <section className="panel profile-summary" aria-label={t("profile.pageTitle")}>
               <Avatar size="xl" initials={profile.initials} photoUrl={profile.photoUrl} />
               <div>
                 <p className="profile-summary__role">{profile.role}</p>
@@ -236,7 +246,7 @@ export function MemberPage() {
               </div>
               {profile.canMessage && (
                 <button type="button" className="btn btn--secondary btn--sm profile-summary__message" onClick={startConversation} disabled={messaging}>
-                  <Icon name="message" size={14} /> {messaging ? "Opening…" : "Message"}
+                  <Icon name="message" size={14} /> {messaging ? t("member.opening") : t("member.message")}
                 </button>
               )}
             </section>
@@ -244,14 +254,16 @@ export function MemberPage() {
             {(profile.projects.length > 0 || profile.groups.length > 0) && (
               <section className="panel" aria-labelledby="member-affiliations">
                 <h2 className="panel__title" id="member-affiliations">
-                  Projects &amp; groups
+                  {t("member.projectsAndGroups")}
                 </h2>
                 <div className="panel__list">
                   {profile.projects.map((p) => (
                     <Link key={p.id} to={`/projects/${p.id}`} className="person person--plain">
                       <span>
                         {p.title}
-                        <small>Project · {p.role === "LEAD" ? "lead" : p.role.toLowerCase()}</small>
+                        <small>
+                          {t("member.projectLabel")} · {p.role === "LEAD" ? t("member.lead") : p.role.toLowerCase()}
+                        </small>
                       </span>
                     </Link>
                   ))}
@@ -259,7 +271,9 @@ export function MemberPage() {
                     <Link key={g.id} to={`/groups/${g.id}`} className="person person--plain">
                       <span>
                         {g.name}
-                        <small>Group · {g.role === "LEAD" ? "lead" : "member"}</small>
+                        <small>
+                          {t("member.groupLabel")} · {g.role === "LEAD" ? t("member.lead") : t("member.member")}
+                        </small>
                       </span>
                     </Link>
                   ))}
@@ -272,7 +286,7 @@ export function MemberPage() {
 
       <TeamMemberFormModal
         open={editOpen}
-        title="Edit profile"
+        title={t("member.editProfile")}
         initial={profile as Partial<TeamMember>}
         showAdminFields={policy.canManageTeamPlacement}
         onClose={() => setEditOpen(false)}
@@ -301,8 +315,8 @@ export function MemberPage() {
 
       <ConfirmDeleteModal
         open={historyDelete !== null}
-        title="Delete history entry"
-        message={historyDelete ? `Delete "${historyDelete.title}" from this profile's history? This cannot be undone.` : ""}
+        title={t("member.deleteHistoryTitle")}
+        message={historyDelete ? t("member.deleteHistoryMessage", { title: historyDelete.title }) : ""}
         onClose={() => setHistoryDelete(null)}
         onConfirm={async () => {
           if (!historyDelete) return;
@@ -313,8 +327,8 @@ export function MemberPage() {
 
       <LinkItemsModal
         open={linkPubsOpen}
-        title="Select your publications"
-        description="Check every publication that belongs to you. This only changes what shows on your profile."
+        title={t("member.selectYourPubsTitle")}
+        description={t("member.selectYourPubsDesc")}
         items={pubItems}
         selectedIds={profile.publications.map((p) => p.id)}
         onClose={() => setLinkPubsOpen(false)}
@@ -329,8 +343,8 @@ export function MemberPage() {
 
       <LinkItemsModal
         open={linkNewsOpen}
-        title="Select your news items"
-        description="Check every news item that's about you or something you did."
+        title={t("member.selectYourNewsTitle")}
+        description={t("member.selectYourNewsDesc")}
         items={newsItems}
         selectedIds={profile.news.map((n) => n.id)}
         onClose={() => setLinkNewsOpen(false)}

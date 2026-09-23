@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { GROUP_MEMBER_ROLES, type GroupDetail, type TeamMember } from "@scl/shared";
+import { GROUP_MEMBER_ROLES, type GroupDetail, type TeamMember, type TranslationKey } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
@@ -17,8 +17,9 @@ import { GroupFormModal } from "../components/GroupFormModal";
 import { MembersModal } from "../components/MembersModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { VisibilityBadge } from "../components/VisibilityField";
+import { useT } from "../i18n/LocaleContext";
 
-const ROLE_LABELS: Record<string, string> = { LEAD: "Lead", MEMBER: "Member" };
+const ROLE_LABEL_KEY: Record<string, TranslationKey> = { LEAD: "groups.role.LEAD", MEMBER: "groups.role.MEMBER" };
 
 type Panel = "edit" | "members" | "delete" | null;
 
@@ -26,6 +27,8 @@ export function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const policy = usePolicy();
+  const t = useT();
+  const ROLE_LABELS: Record<string, string> = { LEAD: t("groups.role.LEAD"), MEMBER: t("groups.role.MEMBER") };
   const { data: group, loading, error, status, reload } = useApiResource<GroupDetail>(`/groups/${id}`);
   const [panel, setPanel] = useState<Panel>(null);
   const [team, setTeam] = useState<TeamMember[] | null>(null);
@@ -36,9 +39,9 @@ export function GroupDetailPage() {
   if (loading && (!group || group.id !== id)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Groups", to: "/groups" }, { label: "Loading…" }]} title="Loading…" />
+        <PageHeader crumbs={[{ label: t("groups.pageTitle"), to: "/groups" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
-          <LoadingState label="Loading group…" variant="text" />
+          <LoadingState label={t("groups.loadingGroup")} variant="text" />
         </div>
       </>
     );
@@ -47,11 +50,11 @@ export function GroupDetailPage() {
   if (status === 404 || (!group && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: "Groups", to: "/groups" }, { label: "Not found" }]} title="Group not found" />
+        <PageHeader crumbs={[{ label: t("groups.pageTitle"), to: "/groups" }, { label: t("common.notFoundCrumb") }]} title={t("groups.notFoundTitle")} />
         <div className="container">
-          <ErrorState message={status === 404 ? "This group could not be found." : (error ?? "Could not load this group.")} onRetry={status === 404 ? undefined : reload} />
+          <ErrorState message={status === 404 ? t("groups.notFoundMsg") : (error ?? t("groups.couldNotLoadThis"))} onRetry={status === 404 ? undefined : reload} />
           <Link to="/groups" className="btn btn--secondary btn--sm">
-            <Icon name="arrow-left" size={14} /> All groups
+            <Icon name="arrow-left" size={14} /> {t("groups.allGroups")}
           </Link>
         </div>
       </>
@@ -65,30 +68,30 @@ export function GroupDetailPage() {
       if (!team) setTeam(await apiFetch<TeamMember[]>("/team"));
       setPanel("members");
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not load the team.");
+      setActionError(err instanceof ApiError ? err.message : t("groups.couldNotLoadTeam"));
     }
   }
   const close = () => setPanel(null);
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Groups", to: "/groups" }, { label: group.name }]} title={group.name} description={group.description} />
+      <PageHeader crumbs={[{ label: t("groups.pageTitle"), to: "/groups" }, { label: group.name }]} title={group.name} description={group.description} />
 
       <div className="container">
         {group.canEdit && (
           <AdminBar
-            text={policy.isManager ? `${policy.isAdmin ? "Admin" : "Lab manager"}: manage this group.` : "You lead this group: edit its details and members."}
+            text={policy.isManager ? t("groups.manageThisSuffix", { role: policy.roleLabel }) : t("groups.leadThis")}
             actions={
               <>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={() => setPanel("edit")}>
-                  Edit group
+                  {t("groups.editGroup")}
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={openMembers}>
-                  Members
+                  {t("projects.membersLabel")}
                 </button>
                 {policy.canDeleteContent && (
                   <button className="btn btn--danger btn--sm" type="button" onClick={() => setPanel("delete")}>
-                    Delete
+                    {t("common.delete")}
                   </button>
                 )}
               </>
@@ -104,22 +107,22 @@ export function GroupDetailPage() {
         )}
 
         <section className="detail-section" aria-labelledby="group-members">
-          <SectionHeader compact id="group-members" title={`Members (${group.members.length})`} />
+          <SectionHeader compact id="group-members" title={t("groups.membersHeading", { count: group.members.length })} />
           {group.members.length === 0 ? (
-            <EmptyState title="No members added yet." compact />
+            <EmptyState title={t("groups.noMembersYet")} compact />
           ) : (
             <div className="person-list">
               {group.members.map((m) => (
-                <PersonLink key={m.teamMemberId} id={m.teamMemberId} name={m.name} initials={m.initials} detail={ROLE_LABELS[m.role] ?? m.role} />
+                <PersonLink key={m.teamMemberId} id={m.teamMemberId} name={m.name} initials={m.initials} detail={t(ROLE_LABEL_KEY[m.role] ?? "groups.role.MEMBER")} />
               ))}
             </div>
           )}
         </section>
 
         <section className="detail-section" aria-labelledby="group-projects">
-          <SectionHeader compact id="group-projects" title={`Projects (${group.projects.length})`} />
+          <SectionHeader compact id="group-projects" title={t("groups.projectsHeading", { count: group.projects.length })} />
           {group.projects.length === 0 ? (
-            <EmptyState title="No projects in this group yet." compact />
+            <EmptyState title={t("groups.noProjectsYet")} compact />
           ) : (
             <div className="grid">
               {group.projects.map((p) => (
@@ -132,7 +135,7 @@ export function GroupDetailPage() {
 
       <GroupFormModal
         open={panel === "edit"}
-        title="Edit group"
+        title={t("groups.editTitle")}
         initial={group}
         canManageSettings={policy.isManager}
         onClose={close}
@@ -144,8 +147,8 @@ export function GroupDetailPage() {
 
       <MembersModal
         open={panel === "members"}
-        title="Group members"
-        description="Choose who belongs to this group. Group leads can edit the group."
+        title={t("groups.membersModalTitle")}
+        description={t("groups.membersModalDesc")}
         people={(team ?? []).map((m) => ({ id: m.id, label: `${m.name} — ${m.role}` }))}
         roles={GROUP_MEMBER_ROLES}
         roleLabels={ROLE_LABELS}
@@ -159,8 +162,8 @@ export function GroupDetailPage() {
 
       <ConfirmDeleteModal
         open={panel === "delete"}
-        title="Delete group"
-        message={`Delete "${group.name}"? Memberships are removed; its projects are kept and become ungrouped. This cannot be undone.`}
+        title={t("groups.deleteTitle")}
+        message={t("groups.deleteMessageFull", { name: group.name })}
         onClose={close}
         onConfirm={async () => {
           await apiFetch(`/groups/${group.id}`, { method: "DELETE" });
