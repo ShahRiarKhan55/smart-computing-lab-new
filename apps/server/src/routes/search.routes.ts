@@ -4,6 +4,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow } from "../lib/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { runSearch } from "../lib/search.js";
+import { resolveLocale } from "../lib/translations.js";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.get(
   optionalAuth,
   asyncHandler(async (req, res) => {
     const query = parseOrThrow(searchQuerySchema, req.query);
-    res.json(await runSearch(req.user ?? null, query));
+    res.json(await runSearch(req.user ?? null, query, resolveLocale(req)));
   }),
 );
 

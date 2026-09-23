@@ -35,10 +35,10 @@ const section = (t) => console.log(`\n# ${t}`);
 
 class Client {
   cookie = "";
-  async req(method, path, body) {
+  async req(method, path, body, extraHeaders) {
     const res = await fetch(`${API}/api${path}`, {
       method,
-      headers: { "Content-Type": "application/json", ...(this.cookie ? { cookie: this.cookie } : {}) },
+      headers: { "Content-Type": "application/json", ...(this.cookie ? { cookie: this.cookie } : {}), ...(extraHeaders ?? {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     for (const c of res.headers.getSetCookie?.() ?? []) {
@@ -53,14 +53,14 @@ class Client {
     } catch {}
     return { status: res.status, json, text, headers: res.headers };
   }
-  get = (p) => this.req("GET", p);
+  get = (p, h) => this.req("GET", p, undefined, h);
   post = (p, b) => this.req("POST", p, b ?? {});
   put = (p, b) => this.req("PUT", p, b ?? {});
   del = (p) => this.req("DELETE", p);
   login = (email, password) => this.post("/auth/login", { email, password });
 }
 
-const search = (c, params) => c.get(`/search?${new URLSearchParams(params).toString()}`);
+const search = (c, params, locale) => c.get(`/search?${new URLSearchParams(params).toString()}`, locale ? { "X-Locale": locale } : undefined);
 const ids = (r) => (r.json?.results ?? []).map((x) => x.id);
 const titles = (r) => (r.json?.results ?? []).map((x) => x.title);
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -79,6 +79,25 @@ async function everything(c, params) {
 
 async function cleanup() {
   await prisma.user.deleteMany({ where: { email: { startsWith: "p10test-" } } }).catch(() => {});
+  // Direct Prisma deletes below bypass the entity routes' own Translation cleanup (Phase 14 §12),
+  // so any Japanese override this suite wrote (§10's search-matching fixtures) is removed first,
+  // by entityId, the same way i18n-regression.mjs proves the routes themselves do it.
+  const [zzAreas, zzProjects, zzGroups, zzNews] = await Promise.all([
+    prisma.researchArea.findMany({ where: { title: { startsWith: "ZZ Search" } }, select: { id: true } }),
+    prisma.researchProject.findMany({ where: { title: { contains: "ZZ Search" } }, select: { id: true } }),
+    prisma.researchGroup.findMany({ where: { name: { contains: "ZZ Search" } }, select: { id: true } }),
+    prisma.newsItem.findMany({ where: { title: { startsWith: "ZZ Search" } }, select: { id: true } }),
+  ]);
+  await prisma.translation.deleteMany({
+    where: {
+      OR: [
+        { entityType: "RESEARCH_AREA", entityId: { in: zzAreas.map((r) => r.id) } },
+        { entityType: "RESEARCH_PROJECT", entityId: { in: zzProjects.map((r) => r.id) } },
+        { entityType: "RESEARCH_GROUP", entityId: { in: zzGroups.map((r) => r.id) } },
+        { entityType: "NEWS_ITEM", entityId: { in: zzNews.map((r) => r.id) } },
+      ],
+    },
+  });
   await prisma.researchProject.deleteMany({ where: { title: { contains: "ZZ Search" } } });
   await prisma.researchGroup.deleteMany({ where: { name: { contains: "ZZ Search" } } });
   await prisma.teamMember.deleteMany({ where: { name: { startsWith: "ZZ Search" } } });
@@ -459,6 +478,39 @@ async function main() {
   for (const q of oddChars) oddRes.push([q, await search(guest, { q })]);
   check("special characters never crash (200, or 400 when nothing searchable remains)", oddRes.every(([, x]) => x.status === 200 || x.status === 400) && oddRes.every(([, x]) => x.status !== 200 || typeof x.json.pagination.total === "number"), oddRes.filter(([, x]) => x.status >= 500).map(([q]) => q).join());
   check("regex/glob characters are literal text, not patterns (.* / [a-z] / * match nothing)", [".*", "[a-z]", "*", "^$"].every((q) => oddRes.find(([k]) => k === q)[1].json?.pagination?.total === 0));
+
+  // ------------------------------------------------------------------ Japanese Translation matching (Phase 15 §10)
+  section("Japanese Translation matching (Phase 15): a ja override is findable, English is untouched, visibility holds");
+  const TERM = "トランスレート限定検索語";
+  const TERM_HIDDEN = "秘密トランスレート限定語";
+  const TITLE_TERM = "翻訳タイトル限定語";
+  const aXlat = await mkArea("ZZ Search Xlat Area", "Nothing special in English here", "ZX", "PUBLIC");
+  await admin.put(`/research/${aXlat.id}`, { translations: { ja: { description: `この分野は${TERM}に関する説明です。` } } });
+  const aXlatHid = await mkArea("ZZ Search Xlat Hidden Area", "Nothing special in English, secret", "ZX", "LAB_ONLY");
+  await admin.put(`/research/${aXlatHid.id}`, { translations: { ja: { description: `非公開の${TERM_HIDDEN}。` } } });
+  const aXlatTitle = await mkArea("ZZ Search Xlat Title Area", "irrelevant english description", "ZX", "PUBLIC");
+  await admin.put(`/research/${aXlatTitle.id}`, { translations: { ja: { title: `${TITLE_TERM}というタイトル` } } });
+  const hostileTerm = "ザッ危険限定語";
+  const aXlatXss = await mkArea("ZZ Search Xlat XSS Area", "irrelevant", "ZX", "PUBLIC");
+  await admin.put(`/research/${aXlatXss.id}`, { translations: { ja: { description: `<script>alert(1)</script>${hostileTerm}` } } });
+
+  check("ja override is NOT searchable at all under X-Locale: en (English never queries Translation)", (await search(guest, { q: TERM }, "en")).json.pagination.total === 0);
+  check("ja override IS searchable under X-Locale: ja, ranked (tier2: never promoted by a title it doesn't have)", ids(await search(guest, { q: TERM }, "ja")).includes(aXlat.id));
+  check("a translation-only match's own type count is still correct", (await search(guest, { q: TERM, type: "research-area" }, "ja")).json.counts["research-area"] === 1);
+  check("visibility still holds WITH a ja override: guest+ja cannot find the LAB_ONLY area", (await search(guest, { q: TERM_HIDDEN }, "ja")).json.pagination.total === 0);
+  check("...but a logged-in member+ja can (same rule as an English LAB_ONLY match)", ids(await search(memA.client, { q: TERM_HIDDEN }, "ja")).includes(aXlatHid.id));
+  check("no locale ever changes what guest can find without ja: en/ja both 0 for the hidden term with no session", (await search(guest, { q: TERM_HIDDEN }, "en")).json.pagination.total === 0);
+
+  const byTitleTerm = (await search(guest, { q: TITLE_TERM, type: "research-area" }, "ja")).json.results[0];
+  check("a ja-title override is matched by its Japanese text", byTitleTerm?.id === aXlatTitle.id);
+  check("...and the RESULT shows the ja title, not the English one (matches the entity's own localized GET)", byTitleTerm?.title === `${TITLE_TERM}というタイトル`);
+  const byEnglishTitleJa = (await search(guest, { q: "ZZ Search Xlat Title Area" }, "ja")).json.results.find((r) => r.id === aXlatTitle.id);
+  check("found via the ENGLISH title under ja locale still shows the ja override in the result (localize() applies regardless of which column matched)", byEnglishTitleJa?.title === `${TITLE_TERM}というタイトル`);
+  const byEnglishTitleEn = (await search(guest, { q: "ZZ Search Xlat Title Area" }, "en")).json.results.find((r) => r.id === aXlatTitle.id);
+  check("...but under X-Locale: en the same entity's result is unchanged (still the English title)", byEnglishTitleEn?.title === "ZZ Search Xlat Title Area");
+
+  const xssHit = (await search(guest, { q: hostileTerm }, "ja")).json.results.find((r) => r.id === aXlatXss.id);
+  check("a hostile ja translation value is findable and round-trips as inert JSON text (never executed, same guarantee as i18n-regression.mjs)", xssHit?.description.includes("<script>alert(1)</script>") && xssHit.description.includes(hostileTerm));
 
   // ------------------------------------------------------------------ raw-JSON audit
   section("raw JSON audit (not just what a UI would render)");

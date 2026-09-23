@@ -1,17 +1,22 @@
 import type { Prisma } from "@prisma/client";
 import {
+  DEFAULT_LOCALE,
   PROJECT_STATUS_LABELS,
   SEARCH_TYPES,
   plainTextForumBody,
+  translatableFieldsOf,
+  type Locale,
   type SearchQuery,
   type SearchResponse,
   type SearchResult,
   type SearchType,
+  type TranslatableEntityType,
 } from "@scl/shared";
 import { prisma } from "./prisma.js";
 import { asProjectStatus, toIsoDate } from "./serializers.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
 import { visibleForumStatus } from "./forumSerializers.js";
+import { loadTranslations, localize } from "./translations.js";
 
 /**
  * Global search (Phase 10). Plain SQLite `LIKE` through Prisma's `contains` / `startsWith`:
@@ -43,7 +48,7 @@ const TIERS: Tier[] = ["t0", "t1", "t2"];
 /** A search word list as `parseSearchText` produced it. */
 type Words = Pick<SearchQuery, "phrase" | "terms">;
 
-interface SourceDef<W extends object, R> {
+interface SourceDef<W extends object, R extends { id: string }> {
   type: SearchType;
   /** The column that is the result's title; ranking looks at it first. */
   title: Extract<keyof W, string>;
@@ -56,6 +61,12 @@ interface SourceDef<W extends object, R> {
   count: (where: W) => Promise<number>;
   find: (where: W, skip: number, take: number) => Promise<R[]>;
   toResult: (row: R, viewer: Viewer, terms: string[]) => SearchResult;
+  /** Present only for the entity types the Phase 14 `Translation` table covers (§4's allow-list).
+   *  When the search request's locale is Japanese, this both (a) lets a Japanese override be
+   *  MATCHED, on top of the English columns above, and (b) shows that override's text in the
+   *  result, exactly like the entity's own GET already does (Phase 14 `localize()`) — a search
+   *  result is never "found in Japanese, shown in English". */
+  translatable?: TranslatableEntityType;
 }
 
 interface SourcePlan {
@@ -65,30 +76,79 @@ interface SourcePlan {
 
 const like = <W>(field: string, op: "contains" | "startsWith", value: string) => ({ [field]: { [op]: value } }) as unknown as W;
 
-/** Builds the WHERE for "everything that matches" and for each ranking tier (tiers are disjoint). */
-function wheres<W extends object, R>(def: SourceDef<W, R>, viewer: Viewer, { phrase, terms }: Words) {
+/**
+ * The ids of `entityType` rows whose Japanese `Translation` override contains EVERY search term
+ * (each term may land in a different translatable field — the same AND-across-terms/OR-across-
+ * fields semantics `wheres()` uses for the English columns below). One query per term, same
+ * multiplicity as the English side's own `anyField` (§10's own "no FTS5, no raw SQL" constraint —
+ * this is plain `contains`, nothing new). Never called for an English-locale search: Phase 14 never
+ * stores English in `Translation`, so there would be nothing to find (§4).
+ */
+async function translationMatchIds(entityType: TranslatableEntityType, terms: string[]): Promise<Set<string>> {
+  const fields = translatableFieldsOf(entityType) as string[];
+  let matched: Set<string> | null = null;
+  for (const term of terms) {
+    const rows = await prisma.translation.findMany({
+      where: { entityType, locale: "ja", field: { in: fields }, value: { contains: term } },
+      select: { entityId: true },
+    });
+    const ids = new Set(rows.map((r) => r.entityId));
+    if (matched === null) {
+      matched = ids;
+    } else {
+      const prev: Set<string> = matched;
+      matched = new Set(Array.from(prev).filter((id) => ids.has(id)));
+    }
+    if (matched.size === 0) return matched;
+  }
+  return matched ?? new Set();
+}
+
+/** Builds the WHERE for "everything that matches" and for each ranking tier (tiers are disjoint).
+ *  `translatedIds`, when given, are OR'd into the match — but NEVER into `t0`/`t1`: those tiers
+ *  rank by the ENGLISH title column, which a translation-only match never satisfies, so it always
+ *  ranks as t2 ("matched only through other fields"), exactly like an English body-only match does.
+ *  It is still ANDed with `base` here like everything else, so locale can never widen visibility. */
+function wheres<W extends object, R extends { id: string }>(def: SourceDef<W, R>, viewer: Viewer, { phrase, terms }: Words, translatedIds: Set<string> | null) {
   const base = def.base(viewer);
   const anyField = (term: string) => ({
     OR: [...[def.title, ...def.fields].map((f) => like<W>(f, "contains", term)), ...(def.extra?.(term) ?? [])],
   });
+  const englishMatch = { AND: terms.map(anyField) };
+  const byTranslation = translatedIds && translatedIds.size > 0 ? [{ id: { in: Array.from(translatedIds) } } as unknown as W] : [];
+  const anyMatch = byTranslation.length > 0 ? { OR: [englishMatch, ...byTranslation] } : englishMatch;
   const titleHasAll = { AND: terms.map((t) => like<W>(def.title, "contains", t)) };
   const prefix = like<W>(def.title, "startsWith", phrase);
   return {
-    all: { AND: [base, ...terms.map(anyField)] } as W,
+    all: { AND: [base, anyMatch] } as W,
     t0: { AND: [base, prefix] } as W, // starting with the phrase implies containing every word
     t1: { AND: [base, titleHasAll, { NOT: prefix }] } as W,
-    t2: { AND: [base, ...terms.map(anyField), { NOT: titleHasAll }] } as W,
+    t2: { AND: [base, anyMatch, { NOT: titleHasAll }] } as W,
   };
 }
 
-function defineSource<W extends object, R>(def: SourceDef<W, R>) {
+function defineSource<W extends object, R extends { id: string }>(def: SourceDef<W, R>) {
   return {
     type: def.type,
-    plan(viewer: Viewer, words: Words): SourcePlan {
-      const w = wheres(def, viewer, words);
+    translatable: def.translatable,
+    async plan(viewer: Viewer, words: Words, locale: Locale): Promise<SourcePlan> {
+      const translatedIds = def.translatable && locale !== DEFAULT_LOCALE ? await translationMatchIds(def.translatable, words.terms) : null;
+      const w = wheres(def, viewer, words, translatedIds);
       return {
         count: (part) => def.count(w[part]),
-        rows: async (tier, skip, take) => (await def.find(w[tier], skip, take)).map((row) => def.toResult(row, viewer, words.terms)),
+        rows: async (tier, skip, take) => {
+          const rows = await def.find(w[tier], skip, take);
+          const translated =
+            def.translatable && locale !== DEFAULT_LOCALE
+              ? await loadTranslations(
+                  prisma,
+                  def.translatable,
+                  rows.map((r) => r.id),
+                  locale,
+                )
+              : new Map<string, Record<string, string>>();
+          return rows.map((row) => def.toResult(def.translatable ? localize(row, def.translatable, translated) : row, viewer, words.terms));
+        },
       };
     },
   };
@@ -134,6 +194,7 @@ const sources = [
     type: "research-area",
     title: "title",
     fields: ["description", "tag"],
+    translatable: "RESEARCH_AREA",
     base: visibleTo,
     count: (where) => prisma.researchArea.count({ where }),
     find: (where, skip, take) =>
@@ -162,6 +223,7 @@ const sources = [
     type: "project",
     title: "title",
     fields: ["slug", "summary", "description"],
+    translatable: "RESEARCH_PROJECT",
     base: visibleTo,
     count: (where) => prisma.researchProject.count({ where }),
     find: (where, skip, take) =>
@@ -187,6 +249,7 @@ const sources = [
     type: "group",
     title: "name",
     fields: ["slug", "description"],
+    translatable: "RESEARCH_GROUP",
     base: visibleTo,
     count: (where) => prisma.researchGroup.count({ where }),
     find: (where, skip, take) =>
@@ -215,6 +278,7 @@ const sources = [
     title: "name",
     fields: ["role", "department", "bio"],
     extra: (term) => [{ historyEntries: { some: { OR: [{ title: { contains: term } }, { description: { contains: term } }] } } }],
+    translatable: "TEAM_MEMBER",
     base: () => ({}),
     count: (where) => prisma.teamMember.count({ where }),
     find: (where, skip, take) =>
@@ -269,6 +333,7 @@ const sources = [
     type: "news",
     title: "title",
     fields: ["description", "type"],
+    translatable: "NEWS_ITEM",
     base: visibleTo,
     count: (where) => prisma.newsItem.count({ where }),
     find: (where, skip, take) =>
@@ -346,9 +411,9 @@ if (sources.some((s, i) => s.type !== SEARCH_TYPES[i])) throw new Error("search 
  * COUNTs per selected type that has matches (tier sizes), then only the SELECTs for the tier/type
  * buckets that overlap the requested page. Nothing is loaded that is not returned.
  */
-export async function runSearch(viewer: Viewer, query: SearchQuery): Promise<SearchResponse> {
+export async function runSearch(viewer: Viewer, query: SearchQuery, locale: Locale = DEFAULT_LOCALE): Promise<SearchResponse> {
   const { type, page, limit } = query;
-  const plans = sources.map((s) => ({ type: s.type, plan: s.plan(viewer, query) }));
+  const plans = await Promise.all(sources.map(async (s) => ({ type: s.type, plan: await s.plan(viewer, query, locale) })));
 
   const totals = await Promise.all(plans.map((p) => p.plan.count("all")));
   const selected = plans.map((p, i) => ({ ...p, total: totals[i] })).filter((p) => type === "all" || p.type === type);
