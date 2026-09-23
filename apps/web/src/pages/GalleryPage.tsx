@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { GALLERY_CATEGORIES, GALLERY_CATEGORY_LABELS, type GalleryCategory, type GalleryItem, type GalleryListResponse, type ProjectSummary } from "@scl/shared";
+import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem, type GalleryListResponse, type ProjectSummary } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
@@ -15,11 +15,14 @@ import { GalleryLightbox } from "../components/GalleryLightbox";
 import { GalleryUploadModal } from "../components/GalleryUploadModal";
 import { GalleryFormModal, type GalleryEditFields } from "../components/GalleryFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
+import { useT } from "../i18n/LocaleContext";
+import { GALLERY_CATEGORY_LABEL_KEY } from "../i18n/labels";
 
 const LIMIT = 24;
 type CategoryFilter = "ALL" | GalleryCategory;
 
 export function GalleryPage() {
+  const t = useT();
   const policy = usePolicy();
   const [searchParams] = useSearchParams();
   // A project detail page links here as "View all" (Phase 13 §"project page integration"); the
@@ -60,7 +63,7 @@ export function GalleryPage() {
       await apiFetch(`/gallery/${deleting.id}`, { method: "DELETE" });
       reload();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not delete this photo.");
+      setActionError(err instanceof ApiError ? err.message : t("gallery.couldNotDelete"));
       throw err;
     }
   }
@@ -68,13 +71,13 @@ export function GalleryPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Community"
-        title="Lab Gallery"
-        description="Photos from projects, events and everyday life in the lab."
+        eyebrow={t("nav.community")}
+        title={t("gallery.pageTitle")}
+        description={t("gallery.pageDescription")}
         actions={
           policy.canCreateGalleryItem && (
             <button className="btn btn--primary" type="button" onClick={() => setShowUpload(true)}>
-              <Icon name="upload" size={16} /> Add photo
+              <Icon name="upload" size={16} /> {t("gallery.addPhoto")}
             </button>
           )
         }
@@ -85,28 +88,26 @@ export function GalleryPage() {
 
         <SectionHeader
           compact
-          title="Browse"
+          title={t("gallery.browse")}
           action={
-            <div className="chips" role="group" aria-label="Filter by category">
+            <div className="chips" role="group" aria-label={t("gallery.filterByCategory")}>
               <button type="button" className={`chip${category === "ALL" ? " active" : ""}`} onClick={() => changeCategory("ALL")} aria-pressed={category === "ALL"}>
-                All
+                {t("gallery.all")}
               </button>
               {GALLERY_CATEGORIES.map((c) => (
                 <button key={c} type="button" className={`chip${category === c ? " active" : ""}`} onClick={() => changeCategory(c)} aria-pressed={category === c}>
-                  {GALLERY_CATEGORY_LABELS[c]}
+                  {t(GALLERY_CATEGORY_LABEL_KEY[c])}
                 </button>
               ))}
             </div>
           }
         />
 
-        {loading && !data && <LoadingState label="Loading gallery…" variant="cards" count={8} />}
+        {loading && !data && <LoadingState label={t("gallery.loading")} variant="cards" count={8} />}
         {error && !data && <ErrorState message={error} onRetry={reload} />}
 
         {data && items.length === 0 && (
-          <EmptyState title="No photos here yet.">
-            {policy.canCreateGalleryItem ? "Be the first to add one." : "Check back later."}
-          </EmptyState>
+          <EmptyState title={t("gallery.empty")}>{policy.canCreateGalleryItem ? t("gallery.beFirst") : t("gallery.checkBackLater")}</EmptyState>
         )}
 
         {items.length > 0 && (
@@ -124,26 +125,24 @@ export function GalleryPage() {
             </div>
 
             {data && data.pagination.totalPages > 1 && (
-              <nav className="search-pager" aria-label="Gallery pages">
+              <nav className="search-pager" aria-label={t("gallery.pagesAria")}>
                 {page > 1 ? (
                   <button type="button" className="btn btn--secondary btn--sm" onClick={() => setPage((p) => p - 1)}>
-                    <Icon name="arrow-left" size={14} /> Previous
+                    <Icon name="arrow-left" size={14} /> {t("common.previous")}
                   </button>
                 ) : (
                   <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-                    <Icon name="arrow-left" size={14} /> Previous
+                    <Icon name="arrow-left" size={14} /> {t("common.previous")}
                   </span>
                 )}
-                <span className="search-pager__pos">
-                  Page {data.pagination.page} of {data.pagination.totalPages}
-                </span>
+                <span className="search-pager__pos">{t("common.pageOf", { page: data.pagination.page, total: data.pagination.totalPages })}</span>
                 {page < data.pagination.totalPages ? (
                   <button type="button" className="btn btn--secondary btn--sm" onClick={() => setPage((p) => p + 1)}>
-                    Next <Icon name="arrow-right" size={14} />
+                    {t("common.next")} <Icon name="arrow-right" size={14} />
                   </button>
                 ) : (
                   <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-                    Next <Icon name="arrow-right" size={14} />
+                    {t("common.next")} <Icon name="arrow-right" size={14} />
                   </span>
                 )}
               </nav>
@@ -181,8 +180,8 @@ export function GalleryPage() {
 
       <ConfirmDeleteModal
         open={deleting !== null}
-        title="Delete photo"
-        message={`Delete "${deleting?.caption || "this photo"}"? This cannot be undone.`}
+        title={t("gallery.deleteTitle")}
+        message={t("gallery.deleteMessageWithCaption", { caption: deleting?.caption || t("gallery.thisPhoto") })}
         onClose={() => setDeleting(null)}
         onConfirm={confirmDelete}
       />
