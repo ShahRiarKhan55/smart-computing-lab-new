@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { PROJECT_STATUS_LABELS, type ProjectStatus } from "@scl/shared";
+import type { ProjectStatus } from "@scl/shared";
+import { useT } from "../i18n/LocaleContext";
+import { PROJECT_STATUS_LABEL_KEY } from "../i18n/labels";
 
 export type BadgeVariant = "neutral" | "brand" | "info" | "warn";
 
@@ -16,9 +18,10 @@ const STATUS_VARIANT: Record<ProjectStatus, BadgeVariant> = {
 
 /** A project's lifecycle state: always the word, never colour alone. */
 export function StatusBadge({ status }: { status: ProjectStatus }) {
+  const t = useT();
   return (
     <Badge variant={STATUS_VARIANT[status]} upper>
-      {PROJECT_STATUS_LABELS[status]}
+      {t(PROJECT_STATUS_LABEL_KEY[status])}
     </Badge>
   );
 }

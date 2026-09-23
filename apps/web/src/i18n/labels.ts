@@ -1,4 +1,4 @@
-import type { Category, GalleryCategory, TranslationKey } from "@scl/shared";
+import type { Category, GalleryCategory, ProjectStatus, TranslationKey } from "@scl/shared";
 
 /** Localized label for a team member's category — same `Record<value, TranslationKey>`
  * convention as `ROLE_LABEL_KEY` in `auth/usePolicy.ts`. The stored value is unchanged in every
@@ -17,4 +17,12 @@ export const GALLERY_CATEGORY_LABEL_KEY: Record<GalleryCategory, TranslationKey>
   EVENT: "gallery.category.EVENT",
   RESEARCH: "gallery.category.RESEARCH",
   OTHER: "gallery.category.OTHER",
+};
+
+/** Localized label for a project's status. */
+export const PROJECT_STATUS_LABEL_KEY: Record<ProjectStatus, TranslationKey> = {
+  PLANNED: "projects.status.PLANNED",
+  ACTIVE: "projects.status.ACTIVE",
+  COMPLETED: "projects.status.COMPLETED",
+  ARCHIVED: "projects.status.ARCHIVED",
 };

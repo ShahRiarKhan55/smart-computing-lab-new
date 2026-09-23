@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PROJECT_STATUSES, PROJECT_STATUS_LABELS, type GroupSummary, type ProjectDetail, type ProjectStatus, type ProjectSummary } from "@scl/shared";
+import { PROJECT_STATUSES, type GroupSummary, type ProjectDetail, type ProjectStatus, type ProjectSummary } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch } from "../lib/api";
@@ -12,6 +12,7 @@ import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { useT } from "../i18n/LocaleContext";
+import { PROJECT_STATUS_LABEL_KEY } from "../i18n/labels";
 
 type StatusFilter = "all" | ProjectStatus;
 
@@ -36,8 +37,8 @@ export function ProjectsPage() {
       <div className="container">
         {policy.canCreateProject && (
           <AdminBar
-            text={`${policy.isAdmin ? "Admin" : "Lab manager"}: create projects and choose who can see them. New projects start as lab-only.`}
-            actionLabel="+ New project"
+            text={t("projects.manageCreateSuffix", { role: policy.roleLabel })}
+            actionLabel={`+ ${t("projects.newProject")}`}
             onAction={() => setCreateOpen(true)}
           />
         )}
@@ -49,26 +50,26 @@ export function ProjectsPage() {
           <>
             {projects.length > 0 && (
               <div className="filters">
-                <div className="chips" role="group" aria-label="Filter projects by status">
+                <div className="chips" role="group" aria-label={t("projects.filterByStatusAria")}>
                   <button className={`chip${active === "all" ? " active" : ""}`} aria-pressed={active === "all"} onClick={() => setFilter("all")} type="button">
-                    All
+                    {t("projects.all")}
                   </button>
                   {PROJECT_STATUSES.filter((s) => present.has(s)).map((s) => (
                     <button key={s} className={`chip${active === s ? " active" : ""}`} aria-pressed={active === s} onClick={() => setFilter(s)} type="button">
-                      {PROJECT_STATUS_LABELS[s]}
+                      {t(PROJECT_STATUS_LABEL_KEY[s])}
                     </button>
                   ))}
                 </div>
                 <p className="filters__count" role="status">
-                  Showing {shown.length} of {projects.length} {projects.length === 1 ? "project" : "projects"}
+                  {t(shown.length === 1 ? "projects.showingCountOne" : "projects.showingCountOther", { shown: shown.length, total: projects.length })}
                 </p>
               </div>
             )}
 
-            {projects.length > 0 && <h2 className="sr-only">Projects</h2>}
+            {projects.length > 0 && <h2 className="sr-only">{t("projects.headingSr")}</h2>}
             {projects.length === 0 ? (
-              <EmptyState title={policy.user ? "No projects yet." : "No public projects yet."}>
-                {policy.user ? "Projects will appear here once a lab manager creates them." : "Lab members can log in to see internal ones."}
+              <EmptyState title={policy.user ? t("projects.empty") : t("projects.emptyGuest")}>
+                {policy.user ? t("projects.emptyHintUser") : t("projects.emptyHintGuest")}
               </EmptyState>
             ) : (
               <div className="grid">

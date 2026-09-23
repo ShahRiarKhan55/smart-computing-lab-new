@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import {
-  PROJECT_STATUSES,
-  PROJECT_STATUS_LABELS,
-  createProjectSchema,
-  type ProjectStatus,
-  type ProjectSummary,
-  type Visibility,
-} from "@scl/shared";
+import { PROJECT_STATUSES, createProjectSchema, type ProjectStatus, type ProjectSummary, type Visibility } from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
+import { PROJECT_STATUS_LABEL_KEY } from "../i18n/labels";
 
 /** What the form hands to the page. Manager-only fields are present only when `canManageSettings`. */
 export type ProjectFormPayload = Record<string, unknown>;
@@ -160,7 +154,7 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
             <select id="project_status" value={values.status} onChange={(e) => set("status", e.target.value as ProjectStatus)}>
               {PROJECT_STATUSES.map((s) => (
                 <option key={s} value={s}>
-                  {PROJECT_STATUS_LABELS[s]}
+                  {t(PROJECT_STATUS_LABEL_KEY[s])}
                 </option>
               ))}
             </select>
