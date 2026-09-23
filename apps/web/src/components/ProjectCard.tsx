@@ -3,7 +3,7 @@ import type { ProjectSummary, TranslationKey } from "@scl/shared";
 import { Avatar } from "./Avatar";
 import { StatusBadge } from "./Badge";
 import { VisibilityBadge } from "./VisibilityField";
-import { formatMonthYear } from "../lib/format";
+import { formatMonthYear, formatProjectDateRange } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
 
 const ROLE_LABEL_KEY: Record<string, TranslationKey> = {
@@ -22,7 +22,7 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
   const { locale, t } = useLocale();
   const start = project.startDate ?? null;
   const end = project.endDate ?? null;
-  const dates = start && end ? `${formatMonthYear(start, locale)} – ${formatMonthYear(end, locale)}` : start ? t("dates.since", { date: formatMonthYear(start, locale) }) : end ? t("dates.until", { date: formatMonthYear(end, locale) }) : "";
+  const dates = start && end ? formatProjectDateRange(start, end, locale) : start ? t("dates.since", { date: formatMonthYear(start, locale) }) : end ? t("dates.until", { date: formatMonthYear(end, locale) }) : "";
   const members = project.members ?? [];
   const areas = project.areas ?? [];
   return (

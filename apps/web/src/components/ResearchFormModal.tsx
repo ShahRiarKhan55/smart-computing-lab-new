@@ -98,28 +98,28 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="research_icon">Icon (emoji)</label>
+            <label htmlFor="research_icon">{t("research.iconLabel")}</label>
             <input id="research_icon" value={values.icon} onChange={(e) => set("icon", e.target.value)} />
           </div>
           <div className="form-group">
-            <label htmlFor="research_tag">Tag</label>
+            <label htmlFor="research_tag">{t("research.tagLabel")}</label>
             <input
               id="research_tag"
               value={values.tag}
               onChange={(e) => set("tag", e.target.value)}
-              placeholder="e.g. AI / ML"
+              placeholder={t("research.tagPlaceholder")}
               required
             />
           </div>
         </div>
 
         <div className="form-group">
-          <label htmlFor="research_title">Title</label>
+          <label htmlFor="research_title">{t("research.titleFieldLabel")}</label>
           <input id="research_title" value={values.title} onChange={(e) => set("title", e.target.value)} required />
         </div>
 
         <div className="form-group">
-          <label htmlFor="research_description">Description</label>
+          <label htmlFor="research_description">{t("research.descriptionFieldLabel")}</label>
           <textarea
             id="research_description"
             value={values.description}
@@ -129,7 +129,7 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
         </div>
 
         <div className="form-group">
-          <label htmlFor="research_sortOrder">Sort order (lower shows first)</label>
+          <label htmlFor="research_sortOrder">{t("research.sortOrderLabel")}</label>
           <input
             id="research_sortOrder"
             type="number"
@@ -148,11 +148,15 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
           <fieldset className="form-fieldset">
             <legend>{t("lang.ja.name")}</legend>
             <div className="form-group">
-              <label htmlFor="research_title_ja">{t("common.optional")}: Title (日本語)</label>
+              <label htmlFor="research_title_ja">
+                {t("common.optional")}: {t("research.titleJaLabel")}
+              </label>
               <input id="research_title_ja" value={ja.title ?? ""} onChange={(e) => setJa("title", e.target.value)} maxLength={200} />
             </div>
             <div className="form-group">
-              <label htmlFor="research_description_ja">{t("common.optional")}: Description (日本語)</label>
+              <label htmlFor="research_description_ja">
+                {t("common.optional")}: {t("research.descriptionJaLabel")}
+              </label>
               <textarea id="research_description_ja" value={ja.description ?? ""} onChange={(e) => setJa("description", e.target.value)} maxLength={2000} />
             </div>
           </fieldset>

@@ -12,6 +12,7 @@ import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
+import { useEntityTranslations } from "../hooks/useEntityTranslations";
 
 /** What the form hands to the page. Manager-only fields are present only when `canManageSettings`. */
 export type ProjectFormPayload = Record<string, unknown>;
@@ -63,6 +64,7 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
   const [values, setValues] = useState<FormState>(() => toFormState(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { values: ja, setField: setJa } = useEntityTranslations("RESEARCH_PROJECT", initial?.id, open);
 
   useEffect(() => {
     if (open) {
@@ -113,6 +115,9 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
         sortOrder: d.sortOrder,
         ...(d.slug ? { slug: d.slug } : {}),
       }),
+      // Only an existing project has somewhere for a translation override to attach (see
+      // useEntityTranslations.ts) — same rule ResearchFormModal established in Phase 14.
+      ...(initial ? { translations: { ja } } : {}),
     };
 
     setSubmitting(true);
@@ -135,23 +140,23 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
       )}
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-group">
-          <label htmlFor="project_title">Title</label>
+          <label htmlFor="project_title">{t("projects.titleFieldLabel")}</label>
           <input id="project_title" value={values.title} onChange={(e) => set("title", e.target.value)} maxLength={200} required />
         </div>
 
         <div className="form-group">
-          <label htmlFor="project_summary">Short summary (shown on the card)</label>
+          <label htmlFor="project_summary">{t("projects.summaryFieldLabel")}</label>
           <input id="project_summary" value={values.summary} onChange={(e) => set("summary", e.target.value)} maxLength={500} />
         </div>
 
         <div className="form-group">
-          <label htmlFor="project_description">Description</label>
+          <label htmlFor="project_description">{t("projects.descriptionFieldLabel")}</label>
           <textarea id="project_description" value={values.description} onChange={(e) => set("description", e.target.value)} />
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="project_status">Status</label>
+            <label htmlFor="project_status">{t("projects.statusLabel")}</label>
             <select id="project_status" value={values.status} onChange={(e) => set("status", e.target.value as ProjectStatus)}>
               {PROJECT_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -161,11 +166,11 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="project_startDate">Start date</label>
+            <label htmlFor="project_startDate">{t("projects.startDateLabel")}</label>
             <input id="project_startDate" type="date" value={values.startDate} onChange={(e) => set("startDate", e.target.value)} />
           </div>
           <div className="form-group">
-            <label htmlFor="project_endDate">End date</label>
+            <label htmlFor="project_endDate">{t("projects.endDateLabel")}</label>
             <input id="project_endDate" type="date" value={values.endDate} onChange={(e) => set("endDate", e.target.value)} />
           </div>
         </div>
@@ -175,9 +180,9 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
             <VisibilityField id="project_visibility" value={values.visibility} onChange={(v) => set("visibility", v)} />
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="project_group">Research group</label>
+                <label htmlFor="project_group">{t("projects.groupFieldLabel")}</label>
                 <select id="project_group" value={values.groupId} onChange={(e) => set("groupId", e.target.value)}>
-                  <option value="">— No group —</option>
+                  <option value="">{t("projects.noGroupOption")}</option>
                   {groups.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
@@ -186,15 +191,47 @@ export function ProjectFormModal({ open, title, initial, canManageSettings, grou
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="project_sortOrder">Sort order (lower shows first)</label>
+                <label htmlFor="project_sortOrder">{t("projects.sortOrderLabel")}</label>
                 <input id="project_sortOrder" type="number" value={values.sortOrder} onChange={(e) => set("sortOrder", e.target.value)} />
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="project_slug">URL name (optional, lowercase-with-hyphens; generated from the title if blank)</label>
-              <input id="project_slug" value={values.slug} onChange={(e) => set("slug", e.target.value)} placeholder={initial ? "leave blank to keep the current one" : "e.g. wafer-test-ml"} />
+              <label htmlFor="project_slug">{t("projects.slugLabel")}</label>
+              <input
+                id="project_slug"
+                value={values.slug}
+                onChange={(e) => set("slug", e.target.value)}
+                placeholder={initial ? t("projects.slugPlaceholderKeep") : t("projects.slugPlaceholderExample")}
+              />
             </div>
           </>
+        )}
+
+        {/* Phase 15: the same translation-editing pattern ResearchFormModal established in
+            Phase 14 — an English field next to a Japanese one, only shown once the project
+            exists (see useEntityTranslations.ts). */}
+        {initial && (
+          <fieldset className="form-fieldset">
+            <legend>{t("lang.ja.name")}</legend>
+            <div className="form-group">
+              <label htmlFor="project_title_ja">
+                {t("common.optional")}: {t("projects.titleJaLabel")}
+              </label>
+              <input id="project_title_ja" value={ja.title ?? ""} onChange={(e) => setJa("title", e.target.value)} maxLength={200} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="project_summary_ja">
+                {t("common.optional")}: {t("projects.summaryJaLabel")}
+              </label>
+              <input id="project_summary_ja" value={ja.summary ?? ""} onChange={(e) => setJa("summary", e.target.value)} maxLength={500} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="project_description_ja">
+                {t("common.optional")}: {t("projects.descriptionJaLabel")}
+              </label>
+              <textarea id="project_description_ja" value={ja.description ?? ""} onChange={(e) => setJa("description", e.target.value)} />
+            </div>
+          </fieldset>
         )}
 
         <div className="modal__actions">

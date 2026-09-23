@@ -32,7 +32,7 @@ import { LinkItemsModal, type LinkableItem } from "../components/LinkItemsModal"
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { VisibilityBadge } from "../components/VisibilityField";
 import { ForumTopicList } from "../components/ForumTopicList";
-import { formatMonthYear } from "../lib/format";
+import { formatMonthYear, formatProjectDateRange } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
 
 const ROLE_LABEL_KEY: Record<string, TranslationKey> = {
@@ -114,7 +114,7 @@ export function ProjectDetailPage() {
   const close = () => setPanel(null);
   const start = project.startDate;
   const end = project.endDate;
-  const dates = start && end ? `${formatMonthYear(start, locale)} – ${formatMonthYear(end, locale)}` : start ? t("dates.since", { date: formatMonthYear(start, locale) }) : end ? t("dates.until", { date: formatMonthYear(end, locale) }) : "";
+  const dates = start && end ? formatProjectDateRange(start, end, locale) : start ? t("dates.since", { date: formatMonthYear(start, locale) }) : end ? t("dates.until", { date: formatMonthYear(end, locale) }) : "";
   const asItems = <T,>(list: T[] | null, label: (x: T) => string, key: (x: T) => string): LinkableItem[] => (list ?? []).map((x) => ({ id: key(x), label: label(x) }));
 
   return (

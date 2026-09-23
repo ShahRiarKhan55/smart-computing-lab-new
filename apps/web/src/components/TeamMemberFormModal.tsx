@@ -4,6 +4,8 @@ import { createTeamMemberSchema, type Category, type TeamMember } from "@scl/sha
 import { Modal } from "./Modal";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
+import { useEntityTranslations } from "../hooks/useEntityTranslations";
+import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
 export interface TeamMemberFormValues {
   name: string;
@@ -14,6 +16,7 @@ export interface TeamMemberFormValues {
   photoUrl: string;
   category: Category;
   sortOrder: number;
+  translations?: { ja: Record<string, string> };
 }
 
 interface TeamMemberFormModalProps {
@@ -26,15 +29,9 @@ interface TeamMemberFormModalProps {
   onSubmit: (values: TeamMemberFormValues) => Promise<void>;
 }
 
-const CATEGORY_OPTIONS: { value: Category; label: string }[] = [
-  { value: "FACULTY", label: "Faculty" },
-  { value: "PHD", label: "PhD Students" },
-  { value: "MSC", label: "MSc Students" },
-  { value: "BSC", label: "BSc Students" },
-  { value: "RESEARCH", label: "Research Students" },
-];
+const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"];
 
-function toFormValues(initial?: Partial<TeamMember> | null): TeamMemberFormValues {
+function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberFormValues, "translations"> {
   return {
     name: initial?.name ?? "",
     initials: initial?.initials ?? "",
@@ -56,9 +53,10 @@ export function TeamMemberFormModal({
   onSubmit,
 }: TeamMemberFormModalProps) {
   const t = useT();
-  const [values, setValues] = useState<TeamMemberFormValues>(() => toFormValues(initial));
+  const [values, setValues] = useState(() => toFormValues(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { values: ja, setField: setJa } = useEntityTranslations("TEAM_MEMBER", initial?.id, open);
 
   useEffect(() => {
     if (open) {
@@ -68,7 +66,7 @@ export function TeamMemberFormModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
 
-  function set<K extends keyof TeamMemberFormValues>(key: K, value: TeamMemberFormValues[K]) {
+  function set<K extends keyof ReturnType<typeof toFormValues>>(key: K, value: ReturnType<typeof toFormValues>[K]) {
     setValues((v) => ({ ...v, [key]: value }));
   }
 
@@ -84,7 +82,7 @@ export function TeamMemberFormModal({
 
     setSubmitting(true);
     try {
-      await onSubmit(values);
+      await onSubmit({ ...values, ...(initial?.id ? { translations: { ja } } : {}) });
       onClose();
     } catch (err) {
       setError(apiErrorMessage(err, t));
@@ -99,11 +97,11 @@ export function TeamMemberFormModal({
       <form onSubmit={handleSubmit}>
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="tm_name">Full name</label>
+            <label htmlFor="tm_name">{t("team.fullNameLabel")}</label>
             <input id="tm_name" value={values.name} onChange={(e) => set("name", e.target.value)} required />
           </div>
           <div className="form-group">
-            <label htmlFor="tm_initials">Initials (shown on avatar)</label>
+            <label htmlFor="tm_initials">{t("team.initialsFieldLabel")}</label>
             <input
               id="tm_initials"
               value={values.initials}
@@ -115,32 +113,32 @@ export function TeamMemberFormModal({
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="tm_role">Role / title</label>
+            <label htmlFor="tm_role">{t("team.roleFieldLabel")}</label>
             <input
               id="tm_role"
               value={values.role}
               onChange={(e) => set("role", e.target.value)}
-              placeholder="e.g. PhD Candidate"
+              placeholder={t("team.roleFieldPlaceholder")}
               required
             />
           </div>
           <div className="form-group">
-            <label htmlFor="tm_department">Department / focus area</label>
+            <label htmlFor="tm_department">{t("team.departmentFieldLabel")}</label>
             <input id="tm_department" value={values.department} onChange={(e) => set("department", e.target.value)} />
           </div>
         </div>
 
         {showAdminFields && (
           <div className="form-group">
-            <label htmlFor="tm_category">Category</label>
+            <label htmlFor="tm_category">{t("team.categoryFieldLabel")}</label>
             <select
               id="tm_category"
               value={values.category}
               onChange={(e) => set("category", e.target.value as Category)}
             >
-              {CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+              {CATEGORY_ORDER.map((cat) => (
+                <option key={cat} value={cat}>
+                  {t(CATEGORY_LABEL_KEY[cat])}
                 </option>
               ))}
             </select>
@@ -148,12 +146,12 @@ export function TeamMemberFormModal({
         )}
 
         <div className="form-group">
-          <label htmlFor="tm_bio">Short bio (optional)</label>
+          <label htmlFor="tm_bio">{t("team.bioFieldLabel")}</label>
           <textarea id="tm_bio" value={values.bio} onChange={(e) => set("bio", e.target.value)} />
         </div>
 
         <div className="form-group">
-          <label htmlFor="tm_photoUrl">Photo URL (optional — leave blank to show initials)</label>
+          <label htmlFor="tm_photoUrl">{t("team.photoUrlLabel")}</label>
           <input
             id="tm_photoUrl"
             value={values.photoUrl}
@@ -164,7 +162,7 @@ export function TeamMemberFormModal({
 
         {showAdminFields && (
           <div className="form-group">
-            <label htmlFor="tm_sortOrder">Sort order (lower shows first)</label>
+            <label htmlFor="tm_sortOrder">{t("team.sortOrderLabel")}</label>
             <input
               id="tm_sortOrder"
               type="number"
@@ -174,10 +172,18 @@ export function TeamMemberFormModal({
           </div>
         )}
 
-        {!showAdminFields && (
-          <p className="modal__lead">
-            Your category (Faculty / PhD / MSc / BSc / Research) can only be changed by the admin.
-          </p>
+        {!showAdminFields && <p className="modal__lead">{t("team.categoryAdminOnlyNote")}</p>}
+
+        {initial?.id && (
+          <fieldset className="form-fieldset">
+            <legend>{t("lang.ja.name")}</legend>
+            <div className="form-group">
+              <label htmlFor="tm_bio_ja">
+                {t("common.optional")}: {t("team.bioJaLabel")}
+              </label>
+              <textarea id="tm_bio_ja" value={ja.bio ?? ""} onChange={(e) => setJa("bio", e.target.value)} />
+            </div>
+          </fieldset>
         )}
 
         <div className="modal__actions">

@@ -5,6 +5,7 @@ import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
+import { useEntityTranslations } from "../hooks/useEntityTranslations";
 
 export type GroupFormPayload = Record<string, unknown>;
 
@@ -42,6 +43,7 @@ export function GroupFormModal({ open, title, initial, canManageSettings, onClos
   const [values, setValues] = useState<FormState>(() => toFormState(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { values: ja, setField: setJa } = useEntityTranslations("RESEARCH_GROUP", initial?.id, open);
 
   useEffect(() => {
     if (open) {
@@ -78,6 +80,7 @@ export function GroupFormModal({ open, title, initial, canManageSettings, onClos
       name: d.name,
       description: d.description,
       ...(canManageSettings && { visibility: d.visibility, sortOrder: d.sortOrder, ...(d.slug ? { slug: d.slug } : {}) }),
+      ...(initial ? { translations: { ja } } : {}),
     };
 
     setSubmitting(true);
@@ -100,12 +103,12 @@ export function GroupFormModal({ open, title, initial, canManageSettings, onClos
       )}
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-group">
-          <label htmlFor="group_name">Name</label>
+          <label htmlFor="group_name">{t("groups.nameFieldLabel")}</label>
           <input id="group_name" value={values.name} onChange={(e) => set("name", e.target.value)} maxLength={120} required />
         </div>
 
         <div className="form-group">
-          <label htmlFor="group_description">Description</label>
+          <label htmlFor="group_description">{t("groups.descriptionFieldLabel")}</label>
           <textarea id="group_description" value={values.description} onChange={(e) => set("description", e.target.value)} />
         </div>
 
@@ -114,15 +117,38 @@ export function GroupFormModal({ open, title, initial, canManageSettings, onClos
             <VisibilityField id="group_visibility" value={values.visibility} onChange={(v) => set("visibility", v)} />
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="group_sortOrder">Sort order (lower shows first)</label>
+                <label htmlFor="group_sortOrder">{t("groups.sortOrderLabel")}</label>
                 <input id="group_sortOrder" type="number" value={values.sortOrder} onChange={(e) => set("sortOrder", e.target.value)} />
               </div>
               <div className="form-group">
-                <label htmlFor="group_slug">URL name (optional)</label>
-                <input id="group_slug" value={values.slug} onChange={(e) => set("slug", e.target.value)} placeholder={initial ? "leave blank to keep" : "generated from the name"} />
+                <label htmlFor="group_slug">{t("groups.slugLabel")}</label>
+                <input
+                  id="group_slug"
+                  value={values.slug}
+                  onChange={(e) => set("slug", e.target.value)}
+                  placeholder={initial ? t("groups.slugPlaceholderKeep") : t("groups.slugPlaceholderGenerated")}
+                />
               </div>
             </div>
           </>
+        )}
+
+        {initial && (
+          <fieldset className="form-fieldset">
+            <legend>{t("lang.ja.name")}</legend>
+            <div className="form-group">
+              <label htmlFor="group_name_ja">
+                {t("common.optional")}: {t("groups.nameJaLabel")}
+              </label>
+              <input id="group_name_ja" value={ja.name ?? ""} onChange={(e) => setJa("name", e.target.value)} maxLength={120} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="group_description_ja">
+                {t("common.optional")}: {t("groups.descriptionJaLabel")}
+              </label>
+              <textarea id="group_description_ja" value={ja.description ?? ""} onChange={(e) => setJa("description", e.target.value)} />
+            </div>
+          </fieldset>
         )}
 
         <div className="modal__actions">
