@@ -20,6 +20,7 @@
     "test:files": "node scripts/files-regression.mjs",
     "test:gallery": "node scripts/gallery-regression.mjs",
     "test:i18n": "node scripts/i18n-regression.mjs",
+    "test:locale-independence": "node scripts/locale-independence-regression.mjs",
     "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts"
   },
   "prisma": {
