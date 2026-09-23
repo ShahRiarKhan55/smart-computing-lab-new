@@ -1,0 +1,55 @@
+import { Link } from "react-router-dom";
+import type { ResearchArea } from "@scl/shared";
+import { CardEditControls } from "./CardEditControls";
+import { VisibilityBadge } from "./VisibilityField";
+
+interface ResearchCardProps {
+  area: ResearchArea;
+  canEdit: boolean;
+  canDelete: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  /** Projects the API already links to this area (visibility-filtered server-side); shown only when there are some. */
+  projects?: { id: string; title: string }[];
+}
+
+const SHOWN_PROJECTS = 3;
+
+export function ResearchCard({ area, canEdit, canDelete, onEdit, onDelete, projects = [] }: ResearchCardProps) {
+  const more = projects.length - SHOWN_PROJECTS;
+  return (
+    <article className={`card research-card${canEdit ? " card--editable" : ""}`}>
+      {canEdit && <CardEditControls onEdit={onEdit} onDelete={canDelete ? onDelete : undefined} subject={area.title} />}
+      <div className="card__top">
+        <span className="icon-tile" aria-hidden="true">
+          {area.icon}
+        </span>
+      </div>
+      <h3 className="card__title">{area.title}</h3>
+      <p className="card__text">{area.description}</p>
+      <div className="cluster">
+        <span className="tag">{area.tag}</span>
+        <VisibilityBadge visibility={area.visibility} />
+      </div>
+      {projects.length > 0 && (
+        <div className="card__foot">
+          <p className="card-note">
+            {projects.length} related {projects.length === 1 ? "project" : "projects"}
+          </p>
+          <ul className="mini-list">
+            {projects.slice(0, SHOWN_PROJECTS).map((p) => (
+              <li key={p.id}>
+                <Link to={`/projects/${p.id}`}>{p.title}</Link>
+              </li>
+            ))}
+            {more > 0 && (
+              <li>
+                <Link to="/projects">and {more} more…</Link>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </article>
+  );
+}

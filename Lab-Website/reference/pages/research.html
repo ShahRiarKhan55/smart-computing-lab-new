@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="../index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="../index.html"       >Home</a></li>
+      <li><a href="research.html"  class="active">Research</a></li>
+      <li><a href="team.html"           >Team</a></li>
+      <li><a href="publications.html"   >Publications</a></li>
+      <li><a href="news.html"           >News</a></li>
+      <li><a href="contact.html"        >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== PAGE BANNER ===================== -->
+  <div class="page-banner">
+    <div class="page-banner__inner">
+      <p class="page-banner__tag">/ research</p>
+      <h1 class="page-banner__title">Research Areas</h1>
+      <p class="page-banner__desc">
+        Our work spans intelligent algorithms, specialized hardware, and large-scale
+        data systems — united by a commitment to smart, efficient computing.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ===================== RESEARCH CARDS ===================== -->
+  <main class="container">
+    <div id="adminBar"></div>
+    <div class="research-grid" id="researchGrid">
+      <p style="color: var(--muted); font-size: 14px;">Loading research areas…</p>
+    </div>
+  </main>
+
+
+  <!-- ===================== EDIT MODAL ===================== -->
+  <div class="modal-overlay" id="editModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="modalTitle">Edit research area</h2>
+        <button class="modal__close" id="modalClose">&times;</button>
+      </div>
+      <div id="modalError"></div>
+      <form id="areaForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Icon (emoji)</label>
+            <input type="text" id="f_icon" />
+          </div>
+          <div class="form-group">
+            <label>Tag</label>
+            <input type="text" id="f_tag" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="f_title" required />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="f_description" required></textarea>
+        </div>
+        <div class="form-group">
+          <label>Sort order (lower shows first)</label>
+          <input type="number" id="f_sortOrder" value="0" />
+        </div>
+        <button class="btn btn--primary form-submit" type="submit" id="saveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="research.html">Research</a></li>
+        <li><a href="team.html">Team</a></li>
+        <li><a href="publications.html">Publications</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="../js/app.js" data-base=".."></script>
+  <script>
+    let areas = [];
+    let editingId = null;
+
+    async function loadAreas() {
+      areas = await window.SCL.api('research.php');
+      render();
+    }
+
+    function render() {
+      const grid = document.getElementById('researchGrid');
+      const user = window.SCL.user;
+      const isAdmin = user && user.role === 'ADMIN';
+      const canEdit = !!user; // any logged-in lab member can add/edit research areas
+
+      const adminBar = document.getElementById('adminBar');
+      if (canEdit) {
+        adminBar.innerHTML = `
+          <div class="admin-bar">
+            <span class="admin-bar__text">${isAdmin ? 'Admin' : 'Logged in'}: add or edit research areas. ${isAdmin ? '' : '(Only admins can delete.)'}</span>
+            <button class="btn btn--primary btn--sm" id="addAreaBtn">+ Add research area</button>
+          </div>`;
+        document.getElementById('addAreaBtn').addEventListener('click', () => openModal(null));
+      } else {
+        adminBar.innerHTML = '';
+      }
+
+      const esc = window.SCL.escapeHtml;
+      grid.innerHTML = areas.map((a) => `
+        <div class="research-card">
+          ${canEdit ? `
+            <div class="card-edit-btn">
+              <button class="icon-btn" title="Edit" data-edit-id="${a.id}">✎</button>
+              ${isAdmin ? `<button class="icon-btn icon-btn--danger" title="Delete" data-delete-id="${a.id}">✕</button>` : ''}
+            </div>` : ''}
+          <div class="research-card__icon">${esc(a.icon)}</div>
+          <h3 class="research-card__title">${esc(a.title)}</h3>
+          <p class="research-card__desc">${esc(a.description)}</p>
+          <span class="research-card__tag">${esc(a.tag)}</span>
+        </div>
+      `).join('');
+
+      grid.querySelectorAll('[data-edit-id]').forEach((btn) => {
+        btn.addEventListener('click', () => openModal(btn.getAttribute('data-edit-id')));
+      });
+      grid.querySelectorAll('[data-delete-id]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteArea(btn.getAttribute('data-delete-id')));
+      });
+    }
+
+    function openModal(id) {
+      editingId = id;
+      const a = id ? areas.find((x) => x.id === id) : null;
+
+      document.getElementById('modalTitle').textContent = id ? 'Edit research area' : 'Add research area';
+      document.getElementById('modalError').innerHTML = '';
+      document.getElementById('f_icon').value = a ? a.icon : '🔬';
+      document.getElementById('f_tag').value = a ? a.tag : '';
+      document.getElementById('f_title').value = a ? a.title : '';
+      document.getElementById('f_description').value = a ? a.description : '';
+      document.getElementById('f_sortOrder').value = a ? a.sortOrder : 0;
+
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = 'none';
+      editingId = null;
+    }
+
+    async function deleteArea(id) {
+      if (!confirm('Delete this research area?')) return;
+      try {
+        await window.SCL.api(`research.php?id=${id}`, { method: 'DELETE' });
+        await loadAreas();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editModal') closeModal();
+    });
+
+    document.getElementById('areaForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const payload = {
+        icon: document.getElementById('f_icon').value,
+        tag: document.getElementById('f_tag').value,
+        title: document.getElementById('f_title').value,
+        description: document.getElementById('f_description').value,
+        sortOrder: Number(document.getElementById('f_sortOrder').value) || 0,
+      };
+
+      try {
+        if (editingId) {
+          await window.SCL.api(`research.php?id=${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        } else {
+          await window.SCL.api('research.php', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        closeModal();
+        await loadAreas();
+      } catch (err) {
+        document.getElementById('modalError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+
+    document.addEventListener('scl:session-ready', render);
+    loadAreas();
+  </script>
+
+</body>
+</html>

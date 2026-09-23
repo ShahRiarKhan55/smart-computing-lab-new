@@ -1,0 +1,40 @@
+import { Router } from "express";
+import authRoutes from "./auth.routes.js";
+import usersRoutes from "./users.routes.js";
+import teamRoutes from "./team.routes.js";
+import researchRoutes from "./research.routes.js";
+import publicationsRoutes from "./publications.routes.js";
+import newsRoutes from "./news.routes.js";
+import profileRoutes from "./profile.routes.js";
+import memberRoutes from "./member.routes.js";
+import projectsRoutes from "./projects.routes.js";
+import groupsRoutes from "./groups.routes.js";
+import searchRoutes from "./search.routes.js";
+import forumRoutes from "./forum.routes.js";
+import messagesRoutes from "./messages.routes.js";
+import notificationsRoutes from "./notifications.routes.js";
+import filesRoutes from "./files.routes.js";
+import galleryRoutes from "./gallery.routes.js";
+import translationsRoutes from "./translations.routes.js";
+
+const router = Router();
+
+router.use("/auth", authRoutes);
+router.use("/users", usersRoutes);
+router.use("/team", teamRoutes);
+router.use("/research", researchRoutes);
+router.use("/publications", publicationsRoutes);
+router.use("/news", newsRoutes);
+router.use("/profile", profileRoutes);
+router.use("/member", memberRoutes);
+router.use("/projects", projectsRoutes);
+router.use("/groups", groupsRoutes);
+router.use("/search", searchRoutes);
+router.use("/forum", forumRoutes);
+router.use("/messages", messagesRoutes);
+router.use("/notifications", notificationsRoutes);
+router.use("/files", filesRoutes);
+router.use("/gallery", galleryRoutes);
+router.use("/translations", translationsRoutes);
+
+export default router;

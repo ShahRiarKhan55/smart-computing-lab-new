@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>News & Events — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="../index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="../index.html"      >Home</a></li>
+      <li><a href="research.html"      >Research</a></li>
+      <li><a href="team.html"          >Team</a></li>
+      <li><a href="publications.html"  >Publications</a></li>
+      <li><a href="news.html" class="active">News</a></li>
+      <li><a href="contact.html"       >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== PAGE BANNER ===================== -->
+  <div class="page-banner">
+    <div class="page-banner__inner">
+      <p class="page-banner__tag">/ stay in the loop</p>
+      <h1 class="page-banner__title">News &amp; Events</h1>
+      <p class="page-banner__desc">
+        Announcements, awards, accepted papers, and open positions from the lab.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ===================== NEWS ===================== -->
+  <main class="container">
+    <div id="adminBar"></div>
+    <div class="news-grid" id="newsGrid">
+      <p style="color: var(--muted); font-size: 14px;">Loading news…</p>
+    </div>
+  </main>
+
+
+  <!-- ===================== EDIT MODAL ===================== -->
+  <div class="modal-overlay" id="editModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="modalTitle">Edit news item</h2>
+        <button class="modal__close" id="modalClose">&times;</button>
+      </div>
+      <div id="modalError"></div>
+      <form id="newsForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Display date</label>
+            <input type="text" id="f_date" placeholder="e.g. May 2025" required />
+          </div>
+          <div class="form-group">
+            <label>Sort date (for ordering)</label>
+            <input type="date" id="f_sortDate" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Type</label>
+            <select id="f_type">
+              <option>Paper</option>
+              <option>Award</option>
+              <option>Position</option>
+              <option>Grant</option>
+              <option>Event</option>
+              <option>Partnership</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Emoji</label>
+            <input type="text" id="f_emoji" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="f_title" required />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="f_description" required></textarea>
+        </div>
+        <button class="btn btn--primary form-submit" type="submit" id="saveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="research.html">Research</a></li>
+        <li><a href="team.html">Team</a></li>
+        <li><a href="publications.html">Publications</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="../js/app.js" data-base=".."></script>
+  <script>
+    let news = [];
+    let editingId = null;
+
+    async function loadNews() {
+      news = await window.SCL.api('news.php');
+      render();
+    }
+
+    function render() {
+      const user = window.SCL.user;
+      const isAdmin = user && user.role === 'ADMIN';
+      const canEdit = !!user; // any logged-in lab member can add/edit news items
+
+      const adminBar = document.getElementById('adminBar');
+      if (canEdit) {
+        adminBar.innerHTML = `
+          <div class="admin-bar">
+            <span class="admin-bar__text">${isAdmin ? 'Admin' : 'Logged in'}: add or edit news items. ${isAdmin ? '' : '(Only admins can delete.)'}</span>
+            <button class="btn btn--primary btn--sm" id="addNewsBtn">+ Add news item</button>
+          </div>`;
+        document.getElementById('addNewsBtn').addEventListener('click', () => openModal(null));
+      } else {
+        adminBar.innerHTML = '';
+      }
+
+      const esc = window.SCL.escapeHtml;
+      const grid = document.getElementById('newsGrid');
+      grid.innerHTML = news.map((n) => `
+        <div class="news-card">
+          ${canEdit ? `
+            <div class="card-edit-btn">
+              <button class="icon-btn" title="Edit" data-edit-id="${n.id}">✎</button>
+              ${isAdmin ? `<button class="icon-btn icon-btn--danger" title="Delete" data-delete-id="${n.id}">✕</button>` : ''}
+            </div>` : ''}
+          <div class="news-card__thumb">${esc(n.emoji)}</div>
+          <div class="news-card__body">
+            <div class="news-card__meta">
+              <span class="news-card__date">${esc(n.date)}</span>
+              <span class="news-card__type">${esc(n.type)}</span>
+            </div>
+            <div class="news-card__title">${esc(n.title)}</div>
+            <div class="news-card__desc">${esc(n.description)}</div>
+          </div>
+        </div>
+      `).join('');
+
+      grid.querySelectorAll('[data-edit-id]').forEach((btn) => {
+        btn.addEventListener('click', () => openModal(btn.getAttribute('data-edit-id')));
+      });
+      grid.querySelectorAll('[data-delete-id]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteNews(btn.getAttribute('data-delete-id')));
+      });
+    }
+
+    function openModal(id) {
+      editingId = id;
+      const n = id ? news.find((x) => x.id === id) : null;
+
+      document.getElementById('modalTitle').textContent = id ? 'Edit news item' : 'Add news item';
+      document.getElementById('modalError').innerHTML = '';
+      document.getElementById('f_date').value = n ? n.date : '';
+      document.getElementById('f_sortDate').value = n ? n.sortDate : new Date().toISOString().slice(0, 10);
+      document.getElementById('f_type').value = n ? n.type : 'Event';
+      document.getElementById('f_emoji').value = n ? n.emoji : '📣';
+      document.getElementById('f_title').value = n ? n.title : '';
+      document.getElementById('f_description').value = n ? n.description : '';
+
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = 'none';
+      editingId = null;
+    }
+
+    async function deleteNews(id) {
+      if (!confirm('Delete this news item?')) return;
+      try {
+        await window.SCL.api(`news.php?id=${id}`, { method: 'DELETE' });
+        await loadNews();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editModal') closeModal();
+    });
+
+    document.getElementById('newsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const payload = {
+        date: document.getElementById('f_date').value,
+        sortDate: document.getElementById('f_sortDate').value,
+        type: document.getElementById('f_type').value,
+        emoji: document.getElementById('f_emoji').value,
+        title: document.getElementById('f_title').value,
+        description: document.getElementById('f_description').value,
+      };
+
+      try {
+        if (editingId) {
+          await window.SCL.api(`news.php?id=${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        } else {
+          await window.SCL.api('news.php', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        closeModal();
+        await loadNews();
+      } catch (err) {
+        document.getElementById('modalError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+
+    document.addEventListener('scl:session-ready', render);
+    loadNews();
+  </script>
+
+</body>
+</html>

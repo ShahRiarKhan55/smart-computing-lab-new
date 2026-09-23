@@ -1,0 +1,126 @@
+/* ============================================================
+   Design tokens — the single source of colour, type, space, shape and motion.
+   Components and pages reference these; they do not define their own values.
+
+   Breakpoints (CSS variables cannot be used inside @media, so they are documented here):
+     480px  small phones      768px  tablets / phones (layout collapses to one column)
+     900px  header switches to the hamburger menu (Phase 10.1)      1120px  content max width
+   ============================================================ */
+:root {
+  /* ---- brand ramp (the Smart Computing Lab green; values unchanged since Phase 1) ---- */
+  --green-50: #eaf3de;
+  --green-100: #c0dd97;
+  --green-200: #97c459;
+  --green-400: #639922;
+  --green-600: #3b6d11;
+  --green-800: #27500a;
+  --green-900: #173404;
+
+  /* ---- neutrals ---- */
+  --gray-50: #f1efe8;
+  --gray-100: #d3d1c7;
+  --gray-200: #b4b2a9;
+  --gray-400: #888780; /* borders and icons only — never for small text (3.5:1 on white) */
+  --gray-600: #5f5e5a;
+
+  /* ---- semantic colour ---- */
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface-alt: #f4f3ee;
+  --text: #1a1a18;
+  --muted: #5f5e5a; /* 6.4:1 on --bg: passes AA for body text */
+  --border: #d3d1c7; /* decorative separators and card outlines */
+  --border-strong: #8a8880; /* form controls and outlined buttons (>= 3:1, WCAG 1.4.11) */
+
+  --primary: var(--green-600);
+  --primary-hover: var(--green-800);
+  --primary-soft: var(--green-50);
+  --focus: var(--green-600);
+
+  /* status colours: each is a soft background + readable foreground + border */
+  --success-bg: var(--green-50);
+  --success-fg: var(--green-800);
+  --success-border: var(--green-100);
+  --info-bg: #e8f0fb;
+  --info-fg: #1f4e8c;
+  --info-border: #c5d8f2;
+  --warning-bg: #fff4d6;
+  --warning-fg: #6b4e00;
+  --warning-border: #f0d98a;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+  --danger-bg: #fef2f2;
+  --danger-fg: #b91c1c;
+  --danger-border: #fecaca;
+  --neutral-bg: var(--gray-50);
+  --neutral-fg: var(--gray-600);
+  --neutral-border: var(--border);
+
+  /* ---- typography ---- */
+  --font-heading: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-body: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+
+  --text-xs: 0.75rem; /* 12px  metadata, labels */
+  --text-sm: 0.875rem; /* 14px  secondary text, buttons */
+  --text-base: 1rem; /* 16px  body */
+  --text-lg: 1.125rem; /* 18px  card headings, lead text */
+  --text-xl: 1.375rem; /* 22px  section headings (small) */
+  --text-2xl: clamp(1.5rem, 1.1rem + 1.2vw, 1.875rem); /* section headings */
+  --text-3xl: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); /* page headings */
+  --text-display: clamp(2.5rem, 1.6rem + 3.6vw, 4rem); /* home hero */
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+  --measure: 68ch; /* comfortable line length for running text */
+
+  /* ---- spacing scale (4px base) ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ---- shape ---- */
+  --radius-sm: 6px; /* controls, buttons */
+  --radius-md: 8px; /* cards, panels */
+  --radius-lg: 12px; /* modals, large surfaces */
+  --radius-pill: 999px; /* badges and chips only */
+
+  --shadow-xs: 0 1px 2px rgba(23, 52, 4, 0.06);
+  --shadow-sm: 0 2px 8px rgba(23, 52, 4, 0.08);
+  --shadow-md: 0 8px 24px rgba(23, 52, 4, 0.1);
+  --shadow-lg: 0 20px 48px rgba(23, 52, 4, 0.18);
+
+  /* ---- layout ---- */
+  --container: 1120px;
+  --container-narrow: 720px;
+  --gutter: 2.5rem;
+  --section-y: 4rem;
+  --header-h: 64px;
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-fast: 0.15s;
+  --dur-base: 0.2s;
+  --dur-slow: 0.28s;
+
+  /* ---- layers ---- */
+  --z-nav: 100;
+  --z-dropdown: 110;
+  --z-modal: 1000;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --gutter: 1.25rem;
+    --section-y: 2.5rem;
+  }
+}

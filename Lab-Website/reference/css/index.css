@@ -1,0 +1,239 @@
+/* ============================================================
+   Smart Computing Lab — Home Page Styles (index.css)
+   ============================================================ */
+
+
+/* ------------------------------------------------------------
+   Hero Section
+   ------------------------------------------------------------ */
+.hero {
+  min-height: calc(100vh - 64px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 4rem;
+  padding: 5rem 2.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green-50);
+  color: var(--green-800);
+  font-family: var(--font-heading);
+  font-size: 11px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--green-100);
+  margin-bottom: 1.5rem;
+  letter-spacing: 0.05em;
+}
+
+.hero__badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--green-400);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+.hero__title {
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 1.25rem;
+}
+
+.hero__title em {
+  font-style: normal;
+  color: var(--green-400);
+}
+
+.hero__subtitle {
+  font-size: 17px;
+  color: var(--muted);
+  font-weight: 300;
+  max-width: 460px;
+  line-height: 1.85;
+  margin-bottom: 2rem;
+}
+
+.hero__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero__stats {
+  display: flex;
+  gap: 2.5rem;
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.stat__number {
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--green-600);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat__label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Circuit SVG panel */
+.hero__visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero__visual svg {
+  width: 100%;
+  max-width: 440px;
+}
+
+
+/* ------------------------------------------------------------
+   Research Preview (home page cards strip)
+   ------------------------------------------------------------ */
+.preview-section {
+  background: var(--gray-50);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4rem 2.5rem;
+}
+
+.preview-section .inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-top: 2rem;
+}
+
+.preview-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1.25rem;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.preview-card:hover {
+  border-color: var(--green-400);
+  transform: translateY(-2px);
+}
+
+.preview-card__icon {
+  font-size: 24px;
+  margin-bottom: 0.75rem;
+}
+
+.preview-card__title {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+
+/* ------------------------------------------------------------
+   Latest News strip (home page)
+   ------------------------------------------------------------ */
+.news-strip {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 4rem 2.5rem;
+}
+
+.news-strip__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.news-strip__card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1.25rem 1.5rem;
+  transition: border-color 0.2s;
+}
+
+.news-strip__card:hover {
+  border-color: var(--green-400);
+}
+
+.news-strip__date {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.news-strip__card h3 {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.news-strip__card p {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.news-strip__footer {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+
+/* ------------------------------------------------------------
+   Responsive
+   ------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding: 3rem 1.25rem;
+  }
+
+  .hero__visual {
+    display: none;
+  }
+
+  .hero__stats {
+    gap: 1.5rem;
+  }
+
+  .preview-section,
+  .news-strip {
+    padding: 3rem 1.25rem;
+  }
+}

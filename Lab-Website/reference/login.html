@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="index.html"              >Home</a></li>
+      <li><a href="pages/research.html"     >Research</a></li>
+      <li><a href="pages/team.html"         >Team</a></li>
+      <li><a href="pages/publications.html" >Publications</a></li>
+      <li><a href="pages/news.html"         >News</a></li>
+      <li><a href="pages/contact.html"      >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== LOGIN FORM ===================== -->
+  <main class="container" style="padding-top: 3rem;">
+    <div class="auth-card">
+      <h1>Log in</h1>
+      <p class="sub">Use your lab account to edit your profile or manage content.</p>
+
+      <div id="loginError"></div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required autofocus />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" required />
+        </div>
+        <button class="btn btn--primary form-submit" type="submit" id="loginBtn">Log in</button>
+      </form>
+
+      <p style="font-size: 13px; margin-top: 1.5rem; color: var(--muted);">
+        Don't have an account? <a href="pages/contact.html" style="color: var(--green-600);">Contact the lab admin</a> to be added.
+      </p>
+    </div>
+  </main>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="pages/research.html">Research</a></li>
+        <li><a href="pages/team.html">Team</a></li>
+        <li><a href="pages/publications.html">Publications</a></li>
+        <li><a href="pages/contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="js/app.js" data-base="."></script>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.textContent = 'Logging in…';
+      document.getElementById('loginError').innerHTML = '';
+
+      try {
+        await window.SCL.api('auth.php?action=login', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        window.location.href = 'profile.html';
+      } catch (err) {
+        document.getElementById('loginError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Log in';
+      }
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Computing Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/index.css" />
+  </head>
+  <body>
+    <!-- ===================== NAVIGATION ===================== -->
+    <nav class="nav">
+      <div class="nav__logo">
+        <a href="index.html">SCL<span>_</span></a>
+      </div>
+      <ul class="nav__links" id="navLinks">
+        <li><a href="index.html" class="active">Home</a></li>
+        <li><a href="pages/research.html">Research</a></li>
+        <li><a href="pages/team.html">Team</a></li>
+        <li><a href="pages/publications.html">Publications</a></li>
+        <li><a href="pages/news.html">News</a></li>
+        <li><a href="pages/contact.html">Contact</a></li>
+      </ul>
+      <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </nav>
+
+    <!-- ===================== HERO ===================== -->
+    <section class="hero">
+      <div class="hero__content">
+        <!-- EDIT: Change the badge text (e.g. founding year, university) -->
+        <div class="hero__badge">Est. 2024 · University Research Lab</div>
+
+        <!-- EDIT: You can change the heading below -->
+        <h1 class="hero__title">
+          Smart<br />
+          <em>Computing</em><br />
+          Lab
+        </h1>
+
+        <!-- EDIT: Update the subtitle to describe your lab -->
+        <p class="hero__subtitle">
+          Advancing the frontiers of AI, hardware computing, and intelligent
+          data systems — from silicon to satellite.
+        </p>
+
+        <div class="hero__actions">
+          <a href="pages/research.html" class="btn btn--primary"
+            >Explore Research →</a
+          >
+          <a href="pages/contact.html" class="btn btn--outline">Join the Lab</a>
+        </div>
+
+        <div class="hero__stats">
+          <div class="stat">
+            <div class="stat__number" id="statPubs">–</div>
+            <div class="stat__label">Publications</div>
+          </div>
+          <div class="stat">
+            <div class="stat__number" id="statResearchers">–</div>
+            <div class="stat__label">Researchers</div>
+          </div>
+          <div class="stat">
+            <div class="stat__number" id="statAreas">–</div>
+            <div class="stat__label">Research Areas</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Animated circuit SVG — decorative, no edits needed -->
+      <div class="hero__visual" aria-hidden="true">
+        <svg
+          viewBox="0 0 420 380"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g stroke="#c0dd97" stroke-width="0.5" opacity="0.35">
+            <line x1="60" y1="0" x2="60" y2="380" />
+            <line x1="120" y1="0" x2="120" y2="380" />
+            <line x1="180" y1="0" x2="180" y2="380" />
+            <line x1="240" y1="0" x2="240" y2="380" />
+            <line x1="300" y1="0" x2="300" y2="380" />
+            <line x1="360" y1="0" x2="360" y2="380" />
+            <line x1="0" y1="60" x2="420" y2="60" />
+            <line x1="0" y1="120" x2="420" y2="120" />
+            <line x1="0" y1="180" x2="420" y2="180" />
+            <line x1="0" y1="240" x2="420" y2="240" />
+            <line x1="0" y1="300" x2="420" y2="300" />
+          </g>
+          <g stroke="#639922" stroke-width="1.5" fill="none" opacity="0.7">
+            <path d="M60 180 L120 180 L120 120 L240 120 L240 60" />
+            <path d="M240 60 L300 60 L300 120 L360 120" />
+            <path
+              d="M60 180 L60 240 L120 240 L120 300 L300 300 L300 240 L360 240"
+            />
+            <path d="M180 180 L180 300" />
+            <path d="M240 180 L360 180" />
+          </g>
+          <g fill="#3b6d11">
+            <circle cx="60" cy="180" r="5" />
+            <circle cx="120" cy="180" r="3" />
+            <circle cx="240" cy="120" r="3" />
+            <circle cx="300" cy="60" r="3" />
+            <circle cx="360" cy="120" r="3" />
+            <circle cx="120" cy="240" r="3" />
+            <circle cx="180" cy="300" r="3" />
+            <circle cx="300" cy="300" r="3" />
+            <circle cx="360" cy="240" r="3" />
+            <circle cx="360" cy="180" r="3" />
+            <circle cx="180" cy="180" r="3" />
+          </g>
+          <rect
+            x="150"
+            y="140"
+            width="120"
+            height="100"
+            rx="6"
+            fill="#eaf3de"
+            stroke="#639922"
+            stroke-width="1.5"
+          />
+          <rect
+            x="162"
+            y="152"
+            width="96"
+            height="76"
+            rx="4"
+            fill="#c0dd97"
+            stroke="#3b6d11"
+            stroke-width="0.5"
+          />
+          <text
+            x="210"
+            y="188"
+            font-family="Space Mono,monospace"
+            font-size="9"
+            font-weight="700"
+            fill="#27500a"
+            text-anchor="middle"
+          >
+            SMART
+          </text>
+          <text
+            x="210"
+            y="202"
+            font-family="Space Mono,monospace"
+            font-size="9"
+            font-weight="700"
+            fill="#27500a"
+            text-anchor="middle"
+          >
+            COMPUTE
+          </text>
+          <text
+            x="210"
+            y="216"
+            font-family="Space Mono,monospace"
+            font-size="7"
+            fill="#3b6d11"
+            text-anchor="middle"
+          >
+            v2.4
+          </text>
+          <g font-family="Space Mono,monospace" font-size="8" fill="#888780">
+            <text x="52" y="170" text-anchor="end">AI</text>
+            <text x="52" y="252" text-anchor="end">FPGA</text>
+            <text x="368" y="124">ML</text>
+            <text x="368" y="244">SAT</text>
+            <text x="210" y="48" text-anchor="middle">DSP</text>
+            <text x="210" y="318" text-anchor="middle">DATA</text>
+          </g>
+          <circle cx="60" cy="180" r="10" fill="#639922" opacity="0.15">
+            <animate
+              attributeName="r"
+              values="6;16;6"
+              dur="2.5s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.35;0;0.35"
+              dur="2.5s"
+              repeatCount="indefinite"
+            />
+          </circle>
+        </svg>
+      </div>
+    </section>
+
+    <!-- ===================== RESEARCH PREVIEW ===================== -->
+    <section class="preview-section">
+      <div class="inner">
+        <p class="section-tag">/ research areas</p>
+        <h2 class="section-title">What we work on</h2>
+
+        <div class="preview-grid" id="researchPreviewGrid">
+          <p style="color: var(--muted); font-size: 14px">Loading…</p>
+        </div>
+
+        <div style="margin-top: 2rem">
+          <a href="pages/research.html" class="btn btn--outline"
+            >See all research areas →</a
+          >
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== LATEST NEWS STRIP ===================== -->
+    <div class="news-strip">
+      <p class="section-tag">/ latest news</p>
+      <h2 class="section-title">Recent updates</h2>
+
+      <div class="news-strip__grid" id="newsStripGrid">
+        <p style="color: var(--muted); font-size: 14px">Loading…</p>
+      </div>
+
+      <div class="news-strip__footer">
+        <a href="pages/news.html" class="btn btn--outline"
+          >All news &amp; events →</a
+        >
+      </div>
+    </div>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="footer">
+      <div class="footer__inner">
+        <!-- EDIT: Update lab name -->
+        <div class="footer__logo">Smart Computing Lab</div>
+        <ul class="footer__links">
+          <li><a href="pages/research.html">Research</a></li>
+          <li><a href="pages/team.html">Team</a></li>
+          <li><a href="pages/publications.html">Publications</a></li>
+          <li><a href="pages/contact.html">Contact</a></li>
+        </ul>
+        <!-- EDIT: Update year -->
+        <div class="footer__copy">
+          © 2025 Smart Computing Lab. All rights reserved.
+        </div>
+      </div>
+    </footer>
+
+    <script src="js/app.js" data-base="."></script>
+    <script>
+      async function loadHomeContent() {
+        try {
+          const areas = await window.SCL.api("research.php");
+          const esc = window.SCL.escapeHtml;
+          document.getElementById("researchPreviewGrid").innerHTML = areas
+            .slice(0, 5)
+            .map(
+              (a) => `
+          <a href="pages/research.html" class="preview-card" style="text-decoration:none;">
+            <div class="preview-card__icon">${esc(a.icon)}</div>
+            <div class="preview-card__title">${esc(a.title)}</div>
+          </a>
+        `,
+            )
+            .join("");
+          document.getElementById("statAreas").textContent = areas.length;
+        } catch (e) {
+          document.getElementById("researchPreviewGrid").innerHTML =
+            '<p style="color: var(--muted); font-size: 14px;">Could not load research areas.</p>';
+        }
+
+        try {
+          const news = await window.SCL.api("news.php");
+          const esc = window.SCL.escapeHtml;
+          document.getElementById("newsStripGrid").innerHTML = news
+            .slice(0, 3)
+            .map(
+              (n) => `
+      <div class="news-strip__card">
+        <div class="news-strip__date">${esc(n.emoji)} ${esc(n.date)}</div>
+        <h3>${esc(n.title)}</h3>
+        <p>${esc(n.description)}</p>
+      </div>
+    `,
+            )
+            .join("");
+        } catch (e) {
+          document.getElementById("newsStripGrid").innerHTML =
+            '<p style="color: var(--muted); font-size: 14px;">Could not load news.</p>';
+        }
+
+        try {
+          const pubs = await window.SCL.api("publications.php");
+          document.getElementById("statPubs").textContent = pubs.length + "+";
+        } catch (e) {
+          document.getElementById("statPubs").textContent = "–";
+        }
+
+        try {
+          const members = await window.SCL.api("team.php");
+          document.getElementById("statResearchers").textContent =
+            members.length;
+        } catch (e) {
+          document.getElementById("statResearchers").textContent = "–";
+        }
+      }
+
+      loadHomeContent();
+    </script>
+  </body>
+</html>

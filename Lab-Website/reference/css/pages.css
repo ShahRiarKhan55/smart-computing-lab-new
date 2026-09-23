@@ -1,0 +1,716 @@
+/* ============================================================
+   Smart Computing Lab — Inner Pages Stylesheet (pages.css)
+   Used by: research.html, team.html, publications.html,
+             news.html, contact.html
+   ============================================================ */
+
+
+/* ------------------------------------------------------------
+   Page Hero Banner (replaces full-screen hero on inner pages)
+   ------------------------------------------------------------ */
+.page-banner {
+  background: var(--green-900);
+  padding: 3.5rem 2.5rem;
+}
+
+.page-banner__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.page-banner__tag {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--green-200);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.6rem;
+  opacity: 0.8;
+}
+
+.page-banner__title {
+  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.75rem;
+}
+
+.page-banner__desc {
+  font-size: 16px;
+  color: var(--green-100);
+  font-weight: 300;
+  max-width: 520px;
+  line-height: 1.8;
+  opacity: 0.85;
+}
+
+
+/* ============================================================
+   RESEARCH PAGE
+   ============================================================ */
+
+.research-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.research-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1.75rem;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.research-card:hover {
+  border-color: var(--green-400);
+  transform: translateY(-3px);
+}
+
+.research-card__icon {
+  width: 48px;
+  height: 48px;
+  background: var(--green-50);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 1.1rem;
+  border: 1px solid var(--green-100);
+}
+
+.research-card__title {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+  line-height: 1.5;
+}
+
+.research-card__desc {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.research-card__tag {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  background: var(--green-50);
+  color: var(--green-800);
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-top: 1rem;
+  border: 1px solid var(--green-100);
+  letter-spacing: 0.04em;
+}
+
+
+/* ============================================================
+   TEAM PAGE
+   ============================================================ */
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.team-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.team-card:hover {
+  border-color: var(--green-400);
+  transform: translateY(-3px);
+}
+
+.team-card__avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  background: var(--green-50);
+  color: var(--green-800);
+  border: 2px solid var(--green-100);
+}
+
+.team-card__avatar--open {
+  background: var(--green-600);
+  color: #fff;
+  font-size: 12px;
+  border-color: var(--green-400);
+}
+
+.team-card__name {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.team-card__role {
+  font-size: 13px;
+  color: var(--green-600);
+  margin-bottom: 4px;
+}
+
+.team-card__dept {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.team-card__dept--link {
+  color: var(--green-600);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.team-card__dept--link:hover {
+  color: var(--green-800);
+}
+
+/* Divider between faculty and students */
+.team-divider {
+  margin: 3rem 0 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.team-divider__label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.team-divider__line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+
+/* ============================================================
+   PUBLICATIONS PAGE
+   ============================================================ */
+
+.pub-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.pub-filter {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  letter-spacing: 0.04em;
+}
+
+.pub-filter:hover,
+.pub-filter.active {
+  background: var(--green-50);
+  color: var(--green-800);
+  border-color: var(--green-400);
+}
+
+.pub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pub-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.4rem 1.75rem;
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+  transition: border-color 0.2s;
+}
+
+.pub-item:hover {
+  border-color: var(--green-400);
+}
+
+.pub-item__year {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--green-600);
+  background: var(--green-50);
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--green-100);
+  text-align: center;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.pub-item__title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 5px;
+  line-height: 1.55;
+}
+
+.pub-item__authors {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.pub-item__venue {
+  font-size: 12px;
+  color: var(--green-600);
+  font-style: italic;
+}
+
+.pub-item__links {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.pub-link {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: border-color 0.2s, color 0.2s;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pub-link:hover {
+  border-color: var(--green-400);
+  color: var(--green-600);
+}
+
+
+/* ============================================================
+   NEWS PAGE
+   ============================================================ */
+
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.news-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.news-card:hover {
+  border-color: var(--green-400);
+  transform: translateY(-3px);
+}
+
+.news-card__thumb {
+  height: 130px;
+  background: linear-gradient(135deg, var(--green-50), var(--green-100));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+
+.news-card__body {
+  padding: 1.25rem 1.5rem;
+}
+
+.news-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0.6rem;
+}
+
+.news-card__date {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.news-card__type {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  background: var(--green-50);
+  color: var(--green-800);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--green-100);
+  letter-spacing: 0.04em;
+}
+
+.news-card__title {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.news-card__desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+
+/* ============================================================
+   CONTACT PAGE
+   ============================================================ */
+
+.contact-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 4rem;
+  align-items: start;
+}
+
+/* Left column — info */
+.contact-info__title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.contact-info__intro {
+  font-size: 15px;
+  color: var(--muted);
+  font-weight: 300;
+  line-height: 1.8;
+  margin-bottom: 2rem;
+}
+
+.contact-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 1.1rem;
+}
+
+.contact-detail__icon {
+  width: 38px;
+  height: 38px;
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.contact-detail__label {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.contact-detail__value {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* Right column — form */
+.contact-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 2.25rem;
+}
+
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group label {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: var(--green-400);
+  box-shadow: 0 0 0 3px rgba(99, 153, 34, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.form-group select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888780' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.form-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+
+/* ============================================================
+   Admin edit controls (shared across team/research/pub/news pages)
+   ============================================================ */
+.admin-bar {
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  border-radius: 10px;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.admin-bar__text {
+  font-size: 13px;
+  color: var(--green-800);
+  font-family: var(--font-heading);
+}
+
+.card-edit-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.icon-btn:hover {
+  border-color: var(--green-400);
+  color: var(--green-600);
+}
+
+.icon-btn--danger:hover {
+  border-color: #b91c1c;
+  color: #b91c1c;
+}
+
+.form-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.form-success {
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  color: var(--green-800);
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.auth-card {
+  max-width: 420px;
+  margin: 4rem auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 2.5rem;
+}
+
+.auth-card h1 {
+  font-size: 1.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.auth-card p.sub {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 1.75rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 52, 4, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: 14px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.modal__header h2 {
+  font-size: 1.1rem;
+  font-family: var(--font-heading);
+}
+
+.modal__close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.team-card,
+.research-card,
+.news-card {
+  position: relative;
+}
+
+.btn--danger {
+  background: #b91c1c;
+  color: #fff;
+}
+
+.btn--danger:hover {
+  background: #991b1b;
+}
+
+.btn--sm {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+/* ============================================================
+   Responsive — Inner Pages
+   ============================================================ */
+@media (max-width: 768px) {
+  .page-banner {
+    padding: 2.5rem 1.25rem;
+  }
+
+  .contact-layout {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .pub-item {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}

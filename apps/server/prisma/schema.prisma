@@ -1,0 +1,651 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// Conventions (see docs/architecture/phase8-platform-architecture.md)
+//
+// * SQLite has no native enum type, so every "enum" below is a plain String.
+//   The value sets live in packages/shared (Zod) and are enforced there and in
+//   the service layer. Values documented next to each field are authoritative.
+// * Visibility is "PUBLIC" | "LAB_ONLY". Tables that already existed before
+//   Phase 8 default to PUBLIC (that is what they already were). Every table
+//   introduced in Phase 8 defaults to LAB_ONLY (fail closed): new content is
+//   internal until somebody explicitly publishes it.
+// * Existing curated content is hard-deleted. User-generated conversational
+//   content (forum posts/comments, messages, files) is soft-deleted.
+// * Deleting a User never deletes shared content: author/actor columns are
+//   nullable and become NULL (SetNull). Purely personal rows (notifications,
+//   reactions, conversation membership) cascade away with the account.
+// * Base-language (English) text lives in the entity's own columns. Other
+//   locales live in `Translation` rows, so no entity table is ever duplicated.
+// =====================================================================
+
+/// Backs the express-session store (see src/lib/prismaSessionStore.ts) so
+/// sessions live in the same SQLite file, without a second native driver.
+model Session {
+  id        String   @id
+  data      String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+// =====================================================================
+// Accounts + researcher profiles (existing)
+//
+// User        = a login account (authentication + authorization role).
+// TeamMember  = the researcher/profile shown on the site. It is deliberately
+//               NOT renamed or split: an account may or may not be linked to
+//               one (userId is nullable), and alumni have no account.
+// role: "ADMIN" | "MEMBER" today; "LAB_MANAGER" is reserved (see docs).
+// =====================================================================
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("MEMBER")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teamMember TeamMember?
+
+  // Phase 8 back-relations (no columns on User itself)
+  auditLogs          AuditLog[]                @relation("AuditActor")
+  notifications      Notification[]            @relation("NotificationRecipient")
+  notificationsActed Notification[]            @relation("NotificationActor")
+  files              StoredFile[]
+  eventsCreated      Event[]
+  forumPosts         ForumPost[]
+  forumRevisions     ForumPostRevision[]
+  forumComments      ForumComment[]
+  forumReactions     ForumReaction[]
+  forumMentions      ForumMention[]
+  conversations      ConversationParticipant[]
+  sentMessages       Message[]
+
+  @@index([role])
+}
+
+model TeamMember {
+  id         String   @id @default(cuid())
+  userId     String?  @unique
+  name       String
+  initials   String
+  role       String
+  category   String
+  department String   @default("")
+  bio        String   @default("")
+  photoUrl   String   @default("")
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user             User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  historyEntries   HistoryEntry[]
+  publicationLinks PublicationAuthor[]
+  newsLinks        NewsAuthor[]
+
+  // Phase 8 back-relations
+  areaLinks    ResearcherArea[]
+  projectLinks ProjectMember[]
+  groupLinks   GroupMember[]
+
+  @@index([category, sortOrder])
+}
+
+model HistoryEntry {
+  id           String   @id @default(cuid())
+  teamMemberId String
+  year         String
+  title        String
+  description  String   @default("")
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@index([teamMemberId])
+}
+
+// =====================================================================
+// Curated content (existing). Phase 8 adds `visibility` (default PUBLIC, so
+// every existing row stays exactly as visible as before) and, for news, an
+// optional link to the project it is about.
+// =====================================================================
+model Publication {
+  id         String   @id @default(cuid())
+  year       Int
+  title      String
+  authors    String
+  venue      String
+  pdfUrl     String   @default("")
+  doiUrl     String   @default("")
+  extraUrl   String   @default("")
+  extraLabel String   @default("")
+  visibility String   @default("PUBLIC") // PUBLIC | LAB_ONLY
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  authorLinks  PublicationAuthor[]
+  projectLinks ProjectPublication[]
+
+  @@index([year])
+}
+
+model NewsItem {
+  id          String   @id @default(cuid())
+  dateLabel   String
+  sortDate    String
+  type        String
+  emoji       String   @default("📣")
+  title       String
+  description String
+  visibility  String   @default("PUBLIC") // PUBLIC | LAB_ONLY
+  projectId   String? // a news item is about at most one project
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  authorLinks NewsAuthor[]
+
+  @@index([sortDate])
+  @@index([projectId])
+}
+
+/// A broad research theme shown on /research ("Computer Vision", "FPGA & VLSI").
+/// Distinct from ResearchProject, which is a concrete piece of work.
+model ResearchArea {
+  id          String   @id @default(cuid())
+  icon        String   @default("🔬")
+  title       String
+  description String
+  tag         String
+  sortOrder   Int      @default(0)
+  visibility  String   @default("PUBLIC") // PUBLIC | LAB_ONLY
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectLinks    ProjectArea[]
+  researcherLinks ResearcherArea[]
+
+  @@index([sortOrder])
+}
+
+model PublicationAuthor {
+  publicationId String
+  teamMemberId  String
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  teamMember  TeamMember  @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@id([publicationId, teamMemberId])
+  @@index([teamMemberId])
+}
+
+model NewsAuthor {
+  newsItemId   String
+  teamMemberId String
+
+  newsItem   NewsItem   @relation(fields: [newsItemId], references: [id], onDelete: Cascade)
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@id([newsItemId, teamMemberId])
+  @@index([teamMemberId])
+}
+
+// =====================================================================
+// Research domain (Phase 8, new)
+//
+// Relationship cardinalities were chosen to avoid many-to-many tables unless
+// a real M:N exists:
+//   Project  -> Group        N:1  (ResearchProject.groupId)
+//   News     -> Project      N:1  (NewsItem.projectId)
+//   Event    -> Project      N:1  (Event.projectId)
+//   Forum post -> Project    N:1  (ForumPost.projectId)
+//   Gallery  -> Event/Project N:1 (GalleryItem.eventId / projectId)
+//   Project <-> Area, Project <-> Researcher, Project <-> Publication,
+//   Researcher <-> Area, Group <-> Researcher   genuinely M:N (join tables).
+// =====================================================================
+model ResearchGroup {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String   @default("")
+  visibility  String   @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members  GroupMember[]
+  projects ResearchProject[]
+
+  @@index([sortOrder])
+}
+
+model GroupMember {
+  groupId      String
+  teamMemberId String
+  role         String @default("MEMBER") // LEAD | MEMBER
+
+  group      ResearchGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  teamMember TeamMember    @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, teamMemberId])
+  @@index([teamMemberId])
+}
+
+model ResearchProject {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  summary     String    @default("")
+  description String    @default("")
+  status      String    @default("ACTIVE") // PLANNED | ACTIVE | COMPLETED | ARCHIVED (research lifecycle, not publishing state)
+  startDate   DateTime?
+  endDate     DateTime?
+  visibility  String    @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  sortOrder   Int       @default(0)
+  groupId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  group        ResearchGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  areaLinks    ProjectArea[]
+  members      ProjectMember[]
+  publications ProjectPublication[]
+  news         NewsItem[]
+  events       Event[]
+  galleryItems GalleryItem[]
+  forumPosts   ForumPost[]
+
+  @@index([groupId])
+  @@index([visibility, sortOrder])
+}
+
+model ProjectMember {
+  projectId    String
+  teamMemberId String
+  role         String @default("MEMBER") // LEAD | MEMBER | COLLABORATOR
+
+  project    ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamMember TeamMember      @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, teamMemberId])
+  @@index([teamMemberId])
+}
+
+model ProjectArea {
+  projectId      String
+  researchAreaId String
+
+  project      ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  researchArea ResearchArea    @relation(fields: [researchAreaId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, researchAreaId])
+  @@index([researchAreaId])
+}
+
+model ProjectPublication {
+  projectId     String
+  publicationId String
+
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  publication Publication     @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, publicationId])
+  @@index([publicationId])
+}
+
+model ResearcherArea {
+  teamMemberId   String
+  researchAreaId String
+
+  teamMember   TeamMember   @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  researchArea ResearchArea @relation(fields: [researchAreaId], references: [id], onDelete: Cascade)
+
+  @@id([teamMemberId, researchAreaId])
+  @@index([researchAreaId])
+}
+
+/// A dated lab event (seminar, deadline, meeting). The current /schedule page is
+/// a Google Calendar embed and stays as it is until an Events phase replaces it.
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @default("")
+  location    String    @default("")
+  url         String    @default("")
+  kind        String    @default("OTHER") // SEMINAR | MEETING | DEADLINE | SOCIAL | OTHER
+  startsAt    DateTime
+  endsAt      DateTime?
+  allDay      Boolean   @default(false)
+  visibility  String    @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  projectId   String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project      ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy    User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  galleryItems GalleryItem[]
+
+  @@index([startsAt])
+  @@index([projectId])
+}
+
+// =====================================================================
+// Files + gallery (Phase 8, new)
+//
+// StoredFile is METADATA ONLY. The bytes live outside the web root (and outside
+// apps/web/dist), addressed by `storageKey`, and are only ever streamed through an
+// authorising API route. Nothing is served by express.static.
+//
+// Access to a file = own visibility AND (if attached) access to the parent.
+// A file whose parent cannot be resolved is denied to everyone but its owner
+// and admins (fail closed).
+// =====================================================================
+model StoredFile {
+  id           String    @id @default(cuid())
+  storageKey   String    @unique // server-generated opaque key; never derived from user input
+  originalName String // display/download name only; never used as a filesystem path
+  mimeType     String // validated server-side against an allow-list, not trusted from the client
+  sizeBytes    Int
+  sha256       String?
+  visibility   String    @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  ownerId      String?
+  // What the file is attached to. NULL = standalone (gallery items and library files).
+  // entityType: PUBLICATION | RESEARCH_PROJECT | EVENT | FORUM_POST | FORUM_COMMENT | MESSAGE
+  entityType   String?
+  entityId     String?
+  deletedAt    DateTime? // soft delete; the blob is purged by a cleanup job
+  createdAt    DateTime  @default(now())
+
+  owner       User?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  galleryItem GalleryItem?
+
+  @@index([entityType, entityId])
+  @@index([ownerId])
+}
+
+/// A gallery entry wraps a file. It has NO visibility of its own: the file's
+/// visibility is the single source of truth, so the two can never disagree.
+model GalleryItem {
+  id        String    @id @default(cuid())
+  fileId    String    @unique
+  caption   String    @default("")
+  category  String    @default("LAB_LIFE") // LAB_LIFE | EVENT | RESEARCH | OTHER
+  takenAt   DateTime?
+  eventId   String?
+  projectId String?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  file    StoredFile       @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  event   Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  project ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([projectId])
+  @@index([category, sortOrder])
+}
+
+// =====================================================================
+// Forum (Phase 8, new)
+//
+// Visibility is set on the CATEGORY only. Posts and comments inherit it, so a
+// post can never be more public than the place it lives in, and moving a post
+// is the only way its audience changes (an audited moderation action).
+// status: ACTIVE | HIDDEN (moderator, reversible) | DELETED (soft).
+// =====================================================================
+model ForumCategory {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String   @default("")
+  visibility  String   @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  isLocked    Boolean  @default(false) // no new posts
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts ForumPost[]
+
+  @@index([sortOrder])
+}
+
+model ForumPost {
+  id             String    @id @default(cuid())
+  categoryId     String
+  authorId       String?
+  projectId      String?
+  title          String
+  body           String
+  status         String    @default("ACTIVE") // ACTIVE | HIDDEN | DELETED
+  pinned         Boolean   @default(false)
+  locked         Boolean   @default(false) // no new comments
+  editedAt       DateTime?
+  lastActivityAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  category  ForumCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  author    User?               @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  project   ResearchProject?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  comments  ForumComment[]
+  reactions ForumReaction[]
+  mentions  ForumMention[]
+  revisions ForumPostRevision[]
+
+  @@index([categoryId, pinned, lastActivityAt])
+  @@index([authorId])
+  @@index([projectId])
+}
+
+/// Snapshot of a post BEFORE an edit (title + body). Comments keep only `editedAt`.
+model ForumPostRevision {
+  id        String   @id @default(cuid())
+  postId    String
+  editorId  String?
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+
+  post   ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  editor User?     @relation(fields: [editorId], references: [id], onDelete: SetNull)
+
+  @@index([postId, createdAt])
+}
+
+model ForumComment {
+  id        String    @id @default(cuid())
+  postId    String
+  authorId  String?
+  parentId  String? // one level of replies; depth is enforced in the service layer
+  body      String
+  status    String    @default("ACTIVE") // ACTIVE | HIDDEN | DELETED
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  post      ForumPost       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  parent    ForumComment?   @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   ForumComment[]  @relation("CommentReplies")
+  reactions ForumReaction[]
+  mentions  ForumMention[]
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+  @@index([authorId])
+}
+
+/// One reaction targets exactly one of {post, comment}; the XOR is enforced by a
+/// CHECK constraint added by hand in the migration SQL (Prisma cannot express it).
+model ForumReaction {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String?
+  commentId String?
+  kind      String   @default("LIKE") // LIKE | LOVE | INSIGHTFUL | THANKS
+  createdAt DateTime @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    ForumPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment ForumComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, kind])
+  @@unique([userId, commentId, kind])
+  @@index([postId])
+  @@index([commentId])
+}
+
+/// Recorded when a post/comment is saved so that an EDIT only notifies people
+/// who are newly mentioned. Same XOR CHECK as ForumReaction.
+model ForumMention {
+  id              String   @id @default(cuid())
+  mentionedUserId String
+  postId          String?
+  commentId       String?
+  createdAt       DateTime @default(now())
+
+  mentionedUser User          @relation(fields: [mentionedUserId], references: [id], onDelete: Cascade)
+  post          ForumPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment       ForumComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([mentionedUserId, postId])
+  @@unique([mentionedUserId, commentId])
+  @@index([postId])
+  @@index([commentId])
+}
+
+// =====================================================================
+// Private messaging (Phase 8, new)
+//
+// One-to-one first. `directKey` = the two participant ids sorted and joined
+// (e.g. "idA:idB"); its UNIQUE index makes "one direct conversation per pair"
+// race-safe. Group chats later use kind = "GROUP" with directKey = NULL.
+// Message rows are never readable by admins through the API: only participants.
+// Unread state = messages newer than the participant's lastReadAt.
+// A deleted message keeps its row (ordering, "message deleted" tombstone) but
+// its body is blanked at deletion time so nothing private lingers.
+// =====================================================================
+model Conversation {
+  id            String    @id @default(cuid())
+  kind          String    @default("DIRECT") // DIRECT | GROUP (reserved)
+  directKey     String?   @unique
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  conversationId String
+  userId         String
+  joinedAt       DateTime  @default(now())
+  lastReadAt     DateTime?
+  archivedAt     DateTime? // "delete for me": hides the conversation for this participant only
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  conversationId String
+  senderId       String?
+  body           String
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+// =====================================================================
+// Notifications, audit log, translations (Phase 8, new) — cross-cutting.
+// These point at other rows with (entityType, entityId) instead of one FK per
+// possible target, so any later feature can use them without a migration.
+// =====================================================================
+
+/// type: MESSAGE_RECEIVED | FORUM_MENTION | FORUM_COMMENT | FORUM_REACTION | FORUM_MODERATION |
+///       PUBLICATION_LINKED | PROJECT_ACTIVITY | ANNOUNCEMENT (see @scl/shared schemas/notifications.ts)
+/// `payload` is small non-sensitive JSON (e.g. a post title). Message bodies are
+/// never copied into a notification.
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  type       String
+  actorId    String?
+  entityType String?
+  entityId   String?
+  targetPath String    @default("") // app-relative link, must start with "/" (validated on write)
+  payload    String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user  User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt, createdAt])
+  @@index([actorId])
+}
+
+/// Append-only. Rows are inserted by the server and never updated or deleted by
+/// the API. `actorEmail` is a snapshot so history stays readable after the
+/// account is deleted. `details` is small JSON with an explicit per-action
+/// allow-list of keys: never passwords, hashes, tokens or message content.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String   @default("")
+  action     String // e.g. USER_CREATED, ROLE_CHANGED, PUBLICATION_UPDATED
+  entityType String // e.g. USER, PUBLICATION, FORUM_POST
+  entityId   String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
+
+/// Non-default-locale text for any translatable field. The base (English) text
+/// stays in the entity's own column and is the fallback. Allowed entityType/field
+/// pairs are an allow-list in packages/shared. There is no FK (polymorphic), so
+/// the code that hard-deletes an entity also deletes its Translation rows.
+model Translation {
+  id         String   @id @default(cuid())
+  entityType String // RESEARCH_AREA | NEWS_ITEM | TEAM_MEMBER | RESEARCH_PROJECT | RESEARCH_GROUP | EVENT | FORUM_CATEGORY
+  entityId   String
+  locale     String // "ja" (base locale "en" is never stored here)
+  field      String // e.g. "title", "description"
+  value      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([entityType, entityId, locale, field])
+  @@index([entityType, entityId])
+}

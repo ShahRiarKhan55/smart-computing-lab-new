@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="../index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="../index.html"      >Home</a></li>
+      <li><a href="research.html"      >Research</a></li>
+      <li><a href="team.html" class="active">Team</a></li>
+      <li><a href="publications.html"  >Publications</a></li>
+      <li><a href="news.html"          >News</a></li>
+      <li><a href="contact.html"       >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== PAGE BANNER ===================== -->
+  <div class="page-banner">
+    <div class="page-banner__inner">
+      <p class="page-banner__tag">/ people</p>
+      <h1 class="page-banner__title">Our Team</h1>
+      <p class="page-banner__desc">
+        Faculty, PhD and MSc researchers, undergraduate students, and research
+        assistants working across the lab's focus areas.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ===================== TEAM MEMBERS ===================== -->
+  <main class="container">
+    <div id="adminBar"></div>
+    <div id="teamContainer">
+      <p style="color: var(--muted); font-size: 14px;">Loading team…</p>
+    </div>
+  </main>
+
+
+  <!-- ===================== EDIT MODAL ===================== -->
+  <div class="modal-overlay" id="editModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="modalTitle">Edit team member</h2>
+        <button class="modal__close" id="modalClose">&times;</button>
+      </div>
+      <div id="modalError"></div>
+      <form id="memberForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Full name</label>
+            <input type="text" id="f_name" required />
+          </div>
+          <div class="form-group">
+            <label>Initials (shown on avatar)</label>
+            <input type="text" id="f_initials" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Role / title</label>
+            <input type="text" id="f_role" placeholder="e.g. PhD Candidate" required />
+          </div>
+          <div class="form-group">
+            <label>Department / focus area</label>
+            <input type="text" id="f_department" />
+          </div>
+        </div>
+        <div class="form-group" id="categoryGroup">
+          <label>Category</label>
+          <select id="f_category">
+            <option value="FACULTY">Faculty</option>
+            <option value="PHD">PhD Students</option>
+            <option value="MSC">MSc Students</option>
+            <option value="BSC">BSc Students</option>
+            <option value="RESEARCH">Research Students</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Short bio (optional)</label>
+          <textarea id="f_bio"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Photo URL (optional — leave blank to show initials)</label>
+          <input type="text" id="f_photoUrl" placeholder="https://..." />
+        </div>
+        <button class="btn btn--primary form-submit" type="submit" id="saveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="research.html">Research</a></li>
+        <li><a href="team.html">Team</a></li>
+        <li><a href="publications.html">Publications</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="../js/app.js" data-base=".."></script>
+  <script>
+    const CATEGORY_LABELS = {
+      FACULTY: 'Faculty',
+      PHD: 'PhD Students',
+      MSC: 'MSc Students',
+      BSC: 'BSc Students',
+      RESEARCH: 'Research Students',
+    };
+    const CATEGORY_ORDER = ['FACULTY', 'PHD', 'MSC', 'BSC', 'RESEARCH'];
+
+    let members = [];
+    let editingId = null; // null = creating new
+
+    async function loadTeam() {
+      members = await window.SCL.api('team.php');
+      render();
+    }
+
+    function render() {
+      const container = document.getElementById('teamContainer');
+      const user = window.SCL.user;
+      const isAdmin = user && user.role === 'ADMIN';
+
+      // Admin bar
+      const adminBar = document.getElementById('adminBar');
+      if (isAdmin) {
+        adminBar.innerHTML = `
+          <div class="admin-bar">
+            <span class="admin-bar__text">Admin: add new members here. To give someone login access, use the Admin dashboard.</span>
+            <button class="btn btn--primary btn--sm" id="addMemberBtn">+ Add team member</button>
+          </div>`;
+        document.getElementById('addMemberBtn').addEventListener('click', () => openModal(null));
+      } else {
+        adminBar.innerHTML = '';
+      }
+
+      const groups = CATEGORY_ORDER
+        .map((cat) => ({ cat, items: members.filter((m) => m.category === cat) }))
+        .filter((g) => g.items.length > 0);
+
+      container.innerHTML = groups.map((group) => `
+        <div class="team-divider">
+          <span class="team-divider__label">${CATEGORY_LABELS[group.cat]}</span>
+          <span class="team-divider__line"></span>
+        </div>
+        <div class="team-grid">
+          ${group.items.map((m) => renderCard(m, user, isAdmin)).join('')}
+        </div>
+      `).join('');
+
+      // Wire up edit/delete buttons
+      container.querySelectorAll('[data-edit-id]').forEach((btn) => {
+        btn.addEventListener('click', () => openModal(btn.getAttribute('data-edit-id')));
+      });
+      container.querySelectorAll('[data-delete-id]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteMember(btn.getAttribute('data-delete-id')));
+      });
+    }
+
+    function renderCard(m, user, isAdmin) {
+      const isOwner = user && m.userId && m.userId === user.id;
+      const canEdit = isAdmin || isOwner;
+      const esc = window.SCL.escapeHtml;
+
+      const avatar = m.photoUrl
+        ? `<img src="${esc(m.photoUrl)}" alt="${esc(m.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
+        : esc(m.initials);
+
+      return `
+        <div class="team-card">
+          ${canEdit ? `
+            <div class="card-edit-btn">
+              <button class="icon-btn" title="Edit" data-edit-id="${m.id}">✎</button>
+              ${isAdmin ? `<button class="icon-btn icon-btn--danger" title="Remove" data-delete-id="${m.id}">✕</button>` : ''}
+            </div>` : ''}
+          <a href="member.html?id=${m.id}" style="text-decoration:none; color:inherit; display:block;">
+            <div class="team-card__avatar">${avatar}</div>
+            <div class="team-card__name">${esc(m.name)}</div>
+            <div class="team-card__role">${esc(m.role)}</div>
+            <div class="team-card__dept">${esc(m.department)}</div>
+          </a>
+        </div>`;
+    }
+
+    function openModal(id) {
+      editingId = id;
+      const user = window.SCL.user;
+      const isAdmin = user && user.role === 'ADMIN';
+      const m = id ? members.find((x) => x.id === id) : null;
+
+      document.getElementById('modalTitle').textContent = id ? 'Edit team member' : 'Add team member';
+      document.getElementById('modalError').innerHTML = '';
+      document.getElementById('f_name').value = m ? m.name : '';
+      document.getElementById('f_initials').value = m ? m.initials : '';
+      document.getElementById('f_role').value = m ? m.role : '';
+      document.getElementById('f_department').value = m ? m.department : '';
+      document.getElementById('f_bio').value = m ? m.bio : '';
+      document.getElementById('f_photoUrl').value = m ? m.photoUrl : '';
+      document.getElementById('f_category').value = m ? m.category : 'BSC';
+
+      // Only admins can change category; members editing their own profile
+      // don't see this field as editable.
+      document.getElementById('categoryGroup').style.display = isAdmin ? '' : 'none';
+
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = 'none';
+      editingId = null;
+    }
+
+    async function deleteMember(id) {
+      if (!confirm('Remove this team member?')) return;
+      try {
+        await window.SCL.api(`team.php?id=${id}`, { method: 'DELETE' });
+        await loadTeam();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editModal') closeModal();
+    });
+
+    document.getElementById('memberForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const payload = {
+        name: document.getElementById('f_name').value,
+        initials: document.getElementById('f_initials').value,
+        role: document.getElementById('f_role').value,
+        department: document.getElementById('f_department').value,
+        bio: document.getElementById('f_bio').value,
+        photoUrl: document.getElementById('f_photoUrl').value,
+        category: document.getElementById('f_category').value,
+      };
+
+      try {
+        if (editingId) {
+          await window.SCL.api(`team.php?id=${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        } else {
+          await window.SCL.api('team.php', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        closeModal();
+        await loadTeam();
+      } catch (err) {
+        document.getElementById('modalError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+
+    document.addEventListener('scl:session-ready', render);
+    loadTeam();
+  </script>
+
+</body>
+</html>

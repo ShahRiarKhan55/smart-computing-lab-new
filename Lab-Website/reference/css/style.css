@@ -1,0 +1,416 @@
+/* ============================================================
+   Smart Computing Lab — Main Stylesheet
+   ============================================================
+   File structure:
+   1. CSS Variables (colors, fonts, spacing)
+   2. Reset & Base
+   3. Navigation
+   4. Footer
+   5. Buttons
+   6. Utility classes
+   ============================================================ */
+
+
+/* ------------------------------------------------------------
+   1. CSS Variables
+   ------------------------------------------------------------ */
+:root {
+  /* Green palette */
+  --green-50:  #eaf3de;
+  --green-100: #c0dd97;
+  --green-200: #97c459;
+  --green-400: #639922;
+  --green-600: #3b6d11;
+  --green-800: #27500a;
+  --green-900: #173404;
+
+  /* Neutral palette */
+  --gray-50:  #f1efe8;
+  --gray-100: #d3d1c7;
+  --gray-200: #b4b2a9;
+  --gray-400: #888780;
+  --gray-600: #5f5e5a;
+
+  /* Semantic tokens */
+  --bg:      #fafaf8;
+  --surface: #ffffff;
+  --text:    #1a1a18;
+  --muted:   #5f5e5a;
+  --border:  #d3d1c7;
+
+  /* Typography */
+  --font-heading: 'Space Mono', monospace;
+  --font-body:    'DM Sans', sans-serif;
+
+  /* Spacing */
+  --section-padding: 5rem 2.5rem;
+  --card-radius:     12px;
+  --btn-radius:      6px;
+}
+
+
+/* ------------------------------------------------------------
+   2. Reset & Base
+   ------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-heading);
+  line-height: 1.2;
+  color: var(--text);
+}
+
+p {
+  color: var(--muted);
+}
+
+
+/* ------------------------------------------------------------
+   3. Navigation
+   ------------------------------------------------------------ */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(250, 250, 248, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2.5rem;
+}
+
+.nav__logo {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green-600);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav__logo span {
+  color: var(--gray-400);
+}
+
+.nav__links {
+  display: flex;
+  list-style: none;
+  gap: 0;
+  align-items: center;
+}
+
+.nav__links a {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 0 1.1rem;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  letter-spacing: 0.01em;
+}
+
+.nav__pill {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  background: var(--green-50);
+  color: var(--green-800);
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--green-100);
+  margin-left: 6px;
+  letter-spacing: 0.02em;
+}
+
+.nav__links a:hover,
+.nav__links a.active {
+  color: var(--green-600);
+  border-bottom-color: var(--green-400);
+}
+
+.nav__links button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  height: auto;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.nav__links button:hover {
+  border-color: var(--green-400);
+  color: var(--green-600);
+}
+
+/* Hamburger — shown only on mobile */
+.nav__hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  padding: 4px;
+  background: none;
+  border: none;
+}
+
+.nav__hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+
+/* ------------------------------------------------------------
+   4. Footer
+   ------------------------------------------------------------ */
+.footer {
+  background: var(--green-900);
+  color: var(--green-100);
+  padding: 3rem 2.5rem;
+  margin-top: 6rem;
+}
+
+.footer__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.footer__logo {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.footer__links {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+}
+
+.footer__links a {
+  font-size: 13px;
+  color: var(--green-100);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.footer__links a:hover {
+  opacity: 1;
+}
+
+.footer__copy {
+  font-size: 12px;
+  color: var(--green-200);
+  opacity: 0.6;
+  width: 100%;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+
+/* ------------------------------------------------------------
+   5. Buttons
+   ------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 11px 24px;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  text-decoration: none;
+}
+
+.btn--primary {
+  background: var(--green-600);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: var(--green-800);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 109, 17, 0.25);
+}
+
+.btn--outline {
+  background: transparent;
+  color: var(--green-600);
+  border: 1px solid var(--green-400);
+}
+
+.btn--outline:hover {
+  background: var(--green-50);
+}
+
+
+/* ------------------------------------------------------------
+   6. Utility classes
+   ------------------------------------------------------------ */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--section-padding);
+}
+
+.section-tag {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--green-600);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.5rem;
+}
+
+.section-title {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.section-desc {
+  font-size: 16px;
+  color: var(--muted);
+  font-weight: 300;
+  max-width: 560px;
+  line-height: 1.8;
+}
+
+.section-header {
+  margin-bottom: 3rem;
+}
+
+/* Card base */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.card:hover {
+  border-color: var(--green-400);
+  transform: translateY(-3px);
+}
+
+/* Pill / tag badge */
+.badge {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  background: var(--green-50);
+  color: var(--green-800);
+  padding: 3px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--green-100);
+}
+
+
+/* ------------------------------------------------------------
+   Responsive
+   ------------------------------------------------------------ */
+@media (max-width: 768px) {
+  :root {
+    --section-padding: 3rem 1.25rem;
+  }
+
+  .nav {
+    padding: 0 1.25rem;
+  }
+
+  .nav__links {
+    display: none;
+    flex-direction: column;
+    position: absolute;
+    top: 64px;
+    left: 0;
+    right: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 0;
+  }
+
+  .nav__links.open {
+    display: flex;
+  }
+
+  .nav__links a {
+    height: auto;
+    padding: 0.75rem 1.5rem;
+    border-bottom: none;
+    border-left: 2px solid transparent;
+  }
+
+  .nav__links a.active,
+  .nav__links a:hover {
+    border-left-color: var(--green-400);
+    border-bottom-color: transparent;
+    background: var(--green-50);
+  }
+
+  .nav__links button {
+    margin: 0.5rem 1.5rem 0;
+  }
+
+  .nav__hamburger {
+    display: flex;
+  }
+
+  .footer__inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

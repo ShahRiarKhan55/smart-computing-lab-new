@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="index.html"              >Home</a></li>
+      <li><a href="pages/research.html"     >Research</a></li>
+      <li><a href="pages/team.html"         >Team</a></li>
+      <li><a href="pages/publications.html" >Publications</a></li>
+      <li><a href="pages/news.html"         >News</a></li>
+      <li><a href="pages/contact.html"      >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== PAGE BANNER ===================== -->
+  <div class="page-banner">
+    <div class="page-banner__inner">
+      <p class="page-banner__tag">/ admin only</p>
+      <h1 class="page-banner__title">Admin Dashboard</h1>
+      <p class="page-banner__desc">
+        Manage lab member accounts and access. Content (team, publications, news,
+        research) is edited directly on each page.
+      </p>
+    </div>
+  </div>
+
+
+  <main class="container">
+    <div id="adminGate">
+      <p style="color: var(--muted); font-size: 14px;">Checking access…</p>
+    </div>
+  </main>
+
+
+  <!-- ===================== CREATE ACCOUNT MODAL ===================== -->
+  <div class="modal-overlay" id="createModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2>Create login for a member</h2>
+        <button class="modal__close" id="modalClose">&times;</button>
+      </div>
+      <div id="createError"></div>
+      <form id="createForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="c_email" required />
+          </div>
+          <div class="form-group">
+            <label>Temporary password</label>
+            <input type="text" id="c_password" placeholder="At least 8 characters" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Account role</label>
+          <select id="c_role">
+            <option value="MEMBER">Member (edits own profile only)</option>
+            <option value="ADMIN">Admin (edits everything)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Link to team profile</label>
+          <select id="c_linkMode">
+            <option value="existing">Link to an existing (unlinked) team member</option>
+            <option value="new">Create a brand new team member profile</option>
+            <option value="none">No team profile (admin-only account)</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="existingMemberGroup">
+          <label>Team member</label>
+          <select id="c_teamMemberId"></select>
+          <p id="noUnlinkedNote" style="font-size:12px; color: var(--muted); margin-top:6px; display:none;">
+            No unlinked team members available — try "Create a brand new team member profile" instead.
+          </p>
+        </div>
+
+        <div id="newMemberFields" style="display:none;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Full name</label>
+              <input type="text" id="c_name" />
+            </div>
+            <div class="form-group">
+              <label>Initials</label>
+              <input type="text" id="c_initials" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Role / title</label>
+              <input type="text" id="c_memberRole" />
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="c_category">
+                <option value="FACULTY">Faculty</option>
+                <option value="PHD">PhD</option>
+                <option value="MSC">MSc</option>
+                <option value="BSC" selected>BSc</option>
+                <option value="RESEARCH">Research Student</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn--primary form-submit" type="submit" id="createBtn">Create account</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="pages/research.html">Research</a></li>
+        <li><a href="pages/team.html">Team</a></li>
+        <li><a href="pages/publications.html">Publications</a></li>
+        <li><a href="pages/contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="js/app.js" data-base="."></script>
+  <script>
+    let users = [];
+    let unlinkedMembers = [];
+
+    document.addEventListener('scl:session-ready', onSessionReady, { once: true });
+
+    async function onSessionReady() {
+      const user = window.SCL.user;
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      if (user.role !== 'ADMIN') {
+        window.location.href = 'index.html';
+        return;
+      }
+      await loadData();
+    }
+
+    async function loadData() {
+      try {
+        const [usersData, members] = await Promise.all([
+          window.SCL.api('users.php'),
+          window.SCL.api('team.php'),
+        ]);
+        users = usersData;
+        unlinkedMembers = members.filter((m) => !m.userId);
+        renderGate();
+      } catch (err) {
+        document.getElementById('adminGate').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderGate() {
+      const esc = window.SCL.escapeHtml;
+      const me = window.SCL.user;
+
+      document.getElementById('adminGate').innerHTML = `
+        <div style="margin-bottom: 1.5rem; display:flex; gap:10px; flex-wrap:wrap;">
+          <a href="pages/research.html" class="btn btn--outline btn--sm">Edit Research</a>
+          <a href="pages/team.html" class="btn btn--outline btn--sm">Edit Team</a>
+          <a href="pages/publications.html" class="btn btn--outline btn--sm">Edit Publications</a>
+          <a href="pages/news.html" class="btn btn--outline btn--sm">Edit News</a>
+        </div>
+
+        <div class="admin-bar">
+          <span class="admin-bar__text">Lab member accounts</span>
+          <button class="btn btn--primary btn--sm" id="createAccountBtn">+ Create login for a member</button>
+        </div>
+
+        <div id="userList" style="display:flex; flex-direction:column; gap:10px;">
+          ${users.map((u) => `
+            <div class="card" style="padding:1rem 1.25rem; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:500; font-size:14px;">${esc(u.email)}</div>
+                <div style="font-size:12px; color: var(--muted);">${u.teamMemberName ? `Linked to ${esc(u.teamMemberName)}` : 'No team profile linked'}</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <select data-role-for="${u.id}" ${u.id === me.id ? 'disabled' : ''}>
+                  <option value="MEMBER" ${u.role === 'MEMBER' ? 'selected' : ''}>Member</option>
+                  <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>Admin</option>
+                </select>
+                <button class="btn btn--danger btn--sm" data-delete-user="${u.id}" ${u.id === me.id ? 'disabled' : ''}>Delete</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      document.getElementById('createAccountBtn').addEventListener('click', openCreateModal);
+      document.querySelectorAll('[data-role-for]').forEach((sel) => {
+        sel.addEventListener('change', () => handleRoleChange(sel.getAttribute('data-role-for'), sel.value));
+      });
+      document.querySelectorAll('[data-delete-user]').forEach((btn) => {
+        btn.addEventListener('click', () => handleDeleteUser(btn.getAttribute('data-delete-user')));
+      });
+    }
+
+    async function handleRoleChange(userId, role) {
+      try {
+        await window.SCL.api(`users.php?id=${userId}`, { method: 'PUT', body: JSON.stringify({ role }) });
+        users = users.map((u) => (u.id === userId ? { ...u, role } : u));
+      } catch (err) {
+        alert(err.message);
+        renderGate(); // revert the select back to its prior state
+      }
+    }
+
+    async function handleDeleteUser(userId) {
+      if (!confirm('Delete this account? They will no longer be able to log in.')) return;
+      try {
+        await window.SCL.api(`users.php?id=${userId}`, { method: 'DELETE' });
+        users = users.filter((u) => u.id !== userId);
+        renderGate();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function openCreateModal() {
+      document.getElementById('createError').innerHTML = '';
+      document.getElementById('createForm').reset();
+
+      const sel = document.getElementById('c_teamMemberId');
+      sel.innerHTML = unlinkedMembers.map((m) => `<option value="${m.id}">${window.SCL.escapeHtml(m.name)}</option>`).join('');
+      document.getElementById('noUnlinkedNote').style.display = unlinkedMembers.length === 0 ? 'block' : 'none';
+
+      updateLinkModeUI();
+      document.getElementById('createModal').style.display = 'flex';
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createModal').style.display = 'none';
+    }
+
+    function updateLinkModeUI() {
+      const mode = document.getElementById('c_linkMode').value;
+      document.getElementById('existingMemberGroup').style.display = mode === 'existing' ? '' : 'none';
+      document.getElementById('newMemberFields').style.display = mode === 'new' ? '' : 'none';
+    }
+
+    document.getElementById('c_linkMode').addEventListener('change', updateLinkModeUI);
+    document.getElementById('modalClose').addEventListener('click', closeCreateModal);
+    document.getElementById('createModal').addEventListener('click', (e) => {
+      if (e.target.id === 'createModal') closeCreateModal();
+    });
+
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('createBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      document.getElementById('createError').innerHTML = '';
+
+      const mode = document.getElementById('c_linkMode').value;
+      const payload = {
+        email: document.getElementById('c_email').value,
+        password: document.getElementById('c_password').value,
+        role: document.getElementById('c_role').value,
+      };
+
+      if (mode === 'existing') {
+        payload.teamMemberId = document.getElementById('c_teamMemberId').value;
+      } else if (mode === 'new') {
+        payload.name = document.getElementById('c_name').value;
+        payload.initials = document.getElementById('c_initials').value;
+        payload.memberRole = document.getElementById('c_memberRole').value;
+        payload.category = document.getElementById('c_category').value;
+      }
+
+      try {
+        await window.SCL.api('users.php', { method: 'POST', body: JSON.stringify(payload) });
+        closeCreateModal();
+        await loadData();
+      } catch (err) {
+        document.getElementById('createError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create account';
+      }
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+/* ============================================================
+   Smart Computing Lab: the stylesheet is split by responsibility.
+   Order matters: tokens -> base -> components -> site chrome -> pages.
+   ============================================================ */
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/components.css";
+@import "./styles/site.css";
+@import "./styles/pages.css";

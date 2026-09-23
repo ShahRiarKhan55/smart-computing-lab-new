@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Publications — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="../index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="../index.html"      >Home</a></li>
+      <li><a href="research.html"      >Research</a></li>
+      <li><a href="team.html"          >Team</a></li>
+      <li><a href="publications.html" class="active">Publications</a></li>
+      <li><a href="news.html"          >News</a></li>
+      <li><a href="contact.html"       >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== PAGE BANNER ===================== -->
+  <div class="page-banner">
+    <div class="page-banner__inner">
+      <p class="page-banner__tag">/ output</p>
+      <h1 class="page-banner__title">Publications</h1>
+      <p class="page-banner__desc">
+        Peer-reviewed papers, conference proceedings, and preprints from our research group.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ===================== PUBLICATIONS ===================== -->
+  <main class="container">
+    <div id="adminBar"></div>
+
+    <div class="pub-filters" id="pubFilters"></div>
+    <p id="pubCount" style="font-size: 13px; color: var(--muted); margin-bottom: 1rem;"></p>
+
+    <div class="pub-list" id="pubList">
+      <p style="color: var(--muted); font-size: 14px;">Loading publications…</p>
+    </div>
+  </main>
+
+
+  <!-- ===================== EDIT MODAL ===================== -->
+  <div class="modal-overlay" id="editModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="modalTitle">Edit publication</h2>
+        <button class="modal__close" id="modalClose">&times;</button>
+      </div>
+      <div id="modalError"></div>
+      <form id="pubForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Year</label>
+            <input type="number" id="f_year" required />
+          </div>
+          <div class="form-group">
+            <label>Venue</label>
+            <input type="text" id="f_venue" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Title</label>
+          <textarea id="f_title" required></textarea>
+        </div>
+        <div class="form-group">
+          <label>Authors</label>
+          <input type="text" id="f_authors" placeholder="comma-separated" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>PDF URL</label>
+            <input type="text" id="f_pdfUrl" />
+          </div>
+          <div class="form-group">
+            <label>DOI URL</label>
+            <input type="text" id="f_doiUrl" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Extra link URL (optional)</label>
+            <input type="text" id="f_extraUrl" />
+          </div>
+          <div class="form-group">
+            <label>Extra link label</label>
+            <input type="text" id="f_extraLabel" placeholder="e.g. Code" />
+          </div>
+        </div>
+        <button class="btn btn--primary form-submit" type="submit" id="saveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="research.html">Research</a></li>
+        <li><a href="team.html">Team</a></li>
+        <li><a href="publications.html">Publications</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="../js/app.js" data-base=".."></script>
+  <script>
+    let pubs = [];
+    let editingId = null;
+    let yearFilter = 'all';
+
+    async function loadPubs() {
+      pubs = await window.SCL.api('publications.php');
+      render();
+    }
+
+    function render() {
+      const user = window.SCL.user;
+      const isAdmin = user && user.role === 'ADMIN';
+      const canEdit = !!user; // any logged-in lab member can add/edit publications
+
+      const adminBar = document.getElementById('adminBar');
+      if (canEdit) {
+        adminBar.innerHTML = `
+          <div class="admin-bar">
+            <span class="admin-bar__text">${isAdmin ? 'Admin' : 'Logged in'}: add or edit publications. ${isAdmin ? '' : '(Only admins can delete.)'}</span>
+            <button class="btn btn--primary btn--sm" id="addPubBtn">+ Add publication</button>
+          </div>`;
+        document.getElementById('addPubBtn').addEventListener('click', () => openModal(null));
+      } else {
+        adminBar.innerHTML = '';
+      }
+
+      const years = [...new Set(pubs.map((p) => p.year))].sort((a, b) => b - a);
+      const filtersEl = document.getElementById('pubFilters');
+      filtersEl.innerHTML = `
+        <button class="pub-filter ${yearFilter === 'all' ? 'active' : ''}" data-year="all">All years</button>
+        ${years.map((y) => `<button class="pub-filter ${yearFilter === y ? 'active' : ''}" data-year="${y}">${y}</button>`).join('')}
+      `;
+      filtersEl.querySelectorAll('[data-year]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const y = btn.getAttribute('data-year');
+          yearFilter = y === 'all' ? 'all' : Number(y);
+          render();
+        });
+      });
+
+      const filtered = yearFilter === 'all' ? pubs : pubs.filter((p) => p.year === yearFilter);
+      document.getElementById('pubCount').textContent = `Showing ${filtered.length} of ${pubs.length} publications`;
+
+      const esc = window.SCL.escapeHtml;
+      const list = document.getElementById('pubList');
+      list.innerHTML = filtered.map((p) => `
+        <div class="pub-item">
+          <div class="pub-item__year">${p.year}</div>
+          <div>
+            <div class="pub-item__title">${esc(p.title)}</div>
+            <div class="pub-item__authors">${esc(p.authors)}</div>
+            <div class="pub-item__venue">${esc(p.venue)}</div>
+            <div class="pub-item__links">
+              ${p.pdfUrl ? `<a href="${esc(p.pdfUrl)}" class="pub-link" target="_blank" rel="noopener noreferrer">PDF</a>` : ''}
+              ${p.doiUrl ? `<a href="${esc(p.doiUrl)}" class="pub-link" target="_blank" rel="noopener noreferrer">DOI</a>` : ''}
+              ${p.extraUrl ? `<a href="${esc(p.extraUrl)}" class="pub-link" target="_blank" rel="noopener noreferrer">${esc(p.extraLabel || 'Link')}</a>` : ''}
+            </div>
+          </div>
+          ${canEdit ? `
+            <div style="display:flex; gap:6px;">
+              <button class="icon-btn" title="Edit" data-edit-id="${p.id}">✎</button>
+              ${isAdmin ? `<button class="icon-btn icon-btn--danger" title="Delete" data-delete-id="${p.id}">✕</button>` : ''}
+            </div>` : ''}
+        </div>
+      `).join('');
+
+      list.querySelectorAll('[data-edit-id]').forEach((btn) => {
+        btn.addEventListener('click', () => openModal(btn.getAttribute('data-edit-id')));
+      });
+      list.querySelectorAll('[data-delete-id]').forEach((btn) => {
+        btn.addEventListener('click', () => deletePub(btn.getAttribute('data-delete-id')));
+      });
+    }
+
+    function openModal(id) {
+      editingId = id;
+      const p = id ? pubs.find((x) => x.id === id) : null;
+
+      document.getElementById('modalTitle').textContent = id ? 'Edit publication' : 'Add publication';
+      document.getElementById('modalError').innerHTML = '';
+      document.getElementById('f_year').value = p ? p.year : new Date().getFullYear();
+      document.getElementById('f_venue').value = p ? p.venue : '';
+      document.getElementById('f_title').value = p ? p.title : '';
+      document.getElementById('f_authors').value = p ? p.authors : '';
+      document.getElementById('f_pdfUrl').value = p ? p.pdfUrl : '';
+      document.getElementById('f_doiUrl').value = p ? p.doiUrl : '';
+      document.getElementById('f_extraUrl').value = p ? p.extraUrl : '';
+      document.getElementById('f_extraLabel').value = p ? p.extraLabel : '';
+
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = 'none';
+      editingId = null;
+    }
+
+    async function deletePub(id) {
+      if (!confirm('Delete this publication?')) return;
+      try {
+        await window.SCL.api(`publications.php?id=${id}`, { method: 'DELETE' });
+        await loadPubs();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editModal') closeModal();
+    });
+
+    document.getElementById('pubForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const payload = {
+        year: Number(document.getElementById('f_year').value),
+        venue: document.getElementById('f_venue').value,
+        title: document.getElementById('f_title').value,
+        authors: document.getElementById('f_authors').value,
+        pdfUrl: document.getElementById('f_pdfUrl').value,
+        doiUrl: document.getElementById('f_doiUrl').value,
+        extraUrl: document.getElementById('f_extraUrl').value,
+        extraLabel: document.getElementById('f_extraLabel').value,
+      };
+
+      try {
+        if (editingId) {
+          await window.SCL.api(`publications.php?id=${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        } else {
+          await window.SCL.api('publications.php', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        closeModal();
+        await loadPubs();
+      } catch (err) {
+        document.getElementById('modalError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+
+    document.addEventListener('scl:session-ready', render);
+    loadPubs();
+  </script>
+
+</body>
+</html>

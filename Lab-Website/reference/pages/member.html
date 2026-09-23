@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile — Smart Computing Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <nav class="nav">
+    <div class="nav__logo"><a href="../index.html">SCL<span>_</span></a></div>
+    <ul class="nav__links" id="navLinks">
+      <li><a href="../index.html"      >Home</a></li>
+      <li><a href="research.html"      >Research</a></li>
+      <li><a href="team.html" class="active">Team</a></li>
+      <li><a href="publications.html"  >Publications</a></li>
+      <li><a href="news.html"          >News</a></li>
+      <li><a href="contact.html"       >Contact</a></li>
+    </ul>
+    <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+
+  <!-- ===================== PAGE BANNER ===================== -->
+  <div class="page-banner" id="profileBanner">
+    <div class="page-banner__inner">
+      <div>
+        <p class="page-banner__tag">/ profile</p>
+        <h1 class="page-banner__title" id="memberName">Loading…</h1>
+        <p class="page-banner__desc" id="memberRoleDept"></p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================== PROFILE CONTENT ===================== -->
+  <main class="container">
+    <div id="ownerBar"></div>
+
+    <div id="bioSection" style="margin-bottom: 2.5rem;">
+      <p id="memberBio" style="font-size: 15px; color: var(--muted); max-width: 700px;"></p>
+    </div>
+
+    <div class="team-divider">
+      <span class="team-divider__label">History</span>
+      <span class="team-divider__line"></span>
+    </div>
+    <div id="historyList" style="margin-bottom: 2.5rem;">
+      <p style="color: var(--muted); font-size: 14px;">Loading…</p>
+    </div>
+
+    <div class="team-divider">
+      <span class="team-divider__label">Publications</span>
+      <span class="team-divider__line"></span>
+    </div>
+    <div class="pub-list" id="memberPubList" style="margin-bottom: 2.5rem;"></div>
+
+    <div class="team-divider">
+      <span class="team-divider__label">News</span>
+      <span class="team-divider__line"></span>
+    </div>
+    <div class="news-grid" id="memberNewsGrid" style="margin-bottom: 2.5rem;"></div>
+  </main>
+
+
+  <!-- ===================== HISTORY EDIT MODAL ===================== -->
+  <div class="modal-overlay" id="historyModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="historyModalTitle">Add history entry</h2>
+        <button class="modal__close" id="historyModalClose">&times;</button>
+      </div>
+      <div id="historyModalError"></div>
+      <form id="historyForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Year</label>
+            <input type="text" id="h_year" placeholder="e.g. 2024" required />
+          </div>
+          <div class="form-group">
+            <label>Sort order (lower shows first)</label>
+            <input type="number" id="h_sortOrder" value="0" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="h_title" placeholder="e.g. Joined the lab" required />
+        </div>
+        <div class="form-group">
+          <label>Description (optional)</label>
+          <textarea id="h_description"></textarea>
+        </div>
+        <button class="btn btn--primary form-submit" type="submit" id="historySaveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== LINK PUBLICATIONS MODAL ===================== -->
+  <div class="modal-overlay" id="linkPubsModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2>Select your publications</h2>
+        <button class="modal__close" id="linkPubsModalClose">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 1rem;">
+        Check every publication that belongs to you. This only changes what shows on your profile.
+      </p>
+      <div id="linkPubsError"></div>
+      <form id="linkPubsForm">
+        <div id="linkPubsCheckboxes" style="display:flex; flex-direction:column; gap:8px; max-height: 320px; overflow-y:auto; margin-bottom:1.25rem;"></div>
+        <button class="btn btn--primary form-submit" type="submit" id="linkPubsSaveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== LINK NEWS MODAL ===================== -->
+  <div class="modal-overlay" id="linkNewsModal" style="display: none;">
+    <div class="modal">
+      <div class="modal__header">
+        <h2>Select your news items</h2>
+        <button class="modal__close" id="linkNewsModalClose">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 1rem;">
+        Check every news item that's about you or something you did.
+      </p>
+      <div id="linkNewsError"></div>
+      <form id="linkNewsForm">
+        <div id="linkNewsCheckboxes" style="display:flex; flex-direction:column; gap:8px; max-height: 320px; overflow-y:auto; margin-bottom:1.25rem;"></div>
+        <button class="btn btn--primary form-submit" type="submit" id="linkNewsSaveBtn">Save</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__logo">Smart Computing Lab</div>
+      <ul class="footer__links">
+        <li><a href="research.html">Research</a></li>
+        <li><a href="team.html">Team</a></li>
+        <li><a href="publications.html">Publications</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+      <div class="footer__copy">© 2026 Smart Computing Lab. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="../js/app.js" data-base=".."></script>
+  <script>
+    const memberId = new URLSearchParams(window.location.search).get('id');
+    let profile = null;
+    let allPubs = [];
+    let allNews = [];
+    let editingHistoryId = null;
+
+    if (!memberId) {
+      document.getElementById('memberName').textContent = 'No profile specified';
+    } else {
+      document.addEventListener('scl:session-ready', loadProfile, { once: true });
+    }
+
+    async function loadProfile() {
+      try {
+        profile = await window.SCL.api(`member.php?id=${memberId}`);
+        render();
+      } catch (err) {
+        document.getElementById('memberName').textContent = 'Profile not found';
+        document.getElementById('historyList').innerHTML = `<p style="color: var(--muted); font-size: 14px;">${window.SCL.escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function canEditThisProfile() {
+      const user = window.SCL.user;
+      if (!user) return false;
+      if (user.role === 'ADMIN') return true;
+      return profile.userId && profile.userId === user.id;
+    }
+
+    function render() {
+      const esc = window.SCL.escapeHtml;
+      document.getElementById('memberName').textContent = profile.name;
+      document.getElementById('memberRoleDept').textContent = [profile.role, profile.department].filter(Boolean).join(' · ');
+      document.getElementById('memberBio').textContent = profile.bio || 'No bio added yet.';
+
+      const canEdit = canEditThisProfile();
+
+      const ownerBar = document.getElementById('ownerBar');
+      if (canEdit) {
+        ownerBar.innerHTML = `
+          <div class="admin-bar">
+            <span class="admin-bar__text">This is your profile — add history, or link your publications and news.</span>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn--outline btn--sm" id="editBioBtn">Edit bio</button>
+              <button class="btn btn--outline btn--sm" id="linkPubsBtn">Link publications</button>
+              <button class="btn btn--outline btn--sm" id="linkNewsBtn">Link news</button>
+              <button class="btn btn--primary btn--sm" id="addHistoryBtn">+ Add history entry</button>
+            </div>
+          </div>`;
+        document.getElementById('addHistoryBtn').addEventListener('click', () => openHistoryModal(null));
+        document.getElementById('editBioBtn').addEventListener('click', editBio);
+        document.getElementById('linkPubsBtn').addEventListener('click', openLinkPubsModal);
+        document.getElementById('linkNewsBtn').addEventListener('click', openLinkNewsModal);
+      } else {
+        ownerBar.innerHTML = '';
+      }
+
+      // History timeline
+      const historyList = document.getElementById('historyList');
+      if (profile.history.length === 0) {
+        historyList.innerHTML = `<p style="color: var(--muted); font-size: 14px;">No history added yet.</p>`;
+      } else {
+        historyList.innerHTML = profile.history.map((h) => `
+          <div class="pub-item" style="grid-template-columns: 70px 1fr auto;">
+            <div class="pub-item__year">${esc(h.year)}</div>
+            <div>
+              <div class="pub-item__title">${esc(h.title)}</div>
+              ${h.description ? `<div class="pub-item__authors">${esc(h.description)}</div>` : ''}
+            </div>
+            ${canEdit ? `
+              <div style="display:flex; gap:6px;">
+                <button class="icon-btn" title="Edit" data-h-edit="${h.id}">✎</button>
+                <button class="icon-btn icon-btn--danger" title="Delete" data-h-delete="${h.id}">✕</button>
+              </div>` : '<div></div>'}
+          </div>
+        `).join('');
+
+        historyList.querySelectorAll('[data-h-edit]').forEach((btn) => {
+          btn.addEventListener('click', () => openHistoryModal(btn.getAttribute('data-h-edit')));
+        });
+        historyList.querySelectorAll('[data-h-delete]').forEach((btn) => {
+          btn.addEventListener('click', () => deleteHistory(btn.getAttribute('data-h-delete')));
+        });
+      }
+
+      // Publications
+      const pubList = document.getElementById('memberPubList');
+      pubList.innerHTML = profile.publications.length === 0
+        ? `<p style="color: var(--muted); font-size: 14px;">No publications linked yet.</p>`
+        : profile.publications.map((p) => `
+          <div class="pub-item">
+            <div class="pub-item__year">${p.year}</div>
+            <div>
+              <div class="pub-item__title">${esc(p.title)}</div>
+              <div class="pub-item__authors">${esc(p.authors)}</div>
+              <div class="pub-item__venue">${esc(p.venue)}</div>
+              <div class="pub-item__links">
+                ${p.pdfUrl ? `<a href="${esc(p.pdfUrl)}" class="pub-link" target="_blank" rel="noopener noreferrer">PDF</a>` : ''}
+                ${p.doiUrl ? `<a href="${esc(p.doiUrl)}" class="pub-link" target="_blank" rel="noopener noreferrer">DOI</a>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+      // News
+      const newsGrid = document.getElementById('memberNewsGrid');
+      newsGrid.innerHTML = profile.news.length === 0
+        ? `<p style="color: var(--muted); font-size: 14px;">No news linked yet.</p>`
+        : profile.news.map((n) => `
+          <div class="news-card">
+            <div class="news-card__thumb">${esc(n.emoji)}</div>
+            <div class="news-card__body">
+              <div class="news-card__meta">
+                <span class="news-card__date">${esc(n.date)}</span>
+                <span class="news-card__type">${esc(n.type)}</span>
+              </div>
+              <div class="news-card__title">${esc(n.title)}</div>
+              <div class="news-card__desc">${esc(n.description)}</div>
+            </div>
+          </div>
+        `).join('');
+    }
+
+    // -----------------------------------------------------------
+    // Bio editing (simple prompt-free inline textarea swap)
+    // -----------------------------------------------------------
+    function editBio() {
+      const current = profile.bio || '';
+      const next = window.prompt('Edit your bio:', current);
+      if (next === null) return; // cancelled
+
+      window.SCL.api('profile.php', { method: 'PUT', body: JSON.stringify({ bio: next }) })
+        .then(() => { profile.bio = next; render(); })
+        .catch((err) => alert(err.message));
+    }
+
+    // -----------------------------------------------------------
+    // History CRUD
+    // -----------------------------------------------------------
+    function openHistoryModal(entryId) {
+      editingHistoryId = entryId;
+      const h = entryId ? profile.history.find((x) => x.id === entryId) : null;
+
+      document.getElementById('historyModalTitle').textContent = entryId ? 'Edit history entry' : 'Add history entry';
+      document.getElementById('historyModalError').innerHTML = '';
+      document.getElementById('h_year').value = h ? h.year : '';
+      document.getElementById('h_title').value = h ? h.title : '';
+      document.getElementById('h_description').value = h ? h.description : '';
+      document.getElementById('h_sortOrder').value = h ? h.sortOrder : 0;
+
+      document.getElementById('historyModal').style.display = 'flex';
+    }
+
+    function closeHistoryModal() {
+      document.getElementById('historyModal').style.display = 'none';
+      editingHistoryId = null;
+    }
+
+    document.getElementById('historyModalClose').addEventListener('click', closeHistoryModal);
+    document.getElementById('historyModal').addEventListener('click', (e) => {
+      if (e.target.id === 'historyModal') closeHistoryModal();
+    });
+
+    document.getElementById('historyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('historySaveBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      const payload = {
+        year: document.getElementById('h_year').value,
+        title: document.getElementById('h_title').value,
+        description: document.getElementById('h_description').value,
+        sortOrder: Number(document.getElementById('h_sortOrder').value) || 0,
+      };
+
+      try {
+        if (editingHistoryId) {
+          await window.SCL.api(`member.php?id=${memberId}&action=update_history&entryId=${editingHistoryId}`, {
+            method: 'PUT', body: JSON.stringify(payload),
+          });
+        } else {
+          await window.SCL.api(`member.php?id=${memberId}&action=add_history`, {
+            method: 'POST', body: JSON.stringify(payload),
+          });
+        }
+        closeHistoryModal();
+        await loadProfile();
+      } catch (err) {
+        document.getElementById('historyModalError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    });
+
+    async function deleteHistory(entryId) {
+      if (!confirm('Delete this history entry?')) return;
+      try {
+        await window.SCL.api(`member.php?id=${memberId}&action=delete_history&entryId=${entryId}`, { method: 'DELETE' });
+        await loadProfile();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // -----------------------------------------------------------
+    // Link publications
+    // -----------------------------------------------------------
+    async function openLinkPubsModal() {
+      document.getElementById('linkPubsError').innerHTML = '';
+      if (allPubs.length === 0) {
+        allPubs = await window.SCL.api('publications.php');
+      }
+      const linkedIds = new Set(profile.publications.map((p) => p.id));
+      const esc = window.SCL.escapeHtml;
+
+      document.getElementById('linkPubsCheckboxes').innerHTML = allPubs.map((p) => `
+        <label style="display:flex; gap:10px; align-items:flex-start; font-size:13px; color: var(--text);">
+          <input type="checkbox" value="${p.id}" ${linkedIds.has(p.id) ? 'checked' : ''} style="margin-top:3px;" />
+          <span>${esc(p.title)} <span style="color:var(--muted);">(${p.year})</span></span>
+        </label>
+      `).join('');
+
+      document.getElementById('linkPubsModal').style.display = 'flex';
+    }
+
+    document.getElementById('linkPubsModalClose').addEventListener('click', () => {
+      document.getElementById('linkPubsModal').style.display = 'none';
+    });
+    document.getElementById('linkPubsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'linkPubsModal') document.getElementById('linkPubsModal').style.display = 'none';
+    });
+
+    document.getElementById('linkPubsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('linkPubsSaveBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      const ids = Array.from(document.querySelectorAll('#linkPubsCheckboxes input:checked')).map((el) => el.value);
+
+      try {
+        await window.SCL.api(`member.php?id=${memberId}&action=set_publications`, {
+          method: 'PUT', body: JSON.stringify({ publicationIds: ids }),
+        });
+        document.getElementById('linkPubsModal').style.display = 'none';
+        await loadProfile();
+      } catch (err) {
+        document.getElementById('linkPubsError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    });
+
+    // -----------------------------------------------------------
+    // Link news
+    // -----------------------------------------------------------
+    async function openLinkNewsModal() {
+      document.getElementById('linkNewsError').innerHTML = '';
+      if (allNews.length === 0) {
+        allNews = await window.SCL.api('news.php');
+      }
+      const linkedIds = new Set(profile.news.map((n) => n.id));
+      const esc = window.SCL.escapeHtml;
+
+      document.getElementById('linkNewsCheckboxes').innerHTML = allNews.map((n) => `
+        <label style="display:flex; gap:10px; align-items:flex-start; font-size:13px; color: var(--text);">
+          <input type="checkbox" value="${n.id}" ${linkedIds.has(n.id) ? 'checked' : ''} style="margin-top:3px;" />
+          <span>${esc(n.title)} <span style="color:var(--muted);">(${esc(n.date)})</span></span>
+        </label>
+      `).join('');
+
+      document.getElementById('linkNewsModal').style.display = 'flex';
+    }
+
+    document.getElementById('linkNewsModalClose').addEventListener('click', () => {
+      document.getElementById('linkNewsModal').style.display = 'none';
+    });
+    document.getElementById('linkNewsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'linkNewsModal') document.getElementById('linkNewsModal').style.display = 'none';
+    });
+
+    document.getElementById('linkNewsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('linkNewsSaveBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      const ids = Array.from(document.querySelectorAll('#linkNewsCheckboxes input:checked')).map((el) => el.value);
+
+      try {
+        await window.SCL.api(`member.php?id=${memberId}&action=set_news`, {
+          method: 'PUT', body: JSON.stringify({ newsIds: ids }),
+        });
+        document.getElementById('linkNewsModal').style.display = 'none';
+        await loadProfile();
+      } catch (err) {
+        document.getElementById('linkNewsError').innerHTML = `<div class="form-error">${window.SCL.escapeHtml(err.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    });
+  </script>
+
+</body>
+</html>
