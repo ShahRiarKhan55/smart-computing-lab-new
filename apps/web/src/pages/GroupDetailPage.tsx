@@ -39,7 +39,7 @@ export function GroupDetailPage() {
   if (loading && (!group || group.id !== id)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("groups.pageTitle"), to: "/groups" }, { label: t("common.loading") }]} title={t("common.loading")} />
+        <PageHeader crumbs={[{ label: t("nav.groups"), to: "/groups" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
           <LoadingState label={t("groups.loadingGroup")} variant="text" />
         </div>
@@ -50,7 +50,7 @@ export function GroupDetailPage() {
   if (status === 404 || (!group && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("groups.pageTitle"), to: "/groups" }, { label: t("common.notFoundCrumb") }]} title={t("groups.notFoundTitle")} />
+        <PageHeader crumbs={[{ label: t("nav.groups"), to: "/groups" }, { label: t("common.notFoundCrumb") }]} title={t("groups.notFoundTitle")} />
         <div className="container">
           <ErrorState message={status === 404 ? t("groups.notFoundMsg") : (error ?? t("groups.couldNotLoadThis"))} onRetry={status === 404 ? undefined : reload} />
           <Link to="/groups" className="btn btn--secondary btn--sm">
@@ -75,7 +75,7 @@ export function GroupDetailPage() {
 
   return (
     <>
-      <PageHeader crumbs={[{ label: t("groups.pageTitle"), to: "/groups" }, { label: group.name }]} title={group.name} description={group.description} />
+      <PageHeader crumbs={[{ label: t("nav.groups"), to: "/groups" }, { label: group.name }]} title={group.name} description={group.description} />
 
       <div className="container">
         {group.canEdit && (

@@ -70,7 +70,7 @@ export function ProjectDetailPage() {
   if (loading && (!project || project.id !== id)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("projects.pageTitle"), to: "/projects" }, { label: t("common.loading") }]} title={t("common.loading")} />
+        <PageHeader crumbs={[{ label: t("nav.projects"), to: "/projects" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
           <LoadingState label={t("projects.loadingProject")} variant="text" />
         </div>
@@ -81,7 +81,7 @@ export function ProjectDetailPage() {
   if (status === 404 || (!project && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("projects.pageTitle"), to: "/projects" }, { label: t("common.notFoundCrumb") }]} title={t("projects.notFoundTitle")} />
+        <PageHeader crumbs={[{ label: t("nav.projects"), to: "/projects" }, { label: t("common.notFoundCrumb") }]} title={t("projects.notFoundTitle")} />
         <div className="container">
           <ErrorState message={status === 404 ? t("projects.notFoundMsg") : (error ?? t("projects.couldNotLoadThis"))} onRetry={status === 404 ? undefined : reload} />
           <Link to="/projects" className="btn btn--secondary btn--sm">
@@ -119,7 +119,7 @@ export function ProjectDetailPage() {
 
   return (
     <>
-      <PageHeader crumbs={[{ label: t("projects.pageTitle"), to: "/projects" }, { label: project.title }]} title={project.title} description={project.summary} />
+      <PageHeader crumbs={[{ label: t("nav.projects"), to: "/projects" }, { label: project.title }]} title={project.title} description={project.summary} />
 
       <div className="container">
         {project.canEdit && (

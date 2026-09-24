@@ -44,7 +44,7 @@ export function MemberPage() {
   if (loading) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: t("common.loading") }]} title={t("common.loading")} />
+        <PageHeader crumbs={[{ label: t("nav.team"), to: "/team" }, { label: t("common.loading") }]} title={t("common.loading")} />
         <div className="container">
           <LoadingState label={t("member.loadingProfile")} variant="text" />
         </div>
@@ -55,7 +55,7 @@ export function MemberPage() {
   if (status === 404 || (!profile && error)) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: t("common.notFoundCrumb") }]} title={t("member.notFoundTitle")} />
+        <PageHeader crumbs={[{ label: t("nav.team"), to: "/team" }, { label: t("common.notFoundCrumb") }]} title={t("member.notFoundTitle")} />
         <div className="container">
           <ErrorState message={error ?? t("member.notFoundMsg")} onRetry={status === 404 ? undefined : reload} />
           <Link to="/team" className="btn btn--secondary btn--sm">
@@ -69,7 +69,7 @@ export function MemberPage() {
   if (!profile) {
     return (
       <>
-        <PageHeader crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: t("member.noProfileTitle") }]} title={t("member.noProfileTitle")} />
+        <PageHeader crumbs={[{ label: t("nav.team"), to: "/team" }, { label: t("member.noProfileTitle") }]} title={t("member.noProfileTitle")} />
         <div className="container">
           <EmptyState title={t("member.noProfileMsg")} />
         </div>
@@ -132,7 +132,7 @@ export function MemberPage() {
   return (
     <>
       <PageHeader
-        crumbs={[{ label: t("team.pageTitle"), to: "/team" }, { label: profile.name }]}
+        crumbs={[{ label: t("nav.team"), to: "/team" }, { label: profile.name }]}
         title={profile.name}
         description={[profile.role, profile.department].filter(Boolean).join(" · ")}
       />

@@ -36,7 +36,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
 
     const first =
       dialog.querySelector<HTMLElement>("[data-autofocus]") ??
-      dialog.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="checkbox"]), textarea, select');
+      dialog.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="checkbox"]):not([disabled]), textarea:not([disabled]), select:not([disabled])');
     (first ?? dialog).focus();
 
     const scrollY = document.body.style.overflow;

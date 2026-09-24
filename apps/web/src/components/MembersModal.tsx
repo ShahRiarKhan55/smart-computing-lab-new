@@ -77,12 +77,12 @@ export function MembersModal({ open, title, description, people, roles, roleLabe
           <p className="modal__lead">{t("common.noTeamMembersAvailable")}</p>
         ) : (
         <div className="pick-list">
-          {people.map((p) => {
+          {people.map((p, index) => {
             const role = chosen.get(p.id);
             return (
               <div key={p.id} className="pick-item">
                 <label className="pick-item__label">
-                  <input type="checkbox" checked={role !== undefined} onChange={() => toggle(p.id)} />
+                  <input type="checkbox" checked={role !== undefined} onChange={() => toggle(p.id)} data-autofocus={index === 0 ? true : undefined} />
                   <span>{p.label}</span>
                 </label>
                 <select
