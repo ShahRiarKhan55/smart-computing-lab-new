@@ -3,7 +3,7 @@
 Status: **done, scoped** (2026-09-23). Builds on the Phase 14 architecture without changing it — no
 new UI translation mechanism, no new domain-translation mechanism, no schema change. `dev.db`
 untouched throughout (sha256 unchanged from Phase 14's own recorded value, verified again at the
-end of this phase — see §12); the reference tree hash is unchanged (verified before and after).
+end of this phase — see §13); the reference tree hash is unchanged (verified before and after).
 This was the first phase run without a pre-existing git history: a git repository was initialized
 as a safety net immediately before any edit (see the "Baseline: Phase 14 complete" commit), so
 every change in this phase is a reviewable, revertible commit.
@@ -27,9 +27,9 @@ deferred list, what is still deferred (disclosed here, not silently), and why.
 | Locale-aware date/number formatting | **Done** — see §2 |
 | Search does not match Japanese `Translation` overrides | **Done** — see §3 |
 | Translation-editing UI: Research only | **Done** — Project/Group/News/TeamMember forms now have the same fieldset |
-| Nested cross-references show base English | **Unchanged, still deferred** — see §8 |
-| Per-field zod validation messages | **Unchanged, still deferred** — see §7 |
-| Admin's six content-page shortcut links | **Unchanged, still deferred** — see §8 |
+| Nested cross-references show base English | **Unchanged, still deferred** — see §9 |
+| Per-field zod validation messages | **Unchanged, still deferred** — see §8 |
+| Admin's six content-page shortcut links | **Done** — see §6 (found and fixed as part of the wider `AdminDashboardPage` sweep) |
 
 ---
 
@@ -173,23 +173,72 @@ though their page headers were already localized in Phase 14.
 several are visible as `tsc` fix-up commits were folded into each area's single commit rather than
 left as separate noise.
 
-A final independent QA sweep (a fresh read-only pass over every file this phase touched, looking
-specifically for JSX text that never went through `t()`) found one real gap this phase's own editing
-had missed: `PROJECT_STATUS_LABELS` (the project status word — "Planned"/"Active"/"Completed"/
-"Archived") was still read directly from `@scl/shared` in three places (`Badge.tsx`'s `StatusBadge`,
-`ProjectFormModal.tsx`'s status `<select>`, and `ProjectsPage.tsx`'s filter chips and status-select) —
-all three now go through a new `PROJECT_STATUS_LABEL_KEY` map (`apps/web/src/i18n/labels.ts`, same
-convention as `ROLE_LABEL_KEY`/`CATEGORY_LABEL_KEY`). Fixing `ProjectsPage.tsx` surfaced that its
-own admin bar, filter aria-label, "All" chip, result count, section heading and empty state were
-*also* still hard-coded English — that page's header (eyebrow/title/description) was localized in
-Phase 14, but its body was not, and neither phase's own deferred-list had flagged it. All of it is
-localized now. This is disclosed here specifically because it is exactly the kind of gap a page-by-
-page manual sweep can miss and a systematic one catches — the QA pass that found it is documented,
-not silently folded into "done."
+See §6 for a second, much larger discovery made by systematically auditing the *rest* of the app
+after this section's own work was believed complete.
 
 ---
 
-## 6. What is still deferred (explicit, not silent)
+## 6. A systemic gap found by QA, not by the original plan: page bodies vs. page headers
+
+Phase 15's brief was scoped around Phase 14 §11's disclosed deferred list (§1 above). Partway
+through, a QA sweep of the files that list touched turned up one real miss: `PROJECT_STATUS_LABELS`
+(the project status word — "Planned"/"Active"/"Completed"/"Archived") was still read directly from
+`@scl/shared` in `Badge.tsx`'s `StatusBadge`, `ProjectFormModal.tsx`'s status `<select>`, and
+`ProjectsPage.tsx`. Fixing the third one exposed something bigger: `ProjectsPage.tsx`'s `PageHeader`
+(eyebrow/title/description) had been localized in Phase 14, but its entire *body* — the admin bar,
+filter chips, "All" button, result count, section heading, empty state — had not, and neither
+phase's deferred-list had flagged it, because Phase 14 §5's own text listed "page headers" as done
+for this page without saying anything about the body.
+
+That raised an obvious question — a page header being localized never implied its body was, so what
+else has the same shape? — so this phase ran two further systematic sweeps rather than treating the
+one page as a one-off:
+
+**Sweep 1 (foundational shared components)**: `Modal.tsx`'s close-dialog button, `PageHeader.tsx`'s
+"Home"/"Breadcrumb", `VisibilityField`/`VisibilityBadge` (the Public/Lab-only selector and "Lab
+only" pill used by **every** content form and card in the app), `CardEditControls` (the edit/
+delete/manage-authors icon buttons used by every editable card), `GroupCard`, `PublicationItem`,
+`SearchResultCard`, `SearchForm`, `LinkItemsModal`, `MembersModal`, `HistoryFormModal`,
+`PublicationFormModal`, `ResearchCard`, `ErrorState`'s "Try again" retry button — every one of these
+had **zero** `t()` calls, in components used across effectively every page in the site, including
+pages neither phase's deferred-list ever mentioned. None of this was Phase 15-introduced regression;
+it was pre-existing, unlocalized-since-Phase-14 code that happened to sit inside components the
+original per-page sweep never had a reason to open.
+
+**Sweep 2 (sibling list/utility pages)**: `ResearchPage`, `GroupsPage`, `PublicationsPage`,
+`NewsPage` all had the exact same header-done/body-not shape as `ProjectsPage`. `SearchPage` (the
+`/search` results page) had its entire status line, filter labels, pagination, and empty states
+hard-coded. `SchedulePage`, `ContactPage` (the most severe — `t()` was called exactly once, for its
+`PageHeader`, and nothing else on the page), and `AdminDashboardPage` (stat labels, content shortcut
+links, the whole account-management table, delete-account confirmation) were the same. `HomePage`
+had one stray `aria-label`. `NotFoundPage` had zero `t()` calls at all.
+
+**What was deliberately left alone**: `ContactPage`'s `DETAILS` array — the placeholder office
+address, email, office hours, and university URL — are the reference site's own placeholder VALUES,
+already documented as unlocalized placeholder content since Phase 10.5 (`docs/architecture/
+phase10-5-ui-ux-modernization.md`: "Contact page still shows the reference site placeholders").
+Only the field *labels* around them ("Location", "Email", …) and the rest of the page's UI chrome
+were localized — inventing a Japanese office address would be worse than leaving the placeholder
+English, exactly the same judgment call Phase 10.5 already made for English.
+
+**Net result**: every page in the application now has both its header and its body routing through
+`t()`. Roughly 520 new dictionary keys were added across both sweeps (on top of the ~360 from the
+originally-planned work in §§1–5), all in `apps/web/src/i18n/labels.ts` (three new
+`Record<value, TranslationKey>` maps: `SEARCH_TYPE_LABEL_KEY`, `SEARCH_FILTER_LABEL_KEY`,
+`SEARCH_CTA_LABEL_KEY`, alongside the earlier `PROJECT_STATUS_LABEL_KEY`) and `packages/shared/src/
+i18n/{en,ja}.ts`. The search-results status line (`"5 results in Projects for "FPGA""`) is composed
+as whole natural-language templates per locale rather than concatenated fragments, because Japanese
+and English order the pieces differently (`"「FPGA」の検索結果（プロジェクト）：5件"` reads right-to-
+left relative to English, not just word-for-word substituted) — the same lesson Phase 14 already
+applied to `dates.since`/`dates.until`, now applied more broadly.
+
+This is disclosed at this length deliberately: a "done" page header is not evidence a page is done,
+and the right response to finding that out partway through a phase is to systematically re-check
+everything with the same shape, not to patch the one instance and move on.
+
+---
+
+## 7. What is still deferred (explicit, not silent)
 
 - **Per-field zod validation messages** beyond Phase 14's small fixed allow-list
   (`error.notFound`/`unauthorized`/`forbidden`/… in `errorMessages.ts`) are still shown in English in
@@ -205,19 +254,19 @@ not silently folded into "done."
   own disclosed boundary — touching this would mean localizing every nested `include` across
   `projects.routes.ts`/`groups.routes.ts`, which both phases have judged disproportionate to a
   "smallest safe change" localization pass.
-- **Admin's six "Edit Research/Projects/…" content-page shortcut links** on `AdminDashboardPage`
-  remain English-only, as Phase 14 disclosed. Not reachable from any user-facing flow this phase
-  prioritized (Forum/Gallery/Messages/Notifications/detail pages); left for a future pass.
+- **`ContactPage`'s placeholder office details** (address, email, office hours, university URL) stay
+  as the reference site's own unlocalized placeholder English, per Phase 10.5's own precedent (§6) —
+  deliberate, not missed.
 - **Accessibility and responsive verification for the newly-localized areas** was performed by
   design review (every new interactive element follows an already-audited pattern: `ConfirmDeleteModal`,
   `Modal`'s focus trap, the existing `.chip`/`.btn`/`.form-group` styles, word-labelled badges) and by
   compiling/building successfully, but **not** by running the live headless-browser accessibility/
   responsive assertions (`ONLY_UI`, `ONLY_NAV`, the `browser-regression.cjs` W390/W768/W1024/W1440
-  sweep) against these specific new pages in this session — see §11.
+  sweep) against these specific new pages in this session — see §12.
 
 ---
 
-## 7. Validation/error localization — investigated, not changed
+## 8. Validation/error localization — investigated, not changed
 
 Every form this phase touched already funnels its `safeParse` failure through
 `validation.error.issues[0]?.message ?? t("common.checkForm")` and its catch block through
@@ -230,19 +279,19 @@ for the same stated reason.
 
 ---
 
-## 8. Search's remaining documented limitations
+## 9. Search's remaining documented limitations
 
 Everything Phase 10/14 already documented and did not change still applies **except** the one item
 this phase fixed (§3): no FTS5, no raw SQL, one deterministic documented ordering (not relevance
 scoring), SQLite `LIKE`'s lack of linguistic folding/tokenization for either language. The nested
-cross-reference boundary (§6) also still applies to search results exactly as it does to detail
+cross-reference boundary (§7) also still applies to search results exactly as it does to detail
 pages: a translation is only matched/shown for the entity it belongs to, never through another
 entity's reference to it (search never joins across entities in the first place, so this was never a
 risk unique to translations).
 
 ---
 
-## 9. Security
+## 10. Security
 
 Unchanged guarantees, reverified rather than merely re-asserted:
 
@@ -266,7 +315,7 @@ Unchanged guarantees, reverified rather than merely re-asserted:
 
 ---
 
-## 10. Accessibility (design-level, not live-browser-verified this phase)
+## 11. Accessibility (design-level, not live-browser-verified this phase)
 
 Every new interactive element reuses an already-accessibility-audited pattern rather than inventing
 one: `ConfirmDeleteModal`/`Modal` (focus trap, Escape, `aria-*`, focus return — Phase 13), the
@@ -278,18 +327,18 @@ lightbox controls all carry the same `aria-label`/`aria-pressed`/`role` attribut
 this phase — only the *text inside* those attributes changed, from a literal string to `t(...)`, so
 no accessibility semantic changed, only its language. This phase did not additionally run the
 headless-browser `ONLY_UI`/`ONLY_NAV`/W390–W1440 responsive assertions against these specific pages
-(see §6's disclosure) — that verification is real work still owed, not claimed here.
+(see §7's disclosure) — that verification is real work still owed, not claimed here.
 
 ---
 
-## 11. Testing
+## 12. Testing
 
 **New this phase:**
 
 | Suite | New checks | Result |
 |---|---|---|
-| `search-regression.mjs` (§10 additions) | 11 | 220/220 total, 0 failed |
-| `locale-independence-regression.mjs` (new, §11) | 46 | 46/46, 0 failed |
+| `search-regression.mjs` (§3 additions) | 11 | 220/220 total, 0 failed |
+| `locale-independence-regression.mjs` (new, §10) | 46 | 46/46, 0 failed |
 
 **All pre-existing suites, re-run on fresh `dev.db` copies at the end of this phase, unmodified in
 behavior:**
@@ -308,7 +357,12 @@ behavior:**
 
 **Total: 1,616 backend checks, 0 failed.** `packages/shared` (`tsc --noEmit`), `apps/server`
 (`tsc`, full compile), and `apps/web` (`tsc -b` + `vite build`) all succeed with zero errors; a full
-`npm run build` from the repo root (shared → server → web) succeeds end to end.
+`npm run build` from the repo root (shared → server → web) succeeds end to end. These counts are
+unchanged by §6's later discoveries: that work was entirely `apps/web` (React components) and
+`packages/shared/src/i18n/{en,ja}.ts` (dictionary keys) — no server route, schema, or business-logic
+line changed, so no backend regression suite's assertions were touched. `unit-i18n.test.ts`'s
+compile-time key-parity check (`ja.ts` typed as `Record<keyof typeof en, string>`) re-ran clean
+after every batch of the ~520 new keys §6 added, confirming no orphaned or mismatched key.
 
 **Not run this phase** (disclosed, not silently skipped): the live headless-browser suite
 (`browser-regression.cjs`, including its `ONLY_UI`/`ONLY_NAV`/`ONLY_FORUM`/`ONLY_I18N` sections and
@@ -317,11 +371,11 @@ this session. Every new page/component was verified by full-project typecheck, a
 production build, and (for every backend-reachable behavior) the regression suites above — but not
 by an actual rendered-in-a-browser pass. This is the one item from the original Phase 15 brief
 (§13–§15: accessibility, responsive, browser regression) this phase does not claim to have
-completed; see §6.
+completed; see §7.
 
 ---
 
-## 12. Database safety
+## 13. Database safety
 
 No migration — nothing in this phase needed one. `apps/server/prisma/dev.db` sha256 before and
 after this phase's entire body of work: `70d2f21dd0252890f6a383584252a90de4791ae35cf553af368c4b98f79d62dc`
@@ -332,7 +386,7 @@ The reference tree (`Lab-Website/reference/`) hash is unchanged from before this
 
 ---
 
-## 13. Performance
+## 14. Performance
 
 The one new query path (§3's `translationMatchIds`) follows the same batching discipline as every
 other Phase 14/15 translation query: one query per search *term* (bounded, small, typically 1–3),
@@ -343,7 +397,7 @@ per fetched page of results, not once per row.
 
 ---
 
-## 14. Scope discipline
+## 15. Scope discipline
 
 Phase 16, deployment, production hosting, and any unrelated refactor were not started. No stable
 Phase 10–14 architecture was rewritten for style. The stack is unchanged: React + TypeScript +
