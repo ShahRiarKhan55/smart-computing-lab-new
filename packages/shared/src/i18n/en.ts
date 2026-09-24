@@ -62,6 +62,14 @@ export const en = {
   "common.link": "Link",
   "common.closeAria": "Close",
   "common.searchAria": "Search",
+  "common.yearLabel": "Year",
+  "common.sortOrderLabel": "Sort order (lower shows first)",
+  "common.titleLabel": "Title",
+  "common.descriptionOptionalLabel": "Description (optional)",
+  "common.editHistoryTitle": "Edit history entry",
+  "common.addHistoryTitle": "Add history entry",
+  "common.yearPlaceholder": "e.g. 2024",
+  "common.historyTitlePlaceholder": "e.g. Joined the lab",
 
   // ---- navigation --------------------------------------------------------------------------
   "nav.mainLabel": "Main",
@@ -266,6 +274,15 @@ export const en = {
   "publications.opensInNewTab": " (opens in a new tab)",
   "publications.pdf": "PDF",
   "publications.doi": "DOI",
+  "publications.venueLabel": "Venue (journal / conference)",
+  "publications.authorsLabel": "Authors (comma-separated, as printed on the paper)",
+  "publications.authorsPlaceholder": "e.g. Jane Doe, John Smith",
+  "publications.pdfUrlLabel": "PDF URL (optional)",
+  "publications.doiUrlLabel": "DOI URL (optional)",
+  "publications.extraUrlLabel": "Extra link URL (optional)",
+  "publications.extraLabelLabel": "Extra link label",
+  "publications.extraLabelPlaceholder": "e.g. Code",
+  "publications.linkSelfCheckbox": "Also show this publication on my member profile",
   "publications.manageAuthorsHelpMember":
     "You can add or remove yourself as an author of this publication. Other authors can only be changed by a lab manager or admin.",
 

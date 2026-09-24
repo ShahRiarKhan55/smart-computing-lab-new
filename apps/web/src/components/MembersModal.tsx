@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Modal } from "./Modal";
 import { ApiError } from "../lib/api";
+import { useT } from "../i18n/LocaleContext";
 
 export interface PersonOption {
   id: string;
@@ -26,6 +27,7 @@ interface MembersModalProps {
 
 /** Checkbox list of team members, each with a role. Used for both project and group membership. */
 export function MembersModal({ open, title, description, people, roles, roleLabels, selected, onClose, onSubmit }: MembersModalProps) {
+  const t = useT();
   const defaultRole = roles[roles.length > 1 ? 1 : 0];
   const [chosen, setChosen] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export function MembersModal({ open, title, description, people, roles, roleLabe
       await onSubmit([...chosen].map(([teamMemberId, role]) => ({ teamMemberId, role })));
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSubmitting(false);
     }
@@ -72,7 +74,7 @@ export function MembersModal({ open, title, description, people, roles, roleLabe
       {error && <div className="form-error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit}>
         {people.length === 0 ? (
-          <p className="modal__lead">No team members available.</p>
+          <p className="modal__lead">{t("common.noTeamMembersAvailable")}</p>
         ) : (
         <div className="pick-list">
           {people.map((p) => {
@@ -84,7 +86,7 @@ export function MembersModal({ open, title, description, people, roles, roleLabe
                   <span>{p.label}</span>
                 </label>
                 <select
-                  aria-label={`Role for ${p.label}`}
+                  aria-label={t("common.roleForAria", { name: p.label })}
                   value={role ?? defaultRole}
                   disabled={role === undefined}
                   onChange={(e) => setRole(p.id, e.target.value)}
@@ -102,10 +104,10 @@ export function MembersModal({ open, title, description, people, roles, roleLabe
         )}
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save"}
+            {submitting ? t("common.saving") : t("common.save")}
           </button>
           <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>

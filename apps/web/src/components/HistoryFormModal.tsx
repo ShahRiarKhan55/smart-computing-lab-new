@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { createHistoryEntrySchema, type HistoryEntry } from "@scl/shared";
 import { Modal } from "./Modal";
 import { ApiError } from "../lib/api";
+import { useT } from "../i18n/LocaleContext";
 
 export interface HistoryFormValues {
   year: string;
@@ -28,6 +29,7 @@ function toFormValues(initial?: HistoryEntry | null): HistoryFormValues {
 }
 
 export function HistoryFormModal({ open, initial, onClose, onSubmit }: HistoryFormModalProps) {
+  const t = useT();
   const [values, setValues] = useState<HistoryFormValues>(() => toFormValues(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,7 +52,7 @@ export function HistoryFormModal({ open, initial, onClose, onSubmit }: HistoryFo
 
     const validation = createHistoryEntrySchema.safeParse(values);
     if (!validation.success) {
-      setError(validation.error.issues[0]?.message ?? "Please check the form.");
+      setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
       return;
     }
 
@@ -59,29 +61,29 @@ export function HistoryFormModal({ open, initial, onClose, onSubmit }: HistoryFo
       await onSubmit(values);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={initial ? "Edit history entry" : "Add history entry"}>
+    <Modal open={open} onClose={onClose} title={initial ? t("common.editHistoryTitle") : t("common.addHistoryTitle")}>
       {error && <div className="form-error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit}>
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="h_year">Year</label>
+            <label htmlFor="h_year">{t("common.yearLabel")}</label>
             <input
               id="h_year"
               value={values.year}
               onChange={(e) => set("year", e.target.value)}
-              placeholder="e.g. 2024"
+              placeholder={t("common.yearPlaceholder")}
               required
             />
           </div>
           <div className="form-group">
-            <label htmlFor="h_sortOrder">Sort order (lower shows first)</label>
+            <label htmlFor="h_sortOrder">{t("common.sortOrderLabel")}</label>
             <input
               id="h_sortOrder"
               type="number"
@@ -91,26 +93,26 @@ export function HistoryFormModal({ open, initial, onClose, onSubmit }: HistoryFo
           </div>
         </div>
         <div className="form-group">
-          <label htmlFor="h_title">Title</label>
+          <label htmlFor="h_title">{t("common.titleLabel")}</label>
           <input
             id="h_title"
             value={values.title}
             onChange={(e) => set("title", e.target.value)}
-            placeholder="e.g. Joined the lab"
+            placeholder={t("common.historyTitlePlaceholder")}
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="h_description">Description (optional)</label>
+          <label htmlFor="h_description">{t("common.descriptionOptionalLabel")}</label>
           <textarea id="h_description" value={values.description} onChange={(e) => set("description", e.target.value)} />
         </div>
 
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save"}
+            {submitting ? t("common.saving") : t("common.save")}
           </button>
           <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>

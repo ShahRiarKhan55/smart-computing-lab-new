@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Modal } from "./Modal";
 import { ApiError } from "../lib/api";
+import { useT } from "../i18n/LocaleContext";
 
 export interface LinkableItem {
   id: string;
@@ -31,6 +32,7 @@ export function LinkItemsModal({
   onClose,
   onSubmit,
 }: LinkItemsModalProps) {
+  const t = useT();
   const [checked, setChecked] = useState<Set<string>>(new Set(selectedIds));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +62,7 @@ export function LinkItemsModal({
       await onSubmit([...checked]);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSubmitting(false);
     }
@@ -72,7 +74,7 @@ export function LinkItemsModal({
       {error && <div className="form-error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit}>
         {items.length === 0 ? (
-          <p className="modal__lead">Nothing available to link yet.</p>
+          <p className="modal__lead">{t("common.nothingToLink")}</p>
         ) : (
           <div className="pick-list">
             {items.map((item) => (
@@ -92,10 +94,10 @@ export function LinkItemsModal({
         )}
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save"}
+            {submitting ? t("common.saving") : t("common.save")}
           </button>
           <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>

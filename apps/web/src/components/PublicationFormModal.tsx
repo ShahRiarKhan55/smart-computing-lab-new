@@ -4,6 +4,7 @@ import { createPublicationSchema, type Publication, type Visibility } from "@scl
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { ApiError } from "../lib/api";
+import { useT } from "../i18n/LocaleContext";
 
 /** What the form hands to the page: the validated, trimmed publication fields. */
 export interface PublicationFormFields {
@@ -64,6 +65,7 @@ export function PublicationFormModal({
   onClose,
   onSubmit,
 }: PublicationFormModalProps) {
+  const t = useT();
   const [values, setValues] = useState<FormState>(() => toFormState(initial));
   const [linkSelf, setLinkSelf] = useState(false);
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "PUBLIC");
@@ -90,7 +92,7 @@ export function PublicationFormModal({
 
     const validation = createPublicationSchema.safeParse(values);
     if (!validation.success) {
-      setError(validation.error.issues[0]?.message ?? "Please check the form.");
+      setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
       return;
     }
     const { teamMemberIds: _unused, ...fields } = validation.data;
@@ -100,7 +102,7 @@ export function PublicationFormModal({
       await onSubmit((canSetVisibility ? { ...fields, visibility } : fields) as PublicationFormFields, linkSelf);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSubmitting(false);
     }
@@ -112,7 +114,7 @@ export function PublicationFormModal({
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="pub_year">Year</label>
+            <label htmlFor="pub_year">{t("common.yearLabel")}</label>
             <input
               id="pub_year"
               type="number"
@@ -123,30 +125,30 @@ export function PublicationFormModal({
             />
           </div>
           <div className="form-group">
-            <label htmlFor="pub_venue">Venue (journal / conference)</label>
+            <label htmlFor="pub_venue">{t("publications.venueLabel")}</label>
             <input id="pub_venue" value={values.venue} onChange={(e) => set("venue", e.target.value)} required />
           </div>
         </div>
 
         <div className="form-group">
-          <label htmlFor="pub_title">Title</label>
+          <label htmlFor="pub_title">{t("common.titleLabel")}</label>
           <textarea id="pub_title" value={values.title} onChange={(e) => set("title", e.target.value)} required />
         </div>
 
         <div className="form-group">
-          <label htmlFor="pub_authors">Authors (comma-separated, as printed on the paper)</label>
+          <label htmlFor="pub_authors">{t("publications.authorsLabel")}</label>
           <input
             id="pub_authors"
             value={values.authors}
             onChange={(e) => set("authors", e.target.value)}
-            placeholder="e.g. Jane Doe, John Smith"
+            placeholder={t("publications.authorsPlaceholder")}
             required
           />
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="pub_pdfUrl">PDF URL (optional)</label>
+            <label htmlFor="pub_pdfUrl">{t("publications.pdfUrlLabel")}</label>
             <input
               id="pub_pdfUrl"
               value={values.pdfUrl}
@@ -155,7 +157,7 @@ export function PublicationFormModal({
             />
           </div>
           <div className="form-group">
-            <label htmlFor="pub_doiUrl">DOI URL (optional)</label>
+            <label htmlFor="pub_doiUrl">{t("publications.doiUrlLabel")}</label>
             <input
               id="pub_doiUrl"
               value={values.doiUrl}
@@ -167,7 +169,7 @@ export function PublicationFormModal({
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="pub_extraUrl">Extra link URL (optional)</label>
+            <label htmlFor="pub_extraUrl">{t("publications.extraUrlLabel")}</label>
             <input
               id="pub_extraUrl"
               value={values.extraUrl}
@@ -176,12 +178,12 @@ export function PublicationFormModal({
             />
           </div>
           <div className="form-group">
-            <label htmlFor="pub_extraLabel">Extra link label</label>
+            <label htmlFor="pub_extraLabel">{t("publications.extraLabelLabel")}</label>
             <input
               id="pub_extraLabel"
               value={values.extraLabel}
               onChange={(e) => set("extraLabel", e.target.value)}
-              placeholder="e.g. Code"
+              placeholder={t("publications.extraLabelPlaceholder")}
             />
           </div>
         </div>
@@ -191,16 +193,16 @@ export function PublicationFormModal({
         {!initial && canLinkSelf && (
           <label className="check-row">
             <input type="checkbox" checked={linkSelf} onChange={(e) => setLinkSelf(e.target.checked)} />
-            <span>Also show this publication on my member profile</span>
+            <span>{t("publications.linkSelfCheckbox")}</span>
           </label>
         )}
 
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save"}
+            {submitting ? t("common.saving") : t("common.save")}
           </button>
           <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>

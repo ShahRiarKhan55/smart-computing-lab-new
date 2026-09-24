@@ -58,6 +58,14 @@ export const ja: Record<keyof typeof en, string> = {
   "common.link": "リンク",
   "common.closeAria": "閉じる",
   "common.searchAria": "検索",
+  "common.yearLabel": "年",
+  "common.sortOrderLabel": "並び順（数値が小さいほど先に表示）",
+  "common.titleLabel": "タイトル",
+  "common.descriptionOptionalLabel": "説明（任意）",
+  "common.editHistoryTitle": "経歴を編集",
+  "common.addHistoryTitle": "経歴を追加",
+  "common.yearPlaceholder": "例：2024",
+  "common.historyTitlePlaceholder": "例：研究室に加入",
 
   // ---- navigation --------------------------------------------------------------------------
   "nav.mainLabel": "メインメニュー",
@@ -258,6 +266,15 @@ export const ja: Record<keyof typeof en, string> = {
   "publications.opensInNewTab": "（新しいタブで開きます）",
   "publications.pdf": "PDF",
   "publications.doi": "DOI",
+  "publications.venueLabel": "掲載誌 / 学会",
+  "publications.authorsLabel": "著者（カンマ区切り、論文に記載の通り）",
+  "publications.authorsPlaceholder": "例：山田太郎、John Smith",
+  "publications.pdfUrlLabel": "PDFのURL（任意）",
+  "publications.doiUrlLabel": "DOIのURL（任意）",
+  "publications.extraUrlLabel": "追加リンクのURL（任意）",
+  "publications.extraLabelLabel": "追加リンクのラベル",
+  "publications.extraLabelPlaceholder": "例：Code",
+  "publications.linkSelfCheckbox": "この論文を自分のメンバープロフィールにも表示する",
   "publications.manageAuthorsHelpMember": "自分自身をこの論文の著者として追加・削除できます。他の著者はラボ管理者または管理者のみ変更できます。",
 
   // ---- news -------------------------------------------------------------------------------
