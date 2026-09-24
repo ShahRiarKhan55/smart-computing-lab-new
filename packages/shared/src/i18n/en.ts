@@ -70,6 +70,7 @@ export const en = {
   "common.addHistoryTitle": "Add history entry",
   "common.yearPlaceholder": "e.g. 2024",
   "common.historyTitlePlaceholder": "e.g. Joined the lab",
+  "common.loggedIn": "Logged in",
 
   // ---- navigation --------------------------------------------------------------------------
   "nav.mainLabel": "Main",
@@ -193,6 +194,10 @@ export const en = {
   "research.newTitle": "Add research area",
   "research.deleteTitle": "Delete research area",
   "research.deleteMessage": "Delete \"{title}\"? This cannot be undone.",
+  "research.addOrEditSuffix": "add or edit research areas.",
+  "research.onlyManagersDelete": "(Only lab managers and admins can delete.)",
+  "research.emptyHint": "Areas the lab works on will be listed here.",
+  "research.headingSr": "All research areas",
   "research.iconLabel": "Icon (emoji)",
   "research.tagLabel": "Tag",
   "research.tagPlaceholder": "e.g. AI / ML",
@@ -283,6 +288,15 @@ export const en = {
   "publications.extraLabelLabel": "Extra link label",
   "publications.extraLabelPlaceholder": "e.g. Code",
   "publications.linkSelfCheckbox": "Also show this publication on my member profile",
+  "publications.addOrEditSuffix": "add or edit publications",
+  "publications.andManageAuthors": " and manage their authors",
+  "publications.emptyHint": "Papers, proceedings and preprints will be listed here.",
+  "publications.filterByYearAria": "Filter publications by year",
+  "publications.allYears": "All years",
+  "publications.showingCountOne": "Showing {shown} of {total} publication",
+  "publications.showingCountOther": "Showing {shown} of {total} publications",
+  "publications.yearCountOne": "{count} publication",
+  "publications.yearCountOther": "{count} publications",
   "publications.manageAuthorsHelpMember":
     "You can add or remove yourself as an author of this publication. Other authors can only be changed by a lab manager or admin.",
 
@@ -312,6 +326,10 @@ export const en = {
   "news.linkSelfCheckbox": "Also show this news item on my member profile",
   "news.titleJaLabel": "Title (日本語)",
   "news.descriptionJaLabel": "Description (日本語)",
+  "news.addOrEditSuffix": "add or edit news items",
+  "news.andManageWhoInvolved": " and manage who they involve",
+  "news.emptyHint": "Announcements, awards and accepted papers will be posted here.",
+  "news.headingSr": "All news",
 
   // ---- team / profiles ------------------------------------------------------------------
   "team.pageTitle": "Our Team",
@@ -742,6 +760,13 @@ export const en = {
   "groups.membersAria": "Group members",
   "groups.moreMembers": "{count} more members",
   "groups.leadSuffix": " (lead)",
+  "groups.manageCreateSuffix": "{role}: create research groups and choose who can see them. New groups start as lab-only.",
+  "groups.newGroup": "New group",
+  "groups.loadingGroups": "Loading groups…",
+  "groups.headingSr": "Research groups",
+  "groups.emptyGuest": "No public research groups yet.",
+  "groups.emptyHintUser": "Groups will appear here once a lab manager creates them.",
+  "groups.emptyHintGuest": "Lab members can log in to see internal ones.",
 
   // ---- member detail, complete coverage (Phase 15) -------------------------------------------
   "member.loadingProfile": "Loading profile…",

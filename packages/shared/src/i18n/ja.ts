@@ -66,6 +66,7 @@ export const ja: Record<keyof typeof en, string> = {
   "common.addHistoryTitle": "経歴を追加",
   "common.yearPlaceholder": "例：2024",
   "common.historyTitlePlaceholder": "例：研究室に加入",
+  "common.loggedIn": "ログイン中",
 
   // ---- navigation --------------------------------------------------------------------------
   "nav.mainLabel": "メインメニュー",
@@ -188,6 +189,10 @@ export const ja: Record<keyof typeof en, string> = {
   "research.newTitle": "研究分野を追加",
   "research.deleteTitle": "研究分野を削除",
   "research.deleteMessage": "「{title}」を削除しますか？元に戻せません。",
+  "research.addOrEditSuffix": "研究分野を追加・編集します。",
+  "research.onlyManagersDelete": "（削除はラボ管理者と管理者のみ可能です。）",
+  "research.emptyHint": "研究室が取り組む分野がここに表示されます。",
+  "research.headingSr": "すべての研究分野",
   "research.iconLabel": "アイコン（絵文字）",
   "research.tagLabel": "タグ",
   "research.tagPlaceholder": "例：AI / ML",
@@ -275,6 +280,15 @@ export const ja: Record<keyof typeof en, string> = {
   "publications.extraLabelLabel": "追加リンクのラベル",
   "publications.extraLabelPlaceholder": "例：Code",
   "publications.linkSelfCheckbox": "この論文を自分のメンバープロフィールにも表示する",
+  "publications.addOrEditSuffix": "論文を追加・編集します",
+  "publications.andManageAuthors": "、著者を管理します",
+  "publications.emptyHint": "論文・会議録・プレプリントがここに表示されます。",
+  "publications.filterByYearAria": "年で絞り込み",
+  "publications.allYears": "すべての年",
+  "publications.showingCountOne": "{total}件中{shown}件を表示",
+  "publications.showingCountOther": "{total}件中{shown}件を表示",
+  "publications.yearCountOne": "{count}件の論文",
+  "publications.yearCountOther": "{count}件の論文",
   "publications.manageAuthorsHelpMember": "自分自身をこの論文の著者として追加・削除できます。他の著者はラボ管理者または管理者のみ変更できます。",
 
   // ---- news -------------------------------------------------------------------------------
@@ -303,6 +317,10 @@ export const ja: Record<keyof typeof en, string> = {
   "news.linkSelfCheckbox": "このニュース項目を自分のメンバープロフィールにも表示する",
   "news.titleJaLabel": "タイトル（日本語）",
   "news.descriptionJaLabel": "説明（日本語）",
+  "news.addOrEditSuffix": "ニュース項目を追加・編集します",
+  "news.andManageWhoInvolved": "、関係者を管理します",
+  "news.emptyHint": "お知らせ・受賞・採択論文がここに掲載されます。",
+  "news.headingSr": "すべてのニュース",
 
   // ---- team / profiles ------------------------------------------------------------------
   "team.pageTitle": "研究員一覧",
@@ -730,6 +748,13 @@ export const ja: Record<keyof typeof en, string> = {
   "groups.membersAria": "グループメンバー",
   "groups.moreMembers": "他{count}名",
   "groups.leadSuffix": "（リード）",
+  "groups.manageCreateSuffix": "{role}：研究グループを作成し、公開範囲を選択します。新規グループはラボ限定で開始されます。",
+  "groups.newGroup": "新しいグループ",
+  "groups.loadingGroups": "グループを読み込み中…",
+  "groups.headingSr": "研究グループ",
+  "groups.emptyGuest": "公開グループはまだありません。",
+  "groups.emptyHintUser": "ラボ管理者がグループを作成すると、ここに表示されます。",
+  "groups.emptyHintGuest": "ログインすると内部グループも表示されます。",
 
   // ---- member detail, complete coverage (Phase 15) -------------------------------------------
   "member.loadingProfile": "プロフィールを読み込み中…",

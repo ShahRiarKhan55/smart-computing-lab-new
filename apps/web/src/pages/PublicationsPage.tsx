@@ -80,11 +80,11 @@ export function PublicationsPage() {
           <AdminBar
             text={
               <>
-                {policy.isManager ? policy.roleLabel : "Logged in"}: add or edit publications
-                {canManageAuthors ? " and manage their authors" : ""}. {policy.canDeleteContent ? "" : "(Only lab managers and admins can delete.)"}
+                {policy.isManager ? policy.roleLabel : t("common.loggedIn")}: {t("publications.addOrEditSuffix")}
+                {canManageAuthors ? t("publications.andManageAuthors") : ""}. {policy.canDeleteContent ? "" : t("research.onlyManagersDelete")}
               </>
             }
-            actionLabel="+ Add publication"
+            actionLabel={`+ ${t("publications.addNew")}`}
             onAction={() => {
               setActionError(null);
               setFormModal({ open: true, pub: null });
@@ -95,14 +95,14 @@ export function PublicationsPage() {
         {actionError && <ErrorState message={actionError} />}
         {loading && !pubs && <LoadingState label={t("publications.loading")} variant="list" />}
         {error && <ErrorState message={error} onRetry={reload} />}
-        {pubs && pubs.length === 0 && <EmptyState title={t("publications.empty")}>Papers, proceedings and preprints will be listed here.</EmptyState>}
+        {pubs && pubs.length === 0 && <EmptyState title={t("publications.empty")}>{t("publications.emptyHint")}</EmptyState>}
 
         {pubs && pubs.length > 0 && (
           <>
             <div className="filters">
-              <div className="chips" role="group" aria-label="Filter publications by year">
+              <div className="chips" role="group" aria-label={t("publications.filterByYearAria")}>
                 <button className={`chip${activeFilter === "all" ? " active" : ""}`} aria-pressed={activeFilter === "all"} onClick={() => setYearFilter("all")} type="button">
-                  All years
+                  {t("publications.allYears")}
                 </button>
                 {years.map((y) => (
                   <button key={y} className={`chip${activeFilter === y ? " active" : ""}`} aria-pressed={activeFilter === y} onClick={() => setYearFilter(y)} type="button">
@@ -111,14 +111,14 @@ export function PublicationsPage() {
                 ))}
               </div>
               <p className="filters__count" role="status">
-                Showing {filtered.length} of {pubs.length} publications
+                {t(filtered.length === 1 ? "publications.showingCountOne" : "publications.showingCountOther", { shown: filtered.length, total: pubs.length })}
               </p>
             </div>
 
             {byYear.map(([year, items]) => (
               <section key={year} aria-labelledby={`pubs-${year}`}>
                 <h2 className="year-heading" id={`pubs-${year}`}>
-                  {year} <small>{items.length} {items.length === 1 ? "publication" : "publications"}</small>
+                  {year} <small>{t(items.length === 1 ? "publications.yearCountOne" : "publications.yearCountOther", { count: items.length })}</small>
                 </h2>
                 <div className="pub-list">
                   {items.map((p) => (

@@ -56,11 +56,11 @@ export function NewsPage() {
           <AdminBar
             text={
               <>
-                {policy.isManager ? policy.roleLabel : "Logged in"}: add or edit news items
-                {canManageAuthors ? " and manage who they involve" : ""}. {policy.canDeleteContent ? "" : "(Only lab managers and admins can delete.)"}
+                {policy.isManager ? policy.roleLabel : t("common.loggedIn")}: {t("news.addOrEditSuffix")}
+                {canManageAuthors ? t("news.andManageWhoInvolved") : ""}. {policy.canDeleteContent ? "" : t("research.onlyManagersDelete")}
               </>
             }
-            actionLabel="+ Add news item"
+            actionLabel={`+ ${t("news.addNew")}`}
             onAction={() => {
               setActionError(null);
               setFormModal({ open: true, item: null });
@@ -71,9 +71,9 @@ export function NewsPage() {
         {actionError && <ErrorState message={actionError} />}
         {loading && !news && <LoadingState label={t("news.loading")} />}
         {error && <ErrorState message={error} onRetry={reload} />}
-        {news && news.length === 0 && <EmptyState title={t("news.empty")}>Announcements, awards and accepted papers will be posted here.</EmptyState>}
+        {news && news.length === 0 && <EmptyState title={t("news.empty")}>{t("news.emptyHint")}</EmptyState>}
 
-        {news && news.length > 0 && <h2 className="sr-only">All news</h2>}
+        {news && news.length > 0 && <h2 className="sr-only">{t("news.headingSr")}</h2>}
         {news && news.length > 0 && (
           <div className="grid">
             {news.map((item) => (

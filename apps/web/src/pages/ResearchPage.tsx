@@ -36,20 +36,19 @@ export function ResearchPage() {
           <AdminBar
             text={
               <>
-                {policy.isManager ? policy.roleLabel : "Logged in"}: add or edit research areas.{" "}
-                {policy.canDeleteContent ? "" : "(Only lab managers and admins can delete.)"}
+                {policy.isManager ? policy.roleLabel : t("common.loggedIn")}: {t("research.addOrEditSuffix")} {policy.canDeleteContent ? "" : t("research.onlyManagersDelete")}
               </>
             }
-            actionLabel="+ Add research area"
+            actionLabel={`+ ${t("research.addNew")}`}
             onAction={() => setFormModal({ open: true, area: null })}
           />
         )}
 
         {loading && !areas && <LoadingState label={t("research.loading")} />}
         {error && <ErrorState message={error} onRetry={reload} />}
-        {areas && areas.length === 0 && <EmptyState title={t("research.empty")}>Areas the lab works on will be listed here.</EmptyState>}
+        {areas && areas.length === 0 && <EmptyState title={t("research.empty")}>{t("research.emptyHint")}</EmptyState>}
 
-        {areas && areas.length > 0 && <h2 className="sr-only">All research areas</h2>}
+        {areas && areas.length > 0 && <h2 className="sr-only">{t("research.headingSr")}</h2>}
         {areas && areas.length > 0 && (
           <div className="grid">
             {areas.map((area) => (

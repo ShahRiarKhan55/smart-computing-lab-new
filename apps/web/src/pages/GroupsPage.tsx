@@ -27,20 +27,20 @@ export function GroupsPage() {
       <div className="container">
         {policy.canCreateGroup && (
           <AdminBar
-            text={`${policy.isAdmin ? "Admin" : "Lab manager"}: create research groups and choose who can see them. New groups start as lab-only.`}
-            actionLabel="+ New group"
+            text={t("groups.manageCreateSuffix", { role: policy.roleLabel })}
+            actionLabel={`+ ${t("groups.newGroup")}`}
             onAction={() => setCreateOpen(true)}
           />
         )}
 
-        {loading && !groups && <LoadingState label="Loading groups…" />}
+        {loading && !groups && <LoadingState label={t("groups.loadingGroups")} />}
         {error && <ErrorState message={error} onRetry={reload} />}
 
-        {groups && groups.length > 0 && <h2 className="sr-only">Research groups</h2>}
+        {groups && groups.length > 0 && <h2 className="sr-only">{t("groups.headingSr")}</h2>}
         {groups &&
           (groups.length === 0 ? (
-            <EmptyState title={policy.user ? "No research groups yet." : "No public research groups yet."}>
-              {policy.user ? "Groups will appear here once a lab manager creates them." : "Lab members can log in to see internal ones."}
+            <EmptyState title={policy.user ? t("groups.empty") : t("groups.emptyGuest")}>
+              {policy.user ? t("groups.emptyHintUser") : t("groups.emptyHintGuest")}
             </EmptyState>
           ) : (
             <div className="grid">
