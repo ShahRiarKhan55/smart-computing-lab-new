@@ -1,6 +1,7 @@
 import type { Publication } from "@scl/shared";
 import { Icon } from "./Icon";
 import { VisibilityBadge } from "./VisibilityField";
+import { useT } from "../i18n/LocaleContext";
 
 interface PublicationItemProps {
   publication: Publication;
@@ -12,17 +13,19 @@ interface PublicationItemProps {
 }
 
 function ExternalLink({ href, children }: { href: string; children: string }) {
+  const t = useT();
   return (
     <a href={href} className="pub-link" target="_blank" rel="noopener noreferrer">
       {children}
       <Icon name="external" size={11} />
-      <span className="sr-only"> (opens in a new tab)</span>
+      <span className="sr-only">{t("publications.opensInNewTab")}</span>
     </a>
   );
 }
 
 /** One row of an academic list: title, authors, venue and year, and links out. Dense on purpose. */
 export function PublicationItem({ publication: p, canEdit, canDelete, onEdit, onDelete, onManageAuthors }: PublicationItemProps) {
+  const t = useT();
   return (
     <article className="pub-item">
       <div>
@@ -35,24 +38,24 @@ export function PublicationItem({ publication: p, canEdit, canDelete, onEdit, on
         </p>
         {(p.pdfUrl || p.doiUrl || p.extraUrl) && (
           <div className="pub-item__links">
-            {p.pdfUrl && <ExternalLink href={p.pdfUrl}>PDF</ExternalLink>}
-            {p.doiUrl && <ExternalLink href={p.doiUrl}>DOI</ExternalLink>}
-            {p.extraUrl && <ExternalLink href={p.extraUrl}>{p.extraLabel || "Link"}</ExternalLink>}
+            {p.pdfUrl && <ExternalLink href={p.pdfUrl}>{t("publications.pdf")}</ExternalLink>}
+            {p.doiUrl && <ExternalLink href={p.doiUrl}>{t("publications.doi")}</ExternalLink>}
+            {p.extraUrl && <ExternalLink href={p.extraUrl}>{p.extraLabel || t("common.link")}</ExternalLink>}
           </div>
         )}
       </div>
       {canEdit && (
         <div className="pub-item__actions">
           {onManageAuthors && (
-            <button className="icon-btn" title="Manage authors" aria-label={`Manage authors of ${p.title}`} type="button" onClick={onManageAuthors}>
+            <button className="icon-btn" title={t("common.manageAuthors")} aria-label={t("common.manageAuthorsOfAria", { subject: p.title })} type="button" onClick={onManageAuthors}>
               <Icon name="users" />
             </button>
           )}
-          <button className="icon-btn" title="Edit" aria-label={`Edit ${p.title}`} type="button" onClick={onEdit}>
+          <button className="icon-btn" title={t("common.edit")} aria-label={t("common.editAria", { subject: p.title })} type="button" onClick={onEdit}>
             <Icon name="edit" />
           </button>
           {canDelete && (
-            <button className="icon-btn icon-btn--danger" title="Delete" aria-label={`Delete ${p.title}`} type="button" onClick={onDelete}>
+            <button className="icon-btn icon-btn--danger" title={t("common.delete")} aria-label={t("common.deleteAria", { subject: p.title })} type="button" onClick={onDelete}>
               <Icon name="trash" />
             </button>
           )}

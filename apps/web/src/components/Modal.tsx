@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Icon } from "./Icon";
+import { useT } from "../i18n/LocaleContext";
 
 interface ModalProps {
   open: boolean;
@@ -17,6 +18,7 @@ const FOCUSABLE =
  * behind does not scroll, and focus returns to whatever opened it.
  */
 export function Modal({ open, onClose, title, children }: ModalProps) {
+  const t = useT();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -89,7 +91,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={dialogRef} tabIndex={-1}>
         <div className="modal__header">
           <h2 id={titleId}>{title}</h2>
-          <button className="modal__close" onClick={onClose} type="button" aria-label="Close dialog">
+          <button className="modal__close" onClick={onClose} type="button" aria-label={t("common.closeDialog")}>
             <Icon name="close" size={20} />
           </button>
         </div>

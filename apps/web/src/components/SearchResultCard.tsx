@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
-import { SEARCH_TYPE_LABELS, type SearchResult, type SearchType } from "@scl/shared";
+import type { SearchResult, SearchType } from "@scl/shared";
 import { Icon, type IconName } from "./Icon";
 import { VisibilityBadge } from "./VisibilityField";
 import { Highlight } from "./Highlight";
+import { useT } from "../i18n/LocaleContext";
+import { SEARCH_CTA_LABEL_KEY, SEARCH_TYPE_LABEL_KEY } from "../i18n/labels";
 
 const TYPE_ICON: Record<SearchType, IconName> = {
   "research-area": "flask",
@@ -14,26 +16,17 @@ const TYPE_ICON: Record<SearchType, IconName> = {
   "forum-topic": "file",
 };
 
-const CTA: Record<SearchType, string> = {
-  "research-area": "View in Research",
-  project: "View project",
-  group: "View group",
-  researcher: "View profile",
-  publication: "View in Publications",
-  news: "View in News",
-  "forum-topic": "View topic",
-};
-
 /**
  * One compact result. The title is the only link (its accessible name is the title itself); a
  * stretched pseudo-element makes the whole card the click target, and the focus ring lands on the card.
  */
 export function SearchResultCard({ result, terms }: { result: SearchResult; terms: string[] }) {
+  const t = useT();
   return (
     <article className={`card card--interactive search-result search-result--${result.type}`}>
       <div className="search-result__top">
         <span className="badge badge--brand badge--upper search-result__type">
-          <Icon name={TYPE_ICON[result.type]} size={12} /> {SEARCH_TYPE_LABELS[result.type]}
+          <Icon name={TYPE_ICON[result.type]} size={12} /> {t(SEARCH_TYPE_LABEL_KEY[result.type])}
         </span>
         <VisibilityBadge visibility={result.visibility} />
       </div>
@@ -53,7 +46,7 @@ export function SearchResultCard({ result, terms }: { result: SearchResult; term
         </p>
       )}
       <span className="search-result__cta" aria-hidden="true">
-        {CTA[result.type]} →
+        {t(SEARCH_CTA_LABEL_KEY[result.type])} →
       </span>
     </article>
   );

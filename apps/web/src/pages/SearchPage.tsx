@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { SEARCH_FILTERS, SEARCH_FILTER_LABELS, SEARCH_MAX_PAGE, parseSearchText, type SearchFilter } from "@scl/shared";
+import { SEARCH_FILTERS, SEARCH_MAX_PAGE, parseSearchText, type SearchFilter } from "@scl/shared";
 import { useSearchResults } from "../hooks/useSearchResults";
 import { PageHeader } from "../components/PageHeader";
 import { SearchForm } from "../components/SearchForm";
@@ -10,6 +10,7 @@ import { ErrorState } from "../components/ErrorState";
 import { Icon } from "../components/Icon";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useT } from "../i18n/LocaleContext";
+import { SEARCH_FILTER_LABEL_KEY } from "../i18n/labels";
 
 const EXAMPLES = ["FPGA", "aging", "Gaussian", "半導体", "FPGA エージング"];
 
@@ -47,6 +48,15 @@ export function SearchPage() {
   const first = (page - 1) * (data?.pagination.limit ?? 20) + 1;
   const scrollToStatus = () => document.getElementById("search-status")?.scrollIntoView({ block: "start" });
 
+  const statusText = () => {
+    if (!data) return "";
+    const showingSuffix = totalPages > 1 && data.results.length > 0 ? t("search.showingSuffix", { first, last: first + data.results.length - 1 }) : "";
+    if (type !== "all") {
+      return t(total === 1 ? "search.statusTypeOne" : "search.statusTypeOther", { count: total, type: t(SEARCH_FILTER_LABEL_KEY[type]), query: data.query }) + showingSuffix;
+    }
+    return t(total === 1 ? "search.statusAllOne" : "search.statusAllOther", { count: total, query: data.query }) + showingSuffix;
+  };
+
   return (
     <>
       <PageHeader eyebrow={t("search.pageTitle")} title={t("search.pageTitle")} description={t("search.pageDescription")} />
@@ -56,7 +66,7 @@ export function SearchPage() {
           variant="page"
           inputId="search-page-input"
           label={t("search.searchLanding")}
-          placeholder="Search by keyword, e.g. FPGA or 半導体"
+          placeholder={t("search.placeholderHint")}
           value={q}
           onSearch={(next) => navigate(searchUrl(next, type))}
         />
@@ -66,9 +76,9 @@ export function SearchPage() {
             <h2 id="search-landing-title" className="search-landing__title">
               {t("search.searchLanding")}
             </h2>
-            <p>Find researchers, projects, publications, research areas, and news. Words can be in English, Japanese, or both.</p>
+            <p>{t("search.introText")}</p>
             <p className="search-landing__try">
-              Try:{" "}
+              {t("search.tryPrefix")}{" "}
               {EXAMPLES.map((example) => (
                 <Link key={example} className="search-landing__example" to={searchUrl(example)}>
                   {example}
@@ -80,10 +90,10 @@ export function SearchPage() {
 
         {q && (
           <>
-            <div className="chips search-filters" role="group" aria-label="Filter results by type">
+            <div className="chips search-filters" role="group" aria-label={t("search.filterByTypeAria")}>
               {SEARCH_FILTERS.map((filter) => (
                 <Link key={filter} to={searchUrl(q, filter)} className={`chip${type === filter ? " active" : ""}`} aria-current={type === filter ? "true" : undefined}>
-                  {SEARCH_FILTER_LABELS[filter]}
+                  {t(SEARCH_FILTER_LABEL_KEY[filter])}
                   {data && <span className="chip__count">{data.counts[filter] ?? 0}</span>}
                 </Link>
               ))}
@@ -91,13 +101,7 @@ export function SearchPage() {
 
             <div className="search-region" aria-busy={loading}>
               <p id="search-status" className="search-status" role="status" aria-live="polite">
-                {error
-                  ? ""
-                  : !data
-                    ? "Searching…"
-                    : `${total} ${total === 1 ? "result" : "results"}${type !== "all" ? ` in ${SEARCH_FILTER_LABELS[type]}` : ""} for “${data.query}”${
-                        totalPages > 1 && data.results.length > 0 ? ` · showing ${first}–${first + data.results.length - 1}` : ""
-                      }`}
+                {error ? "" : !data ? t("search.loading") : statusText()}
               </p>
 
               {error && <ErrorState message={error} onRetry={reload} retryClassName="search-retry" />}
@@ -113,28 +117,28 @@ export function SearchPage() {
               {!error && data && (
                 <>
                   {total === 0 && (
-                    <EmptyState className="search-empty" title={`No results found for “${data.query}”.`}>
+                    <EmptyState className="search-empty" title={t("search.noResultsQuoted", { query: data.query })}>
                       <ul>
-                        <li>Try a broader keyword, or fewer words (every word must match).</li>
-                        <li>Check the spelling.</li>
+                        <li>{t("search.tryBroader")}</li>
+                        <li>{t("search.checkSpelling")}</li>
                         {type !== "all" && data.counts.all > 0 ? (
                           <li>
-                            <Link to={searchUrl(q)}>Search all categories</Link> ({data.counts.all} {data.counts.all === 1 ? "result" : "results"} elsewhere).
+                            <Link to={searchUrl(q)}>{t("search.searchAllCategories")}</Link> ({t(data.counts.all === 1 ? "search.resultCountOne" : "search.resultCountOther", { count: data.counts.all })} {t("search.elsewhere")}).
                           </li>
                         ) : (
-                          <li>Search all categories: results can be in research areas, projects, groups, researchers, publications, or news.</li>
+                          <li>{t("search.searchAllCategoriesHint")}</li>
                         )}
                       </ul>
                     </EmptyState>
                   )}
 
                   {total > 0 && data.results.length === 0 && (
-                    <EmptyState className="search-empty" title={`There is no page ${page} for this search.`}>
-                      <Link to={searchUrl(q, type)}>Go back to the first page</Link>
+                    <EmptyState className="search-empty" title={t("search.noPageFor", { page })}>
+                      <Link to={searchUrl(q, type)}>{t("search.backToFirstPage")}</Link>
                     </EmptyState>
                   )}
 
-                  {data.results.length > 0 && <h2 className="sr-only">Search results</h2>}
+                  {data.results.length > 0 && <h2 className="sr-only">{t("search.resultsHeadingSr")}</h2>}
                   {data.results.length > 0 && (
                     <ol className={`search-results${loading ? " is-loading" : ""}`}>
                       {data.results.map((result) => (
@@ -146,26 +150,24 @@ export function SearchPage() {
                   )}
 
                   {totalPages > 1 && data.results.length > 0 && (
-                    <nav className="search-pager" aria-label="Search result pages">
+                    <nav className="search-pager" aria-label={t("search.resultPagesAria")}>
                       {page > 1 ? (
                         <Link className="btn btn--secondary btn--sm" to={searchUrl(q, type, page - 1)} onClick={scrollToStatus} rel="prev">
-                          <Icon name="arrow-left" size={14} /> Previous
+                          <Icon name="arrow-left" size={14} /> {t("common.previous")}
                         </Link>
                       ) : (
                         <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-                          <Icon name="arrow-left" size={14} /> Previous
+                          <Icon name="arrow-left" size={14} /> {t("common.previous")}
                         </span>
                       )}
-                      <span className="search-pager__pos">
-                        Page {page} of {totalPages}
-                      </span>
+                      <span className="search-pager__pos">{t("common.pageOf", { page, total: totalPages })}</span>
                       {page < totalPages ? (
                         <Link className="btn btn--secondary btn--sm" to={searchUrl(q, type, page + 1)} onClick={scrollToStatus} rel="next">
-                          Next <Icon name="arrow-right" size={14} />
+                          {t("common.next")} <Icon name="arrow-right" size={14} />
                         </Link>
                       ) : (
                         <span className="btn btn--secondary btn--sm is-disabled" aria-disabled="true">
-                          Next <Icon name="arrow-right" size={14} />
+                          {t("common.next")} <Icon name="arrow-right" size={14} />
                         </span>
                       )}
                     </nav>

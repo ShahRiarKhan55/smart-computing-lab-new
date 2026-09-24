@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { SEARCH_QUERY_MAX_LENGTH } from "@scl/shared";
+import { useT } from "../i18n/LocaleContext";
 
 interface SearchFormProps {
   /** "nav" = compact, in the header; "page" = the large box on /search. */
@@ -17,6 +18,7 @@ interface SearchFormProps {
 
 /** An explicit type-and-submit search box. No request is made while typing. */
 export function SearchForm({ variant, inputId, label, placeholder, value = "", clearOnSubmit, onSearch }: SearchFormProps) {
+  const t = useT();
   const [draft, setDraft] = useState(value);
   const [seen, setSeen] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,14 +57,14 @@ export function SearchForm({ variant, inputId, label, placeholder, value = "", c
           enterKeyHint="search"
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button className={`search-form__button${variant === "page" ? " btn btn--primary" : ""}`} type="submit" aria-label={variant === "nav" ? "Search" : undefined}>
+        <button className={`search-form__button${variant === "page" ? " btn btn--primary" : ""}`} type="submit" aria-label={variant === "nav" ? t("common.searchAria") : undefined}>
           {variant === "nav" ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.6-3.6" />
             </svg>
           ) : (
-            "Search"
+            t("common.searchAria")
           )}
         </button>
       </div>
