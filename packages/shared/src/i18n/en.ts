@@ -182,6 +182,8 @@ export const en = {
   "title.admin": "Admin Dashboard",
   "title.search": "Search",
   "title.notFound": "Page not found",
+  "notFound.body": "The page you are looking for does not exist or may have moved.",
+  "notFound.backToHome": "Back to home",
 
   // ---- research areas -----------------------------------------------------------------------
   "research.pageTitle": "Research Areas",
@@ -196,6 +198,9 @@ export const en = {
   "research.deleteTitle": "Delete research area",
   "research.deleteMessage": "Delete \"{title}\"? This cannot be undone.",
   "research.addOrEditSuffix": "add or edit research areas.",
+  "research.relatedProjectOne": "{count} related project",
+  "research.relatedProjectOther": "{count} related projects",
+  "research.andMore": "and {count} more…",
   "research.onlyManagersDelete": "(Only lab managers and admins can delete.)",
   "research.emptyHint": "Areas the lab works on will be listed here.",
   "research.headingSr": "All research areas",

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { ResearchArea } from "@scl/shared";
 import { CardEditControls } from "./CardEditControls";
 import { VisibilityBadge } from "./VisibilityField";
+import { useT } from "../i18n/LocaleContext";
 
 interface ResearchCardProps {
   area: ResearchArea;
@@ -16,6 +17,7 @@ interface ResearchCardProps {
 const SHOWN_PROJECTS = 3;
 
 export function ResearchCard({ area, canEdit, canDelete, onEdit, onDelete, projects = [] }: ResearchCardProps) {
+  const t = useT();
   const more = projects.length - SHOWN_PROJECTS;
   return (
     <article className={`card research-card${canEdit ? " card--editable" : ""}`}>
@@ -33,9 +35,7 @@ export function ResearchCard({ area, canEdit, canDelete, onEdit, onDelete, proje
       </div>
       {projects.length > 0 && (
         <div className="card__foot">
-          <p className="card-note">
-            {projects.length} related {projects.length === 1 ? "project" : "projects"}
-          </p>
+          <p className="card-note">{t(projects.length === 1 ? "research.relatedProjectOne" : "research.relatedProjectOther", { count: projects.length })}</p>
           <ul className="mini-list">
             {projects.slice(0, SHOWN_PROJECTS).map((p) => (
               <li key={p.id}>
@@ -44,7 +44,7 @@ export function ResearchCard({ area, canEdit, canDelete, onEdit, onDelete, proje
             ))}
             {more > 0 && (
               <li>
-                <Link to="/projects">and {more} more…</Link>
+                <Link to="/projects">{t("research.andMore", { count: more })}</Link>
               </li>
             )}
           </ul>

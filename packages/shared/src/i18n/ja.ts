@@ -178,6 +178,8 @@ export const ja: Record<keyof typeof en, string> = {
   "title.admin": "管理者ダッシュボード",
   "title.search": "検索",
   "title.notFound": "ページが見つかりません",
+  "notFound.body": "お探しのページは存在しないか、移動した可能性があります。",
+  "notFound.backToHome": "ホームに戻る",
 
   // ---- research areas -----------------------------------------------------------------------
   "research.pageTitle": "研究分野",
@@ -191,6 +193,9 @@ export const ja: Record<keyof typeof en, string> = {
   "research.deleteTitle": "研究分野を削除",
   "research.deleteMessage": "「{title}」を削除しますか？元に戻せません。",
   "research.addOrEditSuffix": "研究分野を追加・編集します。",
+  "research.relatedProjectOne": "関連プロジェクト{count}件",
+  "research.relatedProjectOther": "関連プロジェクト{count}件",
+  "research.andMore": "他{count}件…",
   "research.onlyManagersDelete": "（削除はラボ管理者と管理者のみ可能です。）",
   "research.emptyHint": "研究室が取り組む分野がここに表示されます。",
   "research.headingSr": "すべての研究分野",

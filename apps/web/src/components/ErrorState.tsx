@@ -1,4 +1,5 @@
 import { Icon } from "./Icon";
+import { useT } from "../i18n/LocaleContext";
 
 interface ErrorStateProps {
   message: string;
@@ -9,6 +10,7 @@ interface ErrorStateProps {
 
 /** A user-facing failure: what went wrong in plain words, and a way to retry. Never a stack trace. */
 export function ErrorState({ message, onRetry, retryClassName = "" }: ErrorStateProps) {
+  const t = useT();
   return (
     <div className="form-error error-state" role="alert">
       <span className="error-state__msg">
@@ -16,7 +18,7 @@ export function ErrorState({ message, onRetry, retryClassName = "" }: ErrorState
       </span>
       {onRetry && (
         <button type="button" className={`btn btn--sm btn--secondary${retryClassName ? ` ${retryClassName}` : ""}`} onClick={onRetry}>
-          Try again
+          {t("common.tryAgain")}
         </button>
       )}
     </div>
