@@ -18,17 +18,17 @@ export function SchedulePage() {
       <PageHeader eyebrow={t("schedule.eyebrow")} title={t("schedule.pageTitle")} description={t("schedule.pageDescription")} />
       <div className="container">
         <AdminBar
-          text="Viewing the lab's shared calendar."
+          text={t("schedule.viewingCalendar")}
           actions={
             <a href={ADD_EVENT_URL} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm">
-              + Add event (opens Google Calendar) <Icon name="external" size={13} />
-              <span className="sr-only"> (opens in a new tab)</span>
+              + {t("schedule.addEvent")} <Icon name="external" size={13} />
+              <span className="sr-only">{t("publications.opensInNewTab")}</span>
             </a>
           }
         />
 
         <div className="calendar-frame">
-          <iframe title="Smart Computing Lab shared calendar" src={EMBED_SRC} loading="lazy" scrolling="no" />
+          <iframe title={t("schedule.calendarIframeTitle")} src={EMBED_SRC} loading="lazy" scrolling="no" />
         </div>
       </div>
     </>

@@ -10,28 +10,33 @@ import { useT } from "../i18n/LocaleContext";
  * service later. We keep that same "not connected to anything" behavior
  * instead of inventing a fake submit-success flow.
  *
- * The details below are the reference site's own (placeholder) details, unchanged: this phase only
- * presents them; the lab supplies the real ones.
+ * The VALUES below are the reference site's own (placeholder) details, unchanged and not
+ * translated: this phase only presents them; the lab supplies the real ones. Only the field
+ * labels (below, via t()) are UI text.
  */
-const DETAILS: { icon: IconName; label: string; value: ReactNode }[] = [
-  {
-    icon: "map-pin",
-    label: "Location",
-    value: (
-      <>
-        Department of Computer Engineering
-        <br />
-        [University Name], Building [X], Room [Y]
-      </>
-    ),
-  },
-  { icon: "mail", label: "Email", value: <a href="mailto:lab@university.edu">lab@university.edu</a> },
-  { icon: "clock", label: "Office Hours", value: "Monday – Friday, 09:00 – 17:00" },
-  { icon: "globe", label: "University", value: <a href="https://www.university.edu">www.university.edu</a> },
-];
+function useDetails(): { icon: IconName; label: string; value: ReactNode }[] {
+  const t = useT();
+  return [
+    {
+      icon: "map-pin",
+      label: t("contact.locationLabel"),
+      value: (
+        <>
+          Department of Computer Engineering
+          <br />
+          [University Name], Building [X], Room [Y]
+        </>
+      ),
+    },
+    { icon: "mail", label: t("contact.emailLabel"), value: <a href="mailto:lab@university.edu">lab@university.edu</a> },
+    { icon: "clock", label: t("contact.officeHoursLabel"), value: "Monday – Friday, 09:00 – 17:00" },
+    { icon: "globe", label: t("contact.universityLabel"), value: <a href="https://www.university.edu">www.university.edu</a> },
+  ];
+}
 
 export function ContactPage() {
   const t = useT();
+  const details = useDetails();
   const [submitted, setSubmitted] = useState(false);
 
   function handleSubmit(e: FormEvent) {
@@ -46,14 +51,11 @@ export function ContactPage() {
       <div className="container">
         <div className="contact-layout">
           <section aria-labelledby="contact-info">
-            <h2 id="contact-info">Smart Computing Lab</h2>
-            <p className="contact-info__intro">
-              We welcome inquiries from prospective students, industry partners, and fellow researchers. Fill out the form or reach us directly using
-              the details below.
-            </p>
+            <h2 id="contact-info">{t("contact.heading")}</h2>
+            <p className="contact-info__intro">{t("contact.intro")}</p>
 
             <dl className="info-list">
-              {DETAILS.map((d) => (
+              {details.map((d) => (
                 <div className="info-item" key={d.label}>
                   <span className="icon-tile icon-tile--sm" aria-hidden="true">
                     <Icon name={d.icon} size={18} />
@@ -69,42 +71,42 @@ export function ContactPage() {
 
           <section className="form-card" aria-labelledby="contact-form-title">
             <h2 id="contact-form-title" className="sr-only">
-              Send a message
+              {t("contact.formHeadingSr")}
             </h2>
             {submitted ? (
               <div className="form-success" role="status">
-                This form isn't connected to an email service yet — nothing was sent. Please use the email address above in the meantime.
+                {t("contact.notConnectedNotice")}
               </div>
             ) : (
               <form onSubmit={handleSubmit}>
                 <div className="form-group">
-                  <label htmlFor="name">Full name</label>
-                  <input type="text" id="name" name="name" placeholder="Your full name" autoComplete="name" required />
+                  <label htmlFor="name">{t("contact.fullNameLabel")}</label>
+                  <input type="text" id="name" name="name" placeholder={t("contact.fullNamePlaceholder")} autoComplete="name" required />
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="email">Email address</label>
-                  <input type="email" id="email" name="email" placeholder="you@example.com" autoComplete="email" required />
+                  <label htmlFor="email">{t("contact.emailAddressLabel")}</label>
+                  <input type="email" id="email" name="email" placeholder={t("contact.emailAddressPlaceholder")} autoComplete="email" required />
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="subject">Subject</label>
+                  <label htmlFor="subject">{t("contact.subjectLabel")}</label>
                   <select id="subject" name="subject">
-                    <option>Research collaboration</option>
-                    <option>PhD application</option>
-                    <option>Postdoc inquiry</option>
-                    <option>General question</option>
-                    <option>Press / media</option>
+                    <option>{t("contact.subjectResearchCollab")}</option>
+                    <option>{t("contact.subjectPhdApplication")}</option>
+                    <option>{t("contact.subjectPostdocInquiry")}</option>
+                    <option>{t("contact.subjectGeneralQuestion")}</option>
+                    <option>{t("contact.subjectPressMedia")}</option>
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="message">Message</label>
-                  <textarea id="message" name="message" placeholder="Tell us about yourself or your inquiry..." required />
+                  <label htmlFor="message">{t("contact.messageLabel")}</label>
+                  <textarea id="message" name="message" placeholder={t("contact.messagePlaceholder")} required />
                 </div>
 
                 <button type="submit" className="btn btn--primary btn--lg btn--block form-submit">
-                  Send message <Icon name="arrow-right" size={16} />
+                  {t("contact.sendMessage")} <Icon name="arrow-right" size={16} />
                 </button>
               </form>
             )}

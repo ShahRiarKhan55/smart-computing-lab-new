@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ROLES, type CreateUserInput, type Role, type TeamMember, type UserSummary } from "@scl/shared";
+import { ROLES, type CreateUserInput, type Role, type TeamMember, type TranslationKey, type UserSummary } from "@scl/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { apiFetch, ApiError } from "../../lib/api";
 import { useT } from "../../i18n/LocaleContext";
@@ -16,13 +16,13 @@ import { StatCard } from "../../components/StatCard";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
 import { CreateLoginModal } from "../../components/CreateLoginModal";
 
-const CONTENT_LINKS: { to: string; label: string; icon: IconName }[] = [
-  { to: "/research", label: "Edit Research", icon: "flask" },
-  { to: "/projects", label: "Edit Projects", icon: "folder" },
-  { to: "/groups", label: "Edit Groups", icon: "users" },
-  { to: "/team", label: "Edit Team", icon: "user" },
-  { to: "/publications", label: "Edit Publications", icon: "file" },
-  { to: "/news", label: "Edit News", icon: "newspaper" },
+const CONTENT_LINKS: { to: string; labelKey: TranslationKey; icon: IconName }[] = [
+  { to: "/research", labelKey: "admin.editResearch", icon: "flask" },
+  { to: "/projects", labelKey: "admin.editProjects", icon: "folder" },
+  { to: "/groups", labelKey: "admin.editGroups", icon: "users" },
+  { to: "/team", labelKey: "admin.editTeam", icon: "user" },
+  { to: "/publications", labelKey: "admin.editPublications", icon: "file" },
+  { to: "/news", labelKey: "admin.editNews", icon: "newspaper" },
 ];
 
 function errorMessage(err: unknown, fallback: string) {
@@ -57,8 +57,9 @@ export function AdminDashboardPage() {
       setMembers(teamList);
       setLoadError(null);
     } catch (err) {
-      setLoadError(errorMessage(err, "Could not load accounts."));
+      setLoadError(errorMessage(err, t("admin.couldNotLoadAccounts")));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export function AdminDashboardPage() {
       setUsers((list) => list?.map((u) => (u.id === target.id ? { ...u, role } : u)) ?? list);
       setNotice(t("admin.roleChanged", { email: target.email, role: roleLabel(role).toLowerCase() }));
     } catch (err) {
-      setActionError(errorMessage(err, "Could not change the role."));
+      setActionError(errorMessage(err, t("admin.couldNotChangeRole")));
     } finally {
       setPendingRole(null);
     }
@@ -91,7 +92,7 @@ export function AdminDashboardPage() {
     setNotice(null);
     setActionError(null);
     await apiFetch("/users", { method: "POST", body: JSON.stringify(payload) });
-    setNotice(`Login created for ${payload.email}.`);
+    setNotice(t("admin.loginCreatedFor", { email: payload.email }));
     await loadData();
   }
 
@@ -99,7 +100,7 @@ export function AdminDashboardPage() {
     setNotice(null);
     setActionError(null);
     await apiFetch(`/users/${target.id}`, { method: "DELETE" });
-    setNotice(`Deleted the account for ${target.email}.`);
+    setNotice(t("admin.deletedAccountFor", { email: target.email }));
     await loadData();
   }
 
@@ -109,32 +110,32 @@ export function AdminDashboardPage() {
 
       <div className="container">
         <section className="detail-section" aria-labelledby="admin-summary">
-          <SectionHeader compact id="admin-summary" title="Accounts at a glance" />
+          <SectionHeader compact id="admin-summary" title={t("admin.accountsAtAGlance")} />
           <div className="stat-grid">
-            <StatCard value={users ? users.length : null} label="Accounts" />
+            <StatCard value={users ? users.length : null} label={t("admin.accountsLabel")} />
             <StatCard value={countRole("ADMIN")} label={t("admin.statAdmins")} />
-            <StatCard value={countRole("LAB_MANAGER")} label="Lab managers" />
-            <StatCard value={countRole("MEMBER")} label="Members" />
-            <StatCard value={users ? unlinkedMembers.length : null} label="Profiles without login" />
+            <StatCard value={countRole("LAB_MANAGER")} label={t("admin.labManagersLabel")} />
+            <StatCard value={countRole("MEMBER")} label={t("admin.membersLabel")} />
+            <StatCard value={users ? unlinkedMembers.length : null} label={t("admin.profilesWithoutLogin")} />
           </div>
         </section>
 
         <section className="detail-section" aria-labelledby="admin-content">
-          <SectionHeader compact id="admin-content" title="Edit lab content" description="Content is edited on its own page, by anyone allowed to." />
+          <SectionHeader compact id="admin-content" title={t("admin.editLabContent")} description={t("admin.editLabContentDesc")} />
           <div className="tile-grid">
             {CONTENT_LINKS.map((link) => (
               <Link key={link.to} to={link.to} className="tile-link">
-                <Icon name={link.icon} size={18} /> {link.label}
+                <Icon name={link.icon} size={18} /> {t(link.labelKey)}
               </Link>
             ))}
           </div>
         </section>
 
         <section className="detail-section" aria-labelledby="admin-accounts">
-          <SectionHeader compact id="admin-accounts" title="Accounts" />
+          <SectionHeader compact id="admin-accounts" title={t("admin.accountsHeading")} />
           <AdminBar
-            text="Lab member accounts"
-            actionLabel="+ Create login for a member"
+            text={t("admin.labMemberAccounts")}
+            actionLabel={`+ ${t("admin.createLoginAction")}`}
             onAction={() => {
               setNotice(null);
               setActionError(null);
@@ -149,11 +150,11 @@ export function AdminDashboardPage() {
           )}
           {actionError && <ErrorState message={actionError} />}
           {loadError && <ErrorState message={loadError} onRetry={() => void loadData()} />}
-          {!users && !loadError && <LoadingState label="Loading accounts…" variant="list" />}
+          {!users && !loadError && <LoadingState label={t("admin.loadingAccounts")} variant="list" />}
 
           {users && (
             <div className="account-list">
-              {users.length === 0 && <EmptyState title="No accounts yet." compact />}
+              {users.length === 0 && <EmptyState title={t("admin.noAccountsYet")} compact />}
               {users.map((u) => {
                 const isSelf = u.id === me?.id;
                 const role = pendingRole?.id === u.id ? pendingRole.role : u.role;
@@ -162,26 +163,26 @@ export function AdminDashboardPage() {
                     <div>
                       <div className="account-row__email">
                         {u.email}
-                        {isSelf && <span className="text-muted"> (you)</span>}
+                        {isSelf && <span className="text-muted">{t("admin.youSuffix")}</span>}
                       </div>
                       <div className="account-row__meta">
                         {u.teamMemberId ? (
                           <>
-                            Linked to{" "}
+                            {t("admin.linkedTo")}{" "}
                             <Link to={`/team/${u.teamMemberId}`} className="link">
                               {u.teamMemberName}
                             </Link>
                           </>
                         ) : (
-                          "No team profile linked"
+                          t("admin.noTeamProfileLinked")
                         )}
                       </div>
                     </div>
                     <div className="account-row__actions">
                       <div className="form-group">
                         <select
-                          aria-label={`Role for ${u.email}`}
-                          title={isSelf ? "You can't change your own role" : undefined}
+                          aria-label={t("admin.roleForAria", { email: u.email })}
+                          title={isSelf ? t("admin.cantChangeOwnRole") : undefined}
                           value={role}
                           disabled={isSelf || pendingRole?.id === u.id}
                           onChange={(e) => handleRoleChange(u, e.target.value as Role)}
@@ -197,7 +198,7 @@ export function AdminDashboardPage() {
                         className="btn btn--danger btn--sm"
                         type="button"
                         disabled={isSelf}
-                        title={isSelf ? "You can't delete your own account" : undefined}
+                        title={isSelf ? t("admin.cantDeleteOwnAccount") : undefined}
                         onClick={() => {
                           setNotice(null);
                           setActionError(null);
@@ -224,14 +225,11 @@ export function AdminDashboardPage() {
 
       <ConfirmDeleteModal
         open={deleteTarget !== null}
-        title="Delete account"
+        title={t("admin.deleteAccountTitle")}
         message={
           deleteTarget
-            ? `Delete ${deleteTarget.email}? They will no longer be able to log in.${
-                deleteTarget.teamMemberName
-                  ? ` Their team profile (${deleteTarget.teamMemberName}) is kept and becomes unlinked.`
-                  : ""
-              }`
+            ? t("admin.deleteAccountMessage", { email: deleteTarget.email }) +
+              (deleteTarget.teamMemberName ? t("admin.deleteAccountKeepsProfile", { name: deleteTarget.teamMemberName }) : "")
             : ""
         }
         onClose={() => setDeleteTarget(null)}

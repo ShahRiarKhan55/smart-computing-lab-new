@@ -82,7 +82,7 @@ export function HomePage() {
       </section>
 
       {/* ===================== LAB STATISTICS (live counts) ===================== */}
-      <section className="band band--flush" aria-label="The lab in numbers">
+      <section className="band band--flush" aria-label={t("home.labInNumbersAria")}>
         <div className="band__inner section--tight">
           <div className="stat-grid">
             <StatCard value={team.data ? team.data.length : null} label={t("home.statResearchers")} />
