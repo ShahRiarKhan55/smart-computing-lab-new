@@ -952,7 +952,7 @@ async function connect() {
   const hrefEverywhere = (h) => ev(`!!document.querySelector('.nav a[href="${h}"]')`); // hidden panels included
   const focusDesc = () => ev(`(() => { const a = document.activeElement; return ((a.getAttribute && a.getAttribute('aria-label')) || a.id || a.textContent || '').trim().toLowerCase(); })()`);
   const tab = async (shift) => { await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: shift ? 8 : 0 }); await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }); await sleep(60); };
-  const KEYS = { down: ["ArrowDown", "ArrowDown", 40], up: ["ArrowUp", "ArrowUp", 38], home: ["Home", "Home", 36], end: ["End", "End", 35], esc: ["Escape", "Escape", 27], enter: ["Enter", "Enter", 13, "\r"], space: [" ", "Space", 32, " "] };
+  const KEYS = { down: ["ArrowDown", "ArrowDown", 40], up: ["ArrowUp", "ArrowUp", 38], home: ["Home", "Home", 36], end: ["End", "End", 35], esc: ["Escape", "Escape", 27], right: ["ArrowRight", "ArrowRight", 39], left: ["ArrowLeft", "ArrowLeft", 37], enter: ["Enter", "Enter", 13, "\r"], space: [" ", "Space", 32, " "] };
   const press = async (name) => { await key(...KEYS[name]); await sleep(60); };
   const focusSel = (sel) => ev(`document.querySelector(${JSON.stringify(sel)}).focus()`);
   const ring = () => ev(`(() => { const s = getComputedStyle(document.activeElement); return s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 2; })()`);
@@ -1979,6 +1979,476 @@ async function connect() {
     }
     await ev(`localStorage.removeItem('scl.locale')`);
     await desktop();
+  });
+
+  // ================================================================= PHASE 15: rendered EN/JA sweep
+  // Final-verification sweep: every localized surface, both languages, nine widths, through the real
+  // rendered DOM (overflow, clipped/overlapping text, accessible names, dialogs, lightbox, keyboard).
+  section("phase 15: rendered accessibility + responsive sweep (EN + JA, 390..1920)");
+  const P15 = {};
+  const P15_WIDTHS = process.env.P15_W ? process.env.P15_W.split(",").map(Number) : [390, 412, 768, 900, 1024, 1280, 1366, 1440, 1920];
+  const P15_TAB_WIDTHS = [390, 768, 1280];
+  const p15Vp = (w) => send("Emulation.setDeviceMetricsOverride", { width: w, height: w < 900 ? 844 : 900, deviceScaleFactor: 1, mobile: w < 900 });
+  const p15Audit = (rootSel, ja) => ev(`(${p15AuditFn.toString()})(${JSON.stringify(rootSel)}, ${!!ja})`);
+  // Runs INSIDE the page. Returns { resp: [...], a11y: [...] }.
+  function p15AuditFn(rootSel, ja) {
+    const root = rootSel ? document.querySelector(rootSel) : document.body;
+    const resp = [];
+    const a11y = [];
+    if (!root) return { resp: ["no root " + rootSel], a11y: [] };
+    const vw = document.documentElement.clientWidth;
+    const short = (el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + (typeof el.className === "string" && el.className ? "." + el.className.trim().split(/\s+/)[0] : "") + '"' + (el.textContent || "").trim().slice(0, 24) + '"';
+    const shown = (el) => { const s = getComputedStyle(el); if (s.visibility === "hidden" || s.display === "none" || el.closest("[hidden]")) return false; const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const tiny = (el) => { const b = el.getBoundingClientRect(); return b.width <= 2 || b.height <= 2; };
+    const scroller = (el) => { for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) { const o = getComputedStyle(a).overflowX; if (o === "auto" || o === "scroll" || o === "hidden" || o === "clip") return true; } return false; };
+    if (!rootSel && document.documentElement.scrollWidth > vw + 1) resp.push("page overflows by " + (document.documentElement.scrollWidth - vw) + "px");
+    const all = [root, ...root.querySelectorAll("*")].filter((e) => !["SCRIPT", "STYLE", "SVG", "PATH", "OPTION", "TEXTAREA", "SELECT", "INPUT"].includes(e.tagName.toUpperCase()) && shown(e) && !tiny(e));
+    for (const el of all) {
+      const s = getComputedStyle(el);
+      const ownText = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim());
+      if (ownText.length) {
+        const range = document.createRange();
+        range.setStartBefore(ownText[0]);
+        range.setEndAfter(ownText[ownText.length - 1]);
+        const r = range.getBoundingClientRect();
+        const b = el.getBoundingClientRect();
+        if (s.display !== "inline" && (r.right > b.right + 1.5 || r.left < b.left - 1.5)) resp.push("text spills out of its box: " + short(el));
+        if (!scroller(el) && (r.right > vw + 1 || r.left < -1)) resp.push("text beyond the viewport: " + short(el));
+        if (s.overflowX !== "visible" && s.overflowX !== "auto" && s.overflowX !== "scroll" && el.scrollWidth > el.clientWidth + 1) resp.push("text clipped horizontally: " + short(el));
+        if ((s.overflowY === "hidden" || s.overflowY === "clip") && el.scrollHeight > el.clientHeight + 1 && !(s.webkitLineClamp && s.webkitLineClamp !== "none")) resp.push("text clipped vertically: " + short(el));
+      }
+    }
+    const visRect = (el) => { let r = el.getBoundingClientRect(); let L = r.left, T = r.top, R = r.right, B = r.bottom; for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) { const st = getComputedStyle(a); if (['auto', 'scroll', 'hidden', 'clip'].includes(st.overflowX) || ['auto', 'scroll', 'hidden', 'clip'].includes(st.overflowY)) { const c = a.getBoundingClientRect(); L = Math.max(L, c.left); T = Math.max(T, c.top); R = Math.min(R, c.right); B = Math.min(B, c.bottom); } } return { left: L, top: T, right: R, bottom: B }; };
+    const IX = 'a[href], button, input:not([type="hidden"]), select, textarea, [role="button"]';
+    const ix = [...root.querySelectorAll(IX)].filter((e) => shown(e) && !tiny(e) && !e.classList.contains('skip-link'));
+    for (let i = 0; i < ix.length; i++) {
+      for (let j = i + 1; j < ix.length; j++) {
+        const a = ix[i], b = ix[j];
+        if (a.contains(b) || b.contains(a)) continue;
+        if (a.closest('.search-form--nav') && a.closest('.search-form--nav') === b.closest('.search-form--nav')) continue; // icon button embedded in the pill by design
+        if (!!a.closest('.nav') !== !!b.closest('.nav')) continue; // sticky header over scrolled content
+        if (a.closest('.card-edit-btn') || b.closest('.card-edit-btn')) continue; // edit overlay sits on the card corner by design; hit-tested below
+        const ra = visRect(a), rb = visRect(b);
+        const ow = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+        const oh = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+        if (ow > 2 && oh > 2) resp.push("controls overlap: " + short(a) + " x " + short(b));
+      }
+    }
+    for (const eb of root.querySelectorAll('.card-edit-btn .icon-btn')) {
+      const b = eb.getBoundingClientRect();
+      if (!shown(eb) || b.top < 0 || b.bottom > innerHeight || b.right > vw) continue;
+      const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      if (top !== eb && !eb.contains(top)) resp.push('edit overlay button is covered by ' + short(top || document.body));
+    }
+    const nameOf = (el) => {
+      const lb = el.getAttribute("aria-labelledby");
+      if (lb) return lb.split(/\s+/).map((i) => (document.getElementById(i) ? document.getElementById(i).textContent : "")).join(" ").trim();
+      const al = el.getAttribute("aria-label");
+      if (al && al.trim()) return al.trim();
+      if (el.labels && el.labels.length) return [...el.labels].map((l) => l.textContent).join(" ").trim();
+      if (el.tagName === "INPUT" && ["submit", "button", "reset"].includes(el.type)) return el.value;
+      let t = "";
+      const walk = (n) => { if (n.nodeType === 3) t += n.textContent; else if (n.nodeType === 1) { if (n.getAttribute("aria-hidden") === "true") return; if (n.tagName === "IMG") t += n.getAttribute("alt") || ""; n.childNodes.forEach(walk); } };
+      walk(el);
+      return t.trim() || (el.getAttribute("title") || "").trim();
+    };
+    for (const el of ix) {
+      if (!nameOf(el)) a11y.push("no accessible name: " + short(el));
+    }
+    for (const img of root.querySelectorAll("img")) if (shown(img) && !img.hasAttribute("alt")) a11y.push("img without alt: " + img.getAttribute("src"));
+    const ids = {};
+    for (const el of root.querySelectorAll("[id]")) { if (ids[el.id]) a11y.push("duplicate id " + el.id); ids[el.id] = 1; }
+    for (const el of root.querySelectorAll("[aria-labelledby],[aria-controls]")) {
+      for (const attr of ["aria-labelledby"]) { const v = el.getAttribute(attr); if (v && v.split(/\s+/).some((i) => !document.getElementById(i))) a11y.push(attr + " points at a missing id: " + short(el)); }
+    }
+    const txt = root.innerText || "";
+    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
+    if (keyLeak) a11y.push("raw translation key visible: " + keyLeak[0]);
+    if (/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/.test(txt)) a11y.push("placeholder/undefined text visible: " + (txt.match(/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/) || [""])[0]);
+    if (!rootSel) {
+      if (document.querySelectorAll("h1").length !== 1) a11y.push("h1 count is " + document.querySelectorAll("h1").length);
+      if (document.querySelectorAll("main").length !== 1) a11y.push("main landmark count is " + document.querySelectorAll("main").length);
+    }
+    if (ja) {
+      const asciiOnly = (v) => v && /[A-Za-z]{3,}/.test(v) && !/[^\x00-\x7F]/.test(v) && !/ZZ|@|https?:|[.][.][.]/.test(v);
+      for (const el of root.querySelectorAll("[aria-label],[title],[placeholder],img[alt]")) {
+        if (!shown(el)) continue;
+        for (const attr of ["aria-label", "title", "placeholder", "alt"]) { const v = el.getAttribute(attr); if (asciiOnly(v)) a11y.push("English " + attr + " in Japanese UI: " + v); }
+      }
+      for (const el of root.querySelectorAll("button, label, legend, th, .btn, .chip")) {
+        if (!shown(el) || el.querySelector("*:not(svg):not(path):not(span)")) continue;
+        const v = (el.innerText || "").trim();
+        if (asciiOnly(v) && !/^(EN|JA|FAQ|CSV|PDF|ID|URL)$/.test(v)) a11y.push("English control text in Japanese UI: " + v);
+      }
+    }
+    return { resp: [...new Set(resp)], a11y: [...new Set(a11y)] };
+  }
+  const p15Settle = async () => { let last = null, same = 0; for (let i = 0; i < 40 && same < 3; i++) { const y = await ev(`Math.round(window.scrollY) + '/' + document.documentElement.scrollHeight`); same = y === last ? same + 1 : 0; last = y; await sleep(60); } };
+  const p15Ready = async (p) => {
+    if (process.env.P15_LOG) console.log("  .. page " + p);
+    await go(p);
+    await navReady();
+    await waitFor(`!document.querySelector('[aria-busy="true"]')`, 8000);
+    await sleep(300);
+  };
+  // Tab through the page: every stop must be visible, named, ringed, not covered, and reachable in DOM order.
+  const p15TabWalk = async (max) => {
+    const bad = [];
+    const seen = new Set();
+    await ev(`(() => { if (document.activeElement) document.activeElement.blur(); window.scrollTo(0, 0); window.__p15c = window.__p15c || 0; })()`);
+    let stops = 0;
+    for (let i = 0; i < max; i++) {
+      await tab(false);
+      await p15Settle();
+      const info = await ev(`(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body) return { body: true };
+        if (!a.__p15) a.__p15 = ++window.__p15c;
+        const b = a.getBoundingClientRect();
+        const s = getComputedStyle(a);
+        const top = document.elementFromPoint(Math.min(Math.max(b.left + b.width / 2, 0), innerWidth - 1), Math.min(Math.max(b.top + b.height / 2, 0), innerHeight - 1));
+        const nm = (a.getAttribute('aria-label') || (a.labels && a.labels[0] && a.labels[0].textContent) || a.textContent || a.getAttribute('title') || '').trim();
+        return { id: a.__p15, d: a.tagName.toLowerCase() + (a.className && typeof a.className === 'string' ? '.' + a.className.trim().split(/\\s+/)[0] : '') + '"' + nm.slice(0, 20) + '"', visible: b.width > 0 && b.height > 0 && !a.closest('[hidden]'), named: !!nm, ring: [a, a.parentElement, a.closest('.card, .gallery-tile, .topic-row, .conversation-item, .notification-item, article, li')].some((x) => { if (!x) return false; const y = getComputedStyle(x); return (y.outlineStyle !== 'none' && parseFloat(y.outlineWidth) >= 2) || (y.boxShadow && y.boxShadow !== 'none'); }), cov: top ? (top.tagName.toLowerCase() + '.' + String(top.className).split(' ')[0]) : 'none', covered: !(top === a || a.contains(top)), inView: b.right <= innerWidth + 1 && b.left >= -1 };
+      })()`);
+      if (info.body) break;
+      if (seen.has(info.id)) break;
+      seen.add(info.id);
+      stops++;
+      if (!info.visible) bad.push("focus on an invisible element " + info.d);
+      if (!info.named) bad.push("focus on an unnamed element " + info.d);
+      if (!info.ring) bad.push("no visible focus indicator on " + info.d);
+      if (info.visible && info.covered) bad.push("focused element covered by " + info.cov + " : " + info.d);
+      if (info.visible && !info.inView) bad.push("focused element off-screen horizontally " + info.d);
+    }
+    return { stops, bad: [...new Set(bad)] };
+  };
+  // Open a dialog with a REAL click, then check semantics, fit, trap, Escape and focus return.
+  const p15Dialog = async (tag, sel, idx, ja) => {
+    if (process.env.P15_LOG) console.log("  .. dialog " + tag);
+    const marked = await ev(`(() => { const el = document.querySelectorAll(${JSON.stringify(sel)})[${idx}]; if (!el) return false; el.scrollIntoView({ block: 'center' }); el.setAttribute('data-p15-op', '1'); return true; })()`);
+    if (!marked) return null;
+    await sleep(150);
+    const jsBefore = P15.jsDialogs.length;
+    await p15Settle();
+    await clickEl("[data-p15-op]");
+    const opened = await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 1500);
+    if (!opened && P15.jsDialogs.length > jsBefore) {
+      const msg = P15.jsDialogs[P15.jsDialogs.length - 1];
+      const hasJa = /[぀-ヿ一-鿿]/.test(msg);
+      check(`${tag}: opens a native confirm() (cancelled) whose message is in the active language`, ja ? hasJa : !hasJa, msg);
+      await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op'))`);
+      return true;
+    }
+    check(`${tag}: the dialog opens from a real click`, opened);
+    if (!opened) { await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op'))`); return false; }
+    await sleep(200);
+    const m = await ev(`(() => {
+      const d = document.querySelector('.modal[role="dialog"]'); const b = d.getBoundingClientRect(); const vw = document.documentElement.clientWidth; const vh = innerHeight;
+      const sc = (e) => ['auto', 'scroll'].includes(getComputedStyle(e).overflowY);
+      const c = d.querySelector('.modal__close'); const cb = c && c.getBoundingClientRect();
+      const title = document.getElementById(d.getAttribute('aria-labelledby') || '__none');
+      return { title: title ? title.textContent.trim() : '', modal: d.getAttribute('aria-modal') === 'true', focusIn: d.contains(document.activeElement), fitsX: b.left >= -0.5 && b.right <= vw + 0.5, fitsY: b.top >= -0.5 && (b.bottom <= vh + 0.5 || sc(d) || sc(d.parentElement)), inner: d.scrollWidth - d.clientWidth, closeOk: !!c && !!c.getAttribute('aria-label') && cb.top >= -0.5 && cb.bottom <= vh + 0.5 && cb.right <= vw + 0.5, locked: getComputedStyle(document.body).overflow === 'hidden' };
+    })()`);
+    check(`${tag}: role=dialog + aria-modal, named by a non-empty title, focus moved inside, page scroll locked, close button named and in view`, m.title.length > 0 && m.modal && m.focusIn && m.locked && m.closeOk, JSON.stringify(m));
+    if (!(m.title.length > 0 && m.modal && m.focusIn && m.locked && m.closeOk && m.fitsX && m.fitsY && m.inner <= 1)) await shot("p15-fail-" + tag.replace(/[^a-z0-9]+/gi, "-").slice(0, 80));
+    check(`${tag}: the dialog fits the viewport (no horizontal spill, no internal horizontal overflow; tall dialogs scroll internally)`, m.fitsX && m.fitsY && m.inner <= 1, JSON.stringify(m));
+    const au = await p15Audit(".modal", ja);
+    check(`${tag}: dialog contents -- no clipped/overlapping text, every control named`, au.resp.length === 0 && au.a11y.length === 0, [...au.resp, ...au.a11y].slice(0, 4).join(" | "));
+    const n = await ev(`document.querySelector('.modal[role="dialog"]').querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])').length`);
+    let trapped = true;
+    for (let i = 0; i < n + 2; i++) { await tab(false); if (!(await ev(`document.querySelector('.modal[role="dialog"]').contains(document.activeElement)`))) trapped = false; }
+    for (let i = 0; i < 3; i++) { await tab(true); if (!(await ev(`document.querySelector('.modal[role="dialog"]').contains(document.activeElement)`))) trapped = false; }
+    check(`${tag}: Tab / Shift+Tab stay trapped inside the dialog (${n} focusable)`, trapped);
+    await press("esc");
+    const closed = await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000);
+    const back = await ev(`document.activeElement && document.activeElement.hasAttribute('data-p15-op')`);
+    check(`${tag}: Escape closes it, the page scrolls again, and focus returns to the control that opened it`, closed && back && (await ev(`getComputedStyle(document.body).overflow !== 'hidden'`)), `closed=${closed} back=${back}`);
+    await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op'))`);
+    return true;
+  };
+  // PNG generator (no deps): w x h gradient, so the lightbox has a real, sizeable image.
+  const p15Png = (w, h) => {
+    const zlib = require("node:zlib");
+    const crcT = new Int32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
+    const crc = (buf) => { let c = -1; for (const b of buf) c = crcT[(c ^ b) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+    const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const raw = Buffer.alloc((w * 3 + 1) * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1); raw[o] = 0; raw[o + 1 + x * 3] = (x * 255 / w) | 0; raw[o + 2 + x * 3] = (y * 255 / h) | 0; raw[o + 3 + x * 3] = 128; }
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+  };
+
+  await step("i18n sweep: seed extra fixtures (conversation, notifications, gallery, long text)", async () => {
+    const asClient = async (email, pw) => { const c = new Client(); await c.req("POST", "/auth/login", { email, password: pw }); return c; };
+    const adm = await asClient(ADMIN.email, ADMIN.password);
+    const plainC = await asClient(D.plain.email, PW);
+    const leadC = await asClient(D.lead.email, PW);
+    const LONG_JA = "超長い日本語のタイトルがレイアウトを壊さないことを確認するためのテスト用の非常に長い文章です。";
+    const LONG_TOKEN = "ZZP15" + "x".repeat(70);
+    Object.assign(P15, { plainC, leadC, adm, LONG_JA, LONG_TOKEN, jsDialogs: [] });
+    ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } });
+    const conv = await plainC.req("POST", "/messages/conversations", { teamMemberId: D.lead.tmId });
+    P15.convId = conv.json?.id;
+    await leadC.req("POST", `/messages/conversations/${P15.convId}/messages`, { body: "ZZ P15 " + LONG_JA });
+    await plainC.req("POST", `/messages/conversations/${P15.convId}/messages`, { body: "ZZ P15 own message " + LONG_TOKEN });
+    await plainC.req("POST", `/messages/conversations/${P15.convId}/messages`, { body: "ZZ P15 " + LONG_JA + "\n二行目もあります。" });
+    await leadC.req("POST", `/messages/conversations/${P15.convId}/messages`, { body: "ZZ P15 reply from lead" });
+    const upload = async (client, caption, category, visibility, w, h) => {
+      const fd = new FormData();
+      fd.append("file", new Blob([p15Png(w, h)], { type: "image/png" }), "p15.png");
+      fd.append("caption", caption); fd.append("category", category);
+      if (visibility) fd.append("visibility", visibility);
+      const res = await fetch(`${API}/api/gallery`, { method: "POST", headers: { cookie: client.cookie }, body: fd });
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    const g1 = await upload(plainC, "ZZ P15 " + LONG_JA, "LAB_LIFE", null, 1200, 800);
+    const g2 = await upload(plainC, "ZZ P15 photo two", "EVENT", null, 600, 900);
+    const g3 = await upload(adm, "ZZ P15 public photo", "RESEARCH", "PUBLIC", 900, 600);
+    check("p15 setup: two member gallery uploads and one public admin upload succeeded (multipart)", g1.status === 201 && g2.status === 201 && g3.status === 201, `${g1.status}/${g2.status}/${g3.status}`);
+    await adm.req("POST", "/news", { date: "Jan 2034", sortDate: "2034-01-01", type: "Paper", title: "ZZ P15 " + LONG_JA + LONG_JA, description: LONG_TOKEN, visibility: "PUBLIC" });
+    await adm.req("POST", "/publications", { year: 2034, title: "ZZ P15 " + LONG_JA, authors: LONG_TOKEN, venue: "v", visibility: "PUBLIC" });
+    const cat = D.fCatPub.slug ? D.fCatPub : null;
+    const ft = await plainC.req("POST", "/forum/posts", { categoryId: D.fCatPub.id, title: "ZZ P15 " + LONG_JA, body: "ZZ P15 body " + LONG_TOKEN });
+    P15.fLong = ft.json;
+    check("p15 setup: conversation, long-text news/publication and forum topic seeded", !!P15.convId && !!P15.fLong?.id && !!cat, `conv=${P15.convId} topic=${P15.fLong?.id}`);
+  });
+
+  await step("i18n sweep: English breadcrumbs keep their pre-localization wording (localization must not change English)", async () => {
+    await desktop();
+    await go("/");
+    await ev(`localStorage.removeItem('scl.locale')`);
+    for (const [label, p, first] of [["project detail", `/projects/${D.p1.id}`, "projects"], ["group detail", `/groups/${D.gPub.id}`, "groups"], ["member detail", `/team/${D.lead.tmId}`, "team"], ["forum topic", `/community/forum/topic/${D.fTopic.id}`, "community"]]) {
+      await p15Ready(p);
+      const crumbs = await ev(`[...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim().toLowerCase())`);
+      check(`p15 en breadcrumb ${label}: starts "Home / ${first}" (English wording unchanged by localization)`, crumbs[0] === "home" && crumbs[1] === first, JSON.stringify(crumbs));
+    }
+  });
+
+  const p15Loop = async (userKey, loginFn, pages, perCombo) => {
+    if (process.env.P15_USERS && !process.env.P15_USERS.split(",").includes(userKey)) return;
+    for (const loc of ["en", "ja"]) {
+      await go("/");
+      await ev(`localStorage.setItem('scl.locale','${loc}')`);
+      if (loginFn) check(`p15 ${userKey} ${loc}: login`, await loginFn());
+      for (const w of P15_WIDTHS) {
+        await p15Vp(w);
+        for (const [label, p] of pages) {
+          await p15Ready(p);
+          check(`p15 ${loc} ${w}px ${userKey} ${label}: <html lang> matches the chosen language`, (await ev(`document.documentElement.lang`)) === loc);
+          const au = await p15Audit(null, loc === "ja");
+          check(`p15 ${loc} ${w}px ${userKey} ${label}: responsive -- no horizontal overflow, clipped/spilling text or overlapping controls`, au.resp.length === 0, au.resp.slice(0, 4).join(" | "));
+          check(`p15 ${loc} ${w}px ${userKey} ${label}: accessibility -- named controls, one h1/main, no raw keys, no untranslated aria/labels`, au.a11y.length === 0, au.a11y.slice(0, 4).join(" | "));
+        }
+        if (perCombo) await perCombo(loc, w);
+      }
+      if (loginFn) await logout();
+    }
+    await ev(`localStorage.removeItem('scl.locale')`);
+    await desktop();
+  };
+
+  await step("i18n sweep: guest -- public pages, dialogs-free surfaces, language switcher, keyboard", async () => {
+    const pages = [["home", "/"], ["research", "/research"], ["projects", "/projects"], ["project detail", `/projects/${D.p1.id}`], ["groups", "/groups"], ["group detail", `/groups/${D.gPub.id}`], ["team", "/team"], ["member detail", `/team/${D.lead.tmId}`], ["publications", "/publications"], ["news", "/news"], ["search results", "/search?q=FPGA"], ["search landing", "/search"], ["contact", "/contact"], ["login", "/login"], ["forum index", "/community/forum"], ["forum category", `/community/forum/category/${D.fCatPub.slug}`], ["forum topic", `/community/forum/topic/${D.fTopic.id}`], ["forum long topic", `/community/forum/topic/${P15.fLong?.id}`], ["gallery (public)", "/gallery"], ["schedule (guest bounce -> login)", "/schedule"], ["404", "/no-such-page-p15"]];
+    await p15Loop("guest", null, pages, async (loc, w) => {
+      const tag = `p15 ${loc} ${w}px language switcher`;
+      await p15Ready("/contact");
+      const ham = await ev(`getComputedStyle(document.querySelector('.nav__hamburger')).display !== 'none'`);
+      if (ham && !(await openPhoneMenu())) check(`${tag}: hamburger opens`, false);
+      const sw = await ev(`(() => { const t = document.querySelector('.lang-switch > .nav__trigger'); if (!t) return null; const b = t.getBoundingClientRect(); return { name: t.textContent.trim(), exp: t.getAttribute('aria-expanded'), inView: b.width > 0 && b.left >= 0 && b.right <= innerWidth, ctl: !!document.getElementById(t.getAttribute('aria-controls')) }; })()`);
+      check(`${tag}: the trigger is visible, in the viewport, named, collapsed and controls a real panel${ham ? " (inside the open hamburger menu)" : ""}`, !!sw && sw.name.length > 0 && sw.inView && sw.exp === "false" && sw.ctl, JSON.stringify(sw));
+      await focusSel(".lang-switch > .nav__trigger");
+      await press("enter");
+      const opened = await ev(`document.querySelector('.lang-switch > .nav__trigger').getAttribute('aria-expanded') === 'true'`);
+      const panel = await ev(`(() => { const p = document.querySelector('.lang-switch__panel'); const bs = [...p.querySelectorAll('button')]; return { n: bs.length, vis: bs.every((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.left >= 0 && b.right <= innerWidth && b.height >= 28; }), hit: bs.every((x) => { const b = x.getBoundingClientRect(); const t = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return x === t || x.contains(t); }), named: bs.every((x) => x.textContent.trim().length > 0), cur: bs.filter((x) => x.getAttribute('aria-current') === 'true').length, label: !!p.getAttribute('aria-label') }; })()`);
+      check(`${tag}: Enter opens it; both language options are in view, hittable, named, exactly one marked current`, opened && panel.n === 2 && panel.vis && panel.hit && panel.named && panel.cur === 1 && panel.label, JSON.stringify(panel));
+      await press("esc");
+      check(`${tag}: Escape closes it and returns focus to the trigger`, (await ev(`document.querySelector('.lang-switch > .nav__trigger').getAttribute('aria-expanded')`)) === "false" && (await ev(`document.activeElement === document.querySelector('.lang-switch > .nav__trigger')`)));
+      await focusSel(".lang-switch > .nav__trigger");
+      await press("enter");
+      const other = loc === "en" ? "ja" : "en";
+      const idx = await ev(`[...document.querySelectorAll('.lang-switch__panel button')].findIndex((b) => b.getAttribute('aria-current') !== 'true')`);
+      await ev(`document.querySelectorAll('.lang-switch__panel button')[${idx}].focus()`);
+      await press("enter");
+      await sleep(250);
+      check(`${tag}: choosing the other language from the keyboard switches <html lang>, persists it, closes the panel and returns focus to the trigger`, (await ev(`document.documentElement.lang`)) === other && (await ev(`localStorage.getItem('scl.locale')`)) === other && (await ev(`document.querySelector('.lang-switch > .nav__trigger').getAttribute('aria-expanded')`)) === "false" && (await ev(`document.activeElement === document.querySelector('.lang-switch > .nav__trigger')`)));
+      const au2 = await p15Audit(null, other === "ja");
+      check(`${tag}: after the live switch (no reload) the same page is still clean (${other})`, au2.resp.length === 0 && au2.a11y.length === 0, [...au2.resp, ...au2.a11y].slice(0, 3).join(" | "));
+      await ev(`localStorage.setItem('scl.locale','${loc}')`);
+      if (P15_TAB_WIDTHS.includes(w)) {
+        for (const [lbl, p] of [["home", "/"], ["contact", "/contact"], ["forum topic", `/community/forum/topic/${D.fTopic.id}`]]) {
+          await p15Ready(p);
+          const tw = await p15TabWalk(60);
+          check(`p15 ${loc} ${w}px keyboard ${lbl} (guest): Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 5 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | "));
+        }
+      }
+    });
+  });
+
+  await step("i18n sweep: member -- profile, messages, notifications, gallery, lightbox, forum, dialogs", async () => {
+    const pages = [["profile", "/profile"], ["messages list", "/messages"], ["conversation", `/messages/${P15.convId}`], ["notifications", "/notifications"], ["gallery", "/gallery"], ["schedule", "/schedule"], ["forum topic", `/community/forum/topic/${D.fTopic.id}`], ["forum long topic", `/community/forum/topic/${P15.fLong?.id}`], ["search (member)", "/search?q=ZZ"], ["own member detail", `/team/${D.plain.tmId}`]];
+    await p15Loop("member", () => login(D.plain.email, PW), pages, async (loc, w) => {
+      const ja = loc === "ja";
+      const T = `p15 ${loc} ${w}px`;
+      // --- gallery: upload dialog + lightbox
+      await p15Ready("/gallery");
+      await p15Dialog(`${T} gallery upload dialog`, ".page-header .btn--primary, .page-header button.btn--primary", 0, ja);
+      const tiles = await ev(`document.querySelectorAll('.gallery-tile__btn').length`);
+      check(`${T} gallery: the member's uploads are listed (${tiles})`, tiles >= 2);
+      if (tiles >= 2) {
+        await ev(`document.querySelectorAll('.gallery-tile__btn')[0].scrollIntoView({ block: 'center' }); document.querySelectorAll('.gallery-tile__btn')[0].setAttribute('data-p15-op', '1')`);
+        await sleep(150);
+        await p15Settle();
+    await clickEl("[data-p15-op]");
+        const lbOpen = await waitFor(`!!document.querySelector('.lightbox__img')`, 4000);
+        await waitFor(`document.querySelector('.lightbox__img') && document.querySelector('.lightbox__img').complete && document.querySelector('.lightbox__img').naturalWidth > 0`, 4000);
+        const lb = await ev(`(() => { const d = document.querySelector('.modal[role="dialog"]'); if (!d) return null; const i = document.querySelector('.lightbox__img'); const ib = i.getBoundingClientRect(); const db = d.getBoundingClientRect(); const vw = document.documentElement.clientWidth; const nav = [...document.querySelectorAll('.lightbox__nav button')]; const sc = (e) => ['auto', 'scroll'].includes(getComputedStyle(e).overflowY); return { title: document.getElementById(d.getAttribute('aria-labelledby')).textContent.trim(), alt: i.getAttribute('alt'), imgIn: ib.left >= -0.5 && ib.right <= vw + 0.5 && ib.width > 40, dlgIn: db.left >= -0.5 && db.right <= vw + 0.5 && (db.bottom <= innerHeight + 0.5 || sc(d) || sc(d.parentElement)), navN: nav.length, navNamed: nav.every((b) => !!b.getAttribute('aria-label')), inner: d.scrollWidth - d.clientWidth, focusIn: d.contains(document.activeElement), meta: [...document.querySelectorAll('.lightbox__meta *')].every((e) => e.getBoundingClientRect().right <= vw + 0.5) }; })()`);
+        check(`${T} lightbox: opens as a named dialog with focus inside, an image with alt text, and named Previous/Next buttons`, lbOpen && !!lb && lb.title.length > 0 && lb.alt && lb.alt.length > 0 && lb.focusIn && lb.navN === 2 && lb.navNamed, JSON.stringify(lb));
+        check(`${T} lightbox: the image, dialog and metadata all fit the viewport (no horizontal overflow)`, !!lb && lb.imgIn && lb.dlgIn && lb.inner <= 1 && lb.meta, JSON.stringify(lb));
+        const au = await p15Audit(".modal", ja);
+        check(`${T} lightbox: no clipped/overlapping text, all controls named`, au.resp.length === 0 && au.a11y.length === 0, [...au.resp, ...au.a11y].slice(0, 3).join(" | "));
+        const t0 = await ev(`document.querySelector('.modal h2').textContent`);
+        await press("esc"); // close, reopen the SECOND to test arrows both ways
+        await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000);
+        const back = await ev(`document.activeElement && document.activeElement.hasAttribute('data-p15-op')`);
+        check(`${T} lightbox: Escape closes it and focus returns to the photo that opened it`, back);
+        await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op')); document.querySelectorAll('.gallery-tile__btn')[0].setAttribute('data-p15-op', '1')`);
+        await p15Settle();
+    await clickEl("[data-p15-op]");
+        await waitFor(`!!document.querySelector('.lightbox__img')`, 3000);
+        await sleep(150);
+        await press("right");
+        await sleep(200);
+        const t1 = await ev(`document.querySelector('.modal h2') ? document.querySelector('.modal h2').textContent : ''`);
+        await press("left");
+        await sleep(200);
+        const t2 = await ev(`document.querySelector('.modal h2') ? document.querySelector('.modal h2').textContent : ''`);
+        check(`${T} lightbox: ArrowRight moves to the next photo and ArrowLeft back, keeping the dialog open`, t1 !== "" && t1 !== t0 && t2 === t0, `${t0} / ${t1} / ${t2}`);
+        const trapN = await ev(`document.querySelector('.modal[role="dialog"]').querySelectorAll('a[href], button:not([disabled])').length`);
+        let trapped = true;
+        for (let i = 0; i < trapN + 2; i++) { await tab(false); if (!(await ev(`document.querySelector('.modal[role="dialog"]') && document.querySelector('.modal[role="dialog"]').contains(document.activeElement)`))) trapped = false; }
+        check(`${T} lightbox: Tab stays trapped inside`, trapped);
+        await press("esc");
+        await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000);
+        await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op'))`);
+      }
+      // gallery edit/delete icon buttons (own items): named + delete confirm dialog
+      const own = await ev(`document.querySelectorAll('.gallery-tile .card-edit-btn .icon-btn').length`);
+      check(`${T} gallery: icon-only edit/delete buttons exist on own photos and each has an aria-label (${own})`, own >= 2 && (await ev(`[...document.querySelectorAll('.gallery-tile .card-edit-btn .icon-btn')].every((b) => (b.getAttribute('aria-label') || '').trim().length > 0)`)));
+      await p15Dialog(`${T} gallery edit-photo dialog`, ".gallery-tile .card-edit-btn .icon-btn:not(.icon-btn--danger)", 0, ja);
+      await p15Dialog(`${T} gallery delete-confirm dialog (cancelled)`, ".gallery-tile .card-edit-btn .icon-btn--danger", 0, ja);
+
+      // --- messaging
+      await p15Ready(`/messages/${P15.convId}`);
+      const msg = await ev(`(() => { const ta = document.getElementById('message-composer-body'); const f = ta.closest('form'); const s = f.querySelector('.form-submit'); return { labelled: ta.labels.length === 1 && ta.labels[0].textContent.trim().length > 0, formNamed: !!f.getAttribute('aria-label'), sendDisabledWhenEmpty: s.disabled, sendNamed: s.textContent.trim().length > 0, rows: document.querySelectorAll('.message-row').length }; })()`);
+      check(`${T} messages: composer textarea is labelled, the form is named, Send is named and disabled while empty`, msg.labelled && msg.formNamed && msg.sendDisabledWhenEmpty && msg.sendNamed, JSON.stringify(msg));
+      await focusSel("#message-composer-body");
+      await setVal("message-composer-body", `ZZ P15 ${loc} ${w} ` + (ja ? "こんにちは、テストメッセージです。" : "hello") + " " + P15.LONG_TOKEN.slice(0, 40));
+      await sleep(100);
+      await press("enter");
+      const sent = await waitFor(`document.querySelectorAll('.message-row').length === ${msg.rows + 1}`, 4000);
+      check(`${T} messages: Enter in the composer sends the message, appends it, and empties the box`, sent && (await ev(`document.getElementById('message-composer-body').value`)) === "");
+      const au = await p15Audit(null, ja);
+      check(`${T} messages: after sending, the page is still overflow/clip/overlap-free and every control named`, au.resp.length === 0 && au.a11y.length === 0, [...au.resp, ...au.a11y].slice(0, 3).join(" | "));
+      await ev(`document.querySelector('.message-row--mine .comment__actions .btn--link').scrollIntoView({ block: 'center' })`);
+      await ev(`document.querySelector('.message-row--mine .comment__actions .btn--link').click()`);
+      const ed = await ev(`(() => { const t = document.querySelector('.message-row--mine textarea[id^="message-edit-"]'); return t ? { labelled: t.labels.length === 1 && t.labels[0].textContent.trim().length > 0, focusable: !t.disabled } : null; })()`);
+      check(`${T} messages: Edit swaps in a labelled textarea with Save / Cancel`, !!ed && ed.labelled && ed.focusable, JSON.stringify(ed));
+      await ev(`(() => { const b = [...document.querySelectorAll('.message-row--mine .comment__actions button')].find((x) => x.classList.contains('btn--secondary')); if (b) b.click(); })()`);
+      await sleep(150);
+      await p15Dialog(`${T} messages delete-confirm dialog (cancelled)`, ".message-row--mine .comment__actions .btn--link:nth-child(2)", 0, ja);
+
+      // --- notifications (a fresh unread each iteration)
+      await P15.leadC.req("POST", `/messages/conversations/${P15.convId}/messages`, { body: `ZZ P15 ping ${loc} ${w}` });
+      await P15.leadC.req("POST", `/messages/conversations/${P15.convId}/messages`, { body: `ZZ P15 pong ${loc} ${w}` });
+      await p15Ready("/notifications");
+      const nf = await ev(`(() => { const items = [...document.querySelectorAll('.notification-item')]; const links = document.querySelectorAll('.notification-item a, a.notification-item'); return { items: items.length, unread: document.querySelectorAll('.notification-item__dot').length, srUnread: [...document.querySelectorAll('.notification-item__dot')].every((d) => !!d.closest('.notification-item, li, a').querySelector('.sr-only')), mark: !!document.querySelector('.page-header .btn, .page-header button') }; })()`);
+      check(`${T} notifications: items render, unread ones carry screen-reader text (not the dot alone), and the mark-all control exists`, nf.items >= 1 && nf.unread >= 1 && nf.srUnread && nf.mark, JSON.stringify(nf));
+      const badge = await ev(`(() => { const nb = document.querySelector('.notification-badge'); return nb ? { aria: nb.getAttribute('aria-hidden'), text: nb.textContent } : null; })()`);
+      check(`${T} notifications: the unread count badge exists in the menu as text (decorative dot is aria-hidden)`, !badge || badge.aria === "true" && /\d/.test(badge.text), JSON.stringify(badge));
+      const tw0 = await ev(`(() => { const as = [...document.querySelectorAll('.notification-item a, a.notification-item')]; const a = as[as.length - 1]; if (!a) return null; a.focus(); return a.getAttribute('href'); })()`);
+      await press("enter");
+      check(`${T} notifications: Enter on a focused notification opens its target (${tw0})`, !!tw0 && (await waitFor(`location.pathname === ${JSON.stringify(tw0)}`, 4000)));
+      await p15Ready("/notifications");
+      const marked = await ev(`(() => { const b = document.querySelector('.page-header button'); if (!b) return false; b.scrollIntoView({ block: 'center' }); return true; })()`);
+      if (marked) {
+        await ev(`document.querySelector('.page-header button').setAttribute('data-p15-op', '1')`);
+        await p15Settle();
+    await clickEl("[data-p15-op]");
+      }
+      check(`${T} notifications: the mark-all-read button really clears every unread marker`, marked && (await waitFor(`document.querySelectorAll('.notification-item__dot').length === 0`, 4000)));
+      await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op'))`);
+
+      // --- forum topic controls
+      await p15Ready(`/community/forum/topic/${D.fTopic.id}`);
+      const fr = await ev(`(() => { const ta = document.getElementById('comment-composer-body'); const rb = [...document.querySelectorAll('.reaction-btn')]; return { taLabel: !!ta && ta.labels.length === 1 && ta.labels[0].textContent.trim().length > 0, rn: rb.length, rNamed: rb.every((b) => b.textContent.trim().length > 0 && b.hasAttribute('aria-pressed')), grp: !!document.querySelector('.reaction-bar[aria-label]') }; })()`);
+      check(`${T} forum: reaction group is named, every reaction button has text + aria-pressed, and the comment box is labelled`, fr.taLabel && fr.rn >= 1 && fr.rNamed && fr.grp, JSON.stringify(fr));
+      if (fr.rn >= 1) {
+        const before = await ev(`document.querySelector('.reaction-btn').getAttribute('aria-pressed')`);
+        await ev(`document.querySelector('.reaction-btn').scrollIntoView({ block: 'center' }); document.querySelector('.reaction-btn').setAttribute('data-p15-op', '1')`);
+        await p15Settle();
+    await clickEl("[data-p15-op]");
+        await sleep(500);
+        const after = await ev(`document.querySelector('.reaction-btn').getAttribute('aria-pressed')`);
+        check(`${T} forum: a real click toggles a reaction (aria-pressed flips)`, before !== after, `${before} -> ${after}`);
+        await p15Settle();
+    await clickEl("[data-p15-op]");
+        await sleep(400);
+        await ev(`document.querySelectorAll('[data-p15-op]').forEach((e) => e.removeAttribute('data-p15-op'))`);
+      }
+      await focusSel("#comment-composer-body");
+      await setVal("comment-composer-body", `ZZ P15 ${loc} ${w} ` + (ja ? "コメントのテストです" : "a comment") + " " + P15.LONG_TOKEN.slice(0, 40));
+      await sleep(100);
+      await ev(`document.querySelector('#comment-composer-body').form.requestSubmit()`);
+      const posted = await waitFor(`document.body.innerText.includes(${JSON.stringify(`ZZ P15 ${loc} ${w} `)})`, 4000);
+      check(`${T} forum: posting a comment shows it in the list`, posted);
+      const au3 = await p15Audit(null, ja);
+      check(`${T} forum: with the new comment (long unbroken token) there is no overflow/clipping/overlap and every control is named`, au3.resp.length === 0 && au3.a11y.length === 0, [...au3.resp, ...au3.a11y].slice(0, 3).join(" | "));
+      await p15Dialog(`${T} forum delete-comment confirm dialog (cancelled)`, ".comment__actions .btn--link:nth-child(2)", 0, ja);
+      await p15Ready("/community/forum");
+      await p15Dialog(`${T} forum new-topic dialog`, ".admin-bar .btn--primary", 0, ja);
+      // --- keyboard walks
+      if (P15_TAB_WIDTHS.includes(w)) {
+        for (const [lbl, p] of [["profile", "/profile"], ["gallery", "/gallery"], ["conversation", `/messages/${P15.convId}`], ["notifications", "/notifications"], ["forum topic", `/community/forum/topic/${D.fTopic.id}`]]) {
+          await p15Ready(p);
+          const tw = await p15TabWalk(70);
+          check(`${T} keyboard ${lbl} (member): Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 5 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | "));
+        }
+      }
+    });
+  });
+
+  await step("i18n sweep: admin -- dashboard, management pages, form/link/members/history dialogs, moderation", async () => {
+    const pages = [["admin dashboard", "/admin"], ["research", "/research"], ["projects", "/projects"], ["project detail", `/projects/${D.p1.id}`], ["groups", "/groups"], ["group detail", `/groups/${D.gPub.id}`], ["team", "/team"], ["member detail", `/team/${D.lead.tmId}`], ["publications", "/publications"], ["news", "/news"], ["gallery", "/gallery"], ["forum index", "/community/forum"], ["forum topic (moderation)", `/community/forum/topic/${D.fTopic.id}`], ["search", "/search?q=ZZ"], ["notifications", "/notifications"], ["messages", "/messages"]];
+    const dialogPages = [["research", "/research"], ["projects", "/projects"], ["project detail", `/projects/${D.p1.id}`], ["groups", "/groups"], ["group detail", `/groups/${D.gPub.id}`], ["team", "/team"], ["member detail", `/team/${D.lead.tmId}`], ["publications", "/publications"], ["news", "/news"], ["forum index", "/community/forum"], ["forum topic", `/community/forum/topic/${D.fTopic.id}`]];
+    await p15Loop("admin", () => login(ADMIN.email, ADMIN.password), pages, async (loc, w) => {
+      const ja = loc === "ja";
+      const dialogSet = P15_TAB_WIDTHS.includes(w) ? dialogPages : dialogPages.filter(([l]) => ["projects", "project detail", "group detail", "member detail", "publications", "news", "forum topic"].includes(l));
+      for (const [lbl, p] of dialogSet) {
+        await p15Ready(p);
+        const T = `p15 ${loc} ${w}px admin ${lbl}`;
+        const forumTopic = lbl === "forum topic";
+        if (forumTopic) {
+          const nb = await ev(`document.querySelectorAll('.admin-bar button').length`);
+          for (const i of nb >= 6 ? [0, 4] : [0]) await p15Dialog(`${T} moderation bar button #${i + 1} dialog`, ".admin-bar button", i, ja);
+        }
+        const sels = forumTopic ? [[".btn--danger.btn--sm", "delete (cancelled)"]] : [[".admin-bar button", "admin-bar action"], [".card-edit-btn .icon-btn:not(.icon-btn--danger)", "card edit/link icon"], [".card-edit-btn .icon-btn--danger, .admin-bar .btn--danger, .btn--danger.btn--sm", "delete (cancelled)"]];
+        for (const [sel, nm] of sels) {
+          const n = await ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+          for (let i = 0; i < Math.min(n, nm === "admin-bar action" ? 3 : 2); i++) {
+            const r = await p15Dialog(`${T} ${nm} #${i + 1} dialog`, sel, i, ja);
+            if (r === false) break;
+            await ev(`window.scrollTo(0, 0)`);
+          }
+        }
+      }
+      if (P15_TAB_WIDTHS.includes(w)) {
+        for (const [lbl, p] of [["admin dashboard", "/admin"], ["projects", "/projects"], ["forum topic (moderation)", `/community/forum/topic/${D.fTopic.id}`]]) {
+          await p15Ready(p);
+          const tw = await p15TabWalk(80);
+          check(`p15 ${loc} ${w}px keyboard ${lbl} (admin): Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 5 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | "));
+        }
+      }
+    });
   });
 
   // ---------------------------------------------------------------- source hygiene (static)
