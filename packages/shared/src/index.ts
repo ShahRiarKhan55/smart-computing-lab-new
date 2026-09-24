@@ -20,3 +20,5 @@ export * from "./schemas/translations.js";
 export * from "./schemas/event.js";
 export * from "./permissions.js";
 export * from "./i18n/index.js";
+
+export * from "./schemas/admin.js";

@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { Actor, TranslationKey } from "@scl/shared";
 import {
+  canAccessAdmin,
+  canBulkChangeVisibility,
   canChangeVisibility,
   canCommentForum,
   canCreateForumTopic,
@@ -11,11 +13,15 @@ import {
   canDeleteContent,
   canDeleteTeamMember,
   canEditProfileView,
+  canLinkAccounts,
   canManageForumCategories,
   canManageTeamPlacement,
+  canManageTranslations,
   canManageUsers,
   canModerate,
   canReactForum,
+  canViewAccountAudit,
+  canViewAuditLog,
   isAdmin,
   isLabManager,
   isManager,
@@ -55,6 +61,13 @@ export function usePolicy() {
       isLabManager: isLabManager(user),
       isManager: isManager(user),
       canManageUsers: canManageUsers(user),
+      /** Phase 17: the admin area (managers and admins); accounts inside it stay admin-only. */
+      canAccessAdmin: canAccessAdmin(user),
+      canBulkChangeVisibility: canBulkChangeVisibility(user),
+      canManageTranslations: canManageTranslations(user),
+      canViewAuditLog: canViewAuditLog(user),
+      canViewAccountAudit: canViewAccountAudit(user),
+      canLinkAccounts: canLinkAccounts(user),
       canChangeVisibility: canChangeVisibility(user),
       canDeleteContent: canDeleteContent(user),
       canCreateProject: canCreateProject(user),

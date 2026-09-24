@@ -142,3 +142,21 @@ export const canCreateEvent = isMember;
 export const canEditEvent = (a: MaybeActor, isOwner: boolean): boolean => isManager(a) || (isMember(a) && isOwner);
 export const canDeleteEvent = canEditEvent;
 export const canLinkEventToProject = isManager;
+
+// ---- admin / CMS (Phase 17) ------------------------------------------------
+// The admin area is a management VIEW over things managers can already do through the ordinary
+// routes, so it adds no new powers: managers (LAB_MANAGER + ADMIN) get the content overview and the
+// content / visibility / translation / community / files sections and the audit log; accounts stay
+// ADMIN-only (`canManageUsers`, above). Private messages and notifications have no admin surface at
+// all. Every rule below is re-checked by the API (`requireCan`), never only in the UI.
+// See docs/architecture/phase17-admin-cms.md.
+export const canAccessAdmin = isManager;
+/** Bulk visibility is the very same rule as changing one record's visibility. */
+export const canBulkChangeVisibility = canChangeVisibility;
+/** Editing Japanese overrides from the admin view; a manager may already edit every translatable entity's own form. */
+export const canManageTranslations = isManager;
+export const canViewAuditLog = isManager;
+/** Account events (entityType USER) and actor emails in the audit log: admin only. */
+export const canViewAccountAudit = isAdmin;
+/** Link or unlink an existing account and a team profile: an account operation, so admin only. */
+export const canLinkAccounts = canManageUsers;

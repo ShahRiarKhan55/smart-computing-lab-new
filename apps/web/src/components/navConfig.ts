@@ -17,6 +17,8 @@ export interface NavContext {
   signedIn: boolean;
   /** From usePolicy(): the same central policy the API enforces. */
   canManageUsers: boolean;
+  /** Managers and admins reach the admin area (Phase 17); the API re-checks every admin request. */
+  canAccessAdmin: boolean;
 }
 
 export interface NavLinkDef {
@@ -79,7 +81,7 @@ export const ACCOUNT_NAV: NavGroupDef = {
     { to: "/profile", labelKey: "nav.myProfile" },
     { to: "/messages", labelKey: "nav.messages" },
     { to: "/notifications", labelKey: "nav.notifications" },
-    { to: "/admin", labelKey: "nav.adminDashboard", when: (ctx) => ctx.canManageUsers },
+    { to: "/admin", labelKey: "nav.adminDashboard", when: (ctx) => ctx.canAccessAdmin },
   ],
 };
 

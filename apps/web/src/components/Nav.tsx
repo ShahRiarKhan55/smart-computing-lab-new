@@ -36,7 +36,7 @@ export function Nav() {
     setOpenGroup(null);
   }
 
-  const ctx = { signedIn: !!user, canManageUsers: policy.canManageUsers };
+  const ctx = { signedIn: !!user, canManageUsers: policy.canManageUsers, canAccessAdmin: policy.canAccessAdmin };
   const entries = resolveNav(MAIN_NAV, ctx);
   const account = user ? resolveGroup(ACCOUNT_NAV, ctx) : null;
   const activeGroup = groupContaining(account ? [...entries, account] : entries, location.pathname);

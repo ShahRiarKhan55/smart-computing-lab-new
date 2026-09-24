@@ -96,6 +96,13 @@ const rows: Row[] = [
   ["canDeleteEvent (not the owner)", (a) => P.canDeleteEvent(a, false), [F, F, T, T]],
   ["canDeleteEvent (is the owner)", (a) => P.canDeleteEvent(a, true), [F, T, T, T]],
   ["canLinkEventToProject", P.canLinkEventToProject, [F, F, T, T]],
+  // Phase 17: admin / CMS. Managers get the content views; accounts and account audit stay ADMIN-only.
+  ["canAccessAdmin", P.canAccessAdmin, [F, F, T, T]],
+  ["canBulkChangeVisibility (same rule as canChangeVisibility)", P.canBulkChangeVisibility, [F, F, T, T]],
+  ["canManageTranslations", P.canManageTranslations, [F, F, T, T]],
+  ["canViewAuditLog", P.canViewAuditLog, [F, F, T, T]],
+  ["canViewAccountAudit (admin only)", P.canViewAccountAudit, [F, F, F, T]],
+  ["canLinkAccounts (admin only, = canManageUsers)", P.canLinkAccounts, [F, F, F, T]],
 ];
 
 const cell = (b: boolean) => (b ? "✔" : "·");

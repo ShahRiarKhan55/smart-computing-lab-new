@@ -6,6 +6,7 @@
 //   ONLY_I18N=1 runs just the Phase 14 localization section (steps named "i18n ...").
 //   ONLY_STEPS=<regex> runs just the steps whose name matches (independent of the ONLY_* flags above).
 //   ONLY_EVENTS=1 runs just the Phase 16 events section (steps named "events ..."; P15_W narrows its widths too).
+//   ONLY_ADMIN=1 runs just the Phase 17 admin/CMS section (steps named "admin ..."; P15_W / P15_USERS=admin-manager,admin-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
 //          Vite on :5180 (`vite --port 5180 --strictPort`), then
 //          node scripts/browser-regression.cjs http://localhost:5180 http://localhost:4001 ./shots
@@ -42,6 +43,7 @@ const ONLY_UI = !!process.env.ONLY_UI;
 const ONLY_FORUM = !!process.env.ONLY_FORUM;
 const ONLY_I18N = !!process.env.ONLY_I18N;
 const ONLY_EVENTS = !!process.env.ONLY_EVENTS;
+const ONLY_ADMIN = !!process.env.ONLY_ADMIN;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -163,7 +165,7 @@ async function connect() {
         const body = r.result?.body;
         if (typeof body !== "string") return;
         bodiesScanned++;
-        if (/\/api\/(auth|users)/.test(url)) return; // own session info / admin-only account list are allowed to carry ids
+        if (/\/api\/(auth|users|admin\/audit)/.test(url)) return; // (an ADMIN's audit rows name the account a USER event is about) // own session info / admin-only account list are allowed to carry ids
         const key = body.match(/"(userId|passwordHash|password|sessionId|sid|token)"\s*:/)?.[1];
         const idHit = D.userIds.find((u) => body.includes(u));
         if (key || idHit) bodyLeaks.push(`${url} -> ${key ? "key " + key : "account id value"}`);
@@ -213,7 +215,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events"))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -508,8 +510,13 @@ async function connect() {
 
     // --- accounts are still admin-only
     check("manager cannot list accounts via the API (403)", (await apiCall("GET", "/users")) === 403 && (await apiCall("PUT", `/users/${D.mem.userId}`, { role: "ADMIN" })) === 403);
+    // Phase 17 test maintenance: the admin area is now a MANAGEMENT view, so a lab manager reaches /admin (and has the
+    // header link) while ACCOUNTS stay admin-only: /admin/people is still bounced and /api/users is still 403 (above).
+    // The old assertion ("manager is bounced from /admin") described the pre-Phase-17 admin-only dashboard.
     await go("/admin"); await sleep(600);
-    check("manager is bounced from /admin and has no Admin link", (await pathNow()) === "/" && !(await text()).includes("Admin") && !(await exists('.nav a[href="/admin"]')));
+    check("manager reaches /admin (Phase 17 management area) and has an Admin link", (await pathNow()) === "/admin" && (await waitText("Admin Dashboard")) && (await exists('.nav a[href="/admin"]')));
+    await go("/admin/people"); await sleep(600);
+    check("manager is still bounced from /admin/people (accounts are admin-only) and the section nav does not offer it", (await pathNow()) === "/" && !(await exists('a[href="/admin/people"]')));
     check("manager can edit another member's profile", await (async () => { await go(`/team/${D.mem.tmId}`); await waitText("ZZ B9 Member"); return (await text()).includes("Edit profile"); })());
     check("manager cannot delete team members (no ✕ on Team page)", await (async () => { await go("/team"); await waitText("Our Team"); await waitFor(`document.querySelectorAll(".team-card").length > 2`); await sleep(300); return !(await exists(".icon-btn--danger")); })());
 
@@ -529,10 +536,11 @@ async function connect() {
   section("admin");
   await step("admin", async () => {
     check("admin login", await login(ADMIN.email, ADMIN.password));
-    await go("/admin");
+    // Phase 17: the account list moved from /admin to the "People & Accounts" section (/admin/people); /admin is the overview.
+    await go("/admin/people");
     check("admin dashboard renders with the account list", await waitText("b9-manager@example.test"));
     check("role select offers Member / Lab manager / Admin", await ev(`[...document.querySelectorAll('select[aria-label^="Role for"]')].every(s => [...s.options].map(o => o.text).join() === 'Admin,Lab manager,Member')`));
-    check("dashboard links to project + group management", (await text()).includes("Edit Projects") && (await text()).includes("Edit Groups"));
+    check("dashboard section nav reaches content management (Research content, Events, Localization, Audit log)", (await text()).includes("Research content") && (await text()).includes("Events") && (await text()).includes("Localization") && (await text()).includes("Audit log"));
     // promote the plain member to LAB_MANAGER through the UI
     await ev(`(() => { const s = document.querySelector('select[aria-label="Role for ${D.mem.email}"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'LAB_MANAGER'); s.dispatchEvent(new Event('change',{bubbles:true})); })()`);
     check("role change confirms in the UI", await waitText(`${D.mem.email} is now lab manager`));
@@ -564,7 +572,7 @@ async function connect() {
     check("9.1 an account with no profile is not offered 'show on my member profile'", !(await text()).includes("Also show this publication on my member profile"));
     await clickText("cancel", ".modal button");
     await waitFor(`!document.querySelector('.modal')`);
-    await go("/admin");
+    await go("/admin/people");
     await waitText("b9-manager@example.test");
     await clickText("create login");
     check("9.1 create-login modal lists only UNLINKED profiles (derived from /users, not the public /team)", (await waitFor(`!!document.getElementById('c_teamMemberId')`)) && (await ev(`(() => { const opts = [...document.getElementById('c_teamMemberId').options].map(o => o.text); return opts.length > 0 && opts.some(o => o.includes(${JSON.stringify(D.unlinkedSeed.name)})) && !opts.some(o => o.includes('ZZ B9 Member') || o.includes('ZZ B9 Lead') || o.includes('ZZ B9 Manager')); })()`)));
@@ -984,6 +992,9 @@ async function connect() {
   const navReady = () => waitFor(`document.querySelector('nav.nav')?.getAttribute('data-auth') === 'ready'`);
   const inViewport = (sel) => ev(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return b.width > 0 && b.left >= -0.5 && b.right <= innerWidth + 0.5 && b.top >= 0; })()`);
   const MEMBER = { email: D.mem.email, password: PW_NAV };
+  // Phase 17: D.mem is promoted to LAB_MANAGER by earlier steps, and a manager now legitimately has the Admin link. The header tests that assert
+  // "a MEMBER has no Admin link" therefore use D.plain, which stays a true MEMBER for the whole run.
+  const TRUE_MEMBER = { email: D.plain.email, password: PW_NAV };
   const MANAGER = { email: D.mgr.email, password: PW_NAV };
   const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/news"];
   const PEOPLE_HREFS = ["/team", "/groups"];
@@ -1138,7 +1149,8 @@ async function connect() {
   // ---------------------------------------------------------------- MEMBER / LAB_MANAGER / ADMIN, desktop
   section("phase 10.1: member, lab manager and admin headers (desktop)");
   const SAME_TOP = ["research", "people", "community", "schedule", "contact", "account"];
-  for (const [label, creds, isAdminRole] of [["MEMBER", MEMBER, false], ["LAB_MANAGER", MANAGER, false], ["ADMIN", ADMIN, true]]) {
+  // Phase 17: `isAdminRole` now means "has the Admin Dashboard link" -- managers and admins (the admin area is a management view; accounts stay admin-only).
+  for (const [label, creds, isAdminRole] of [["MEMBER", TRUE_MEMBER, false], ["LAB_MANAGER", MANAGER, true], ["ADMIN", ADMIN, true]]) {
     await step(`nav ${label}`, async () => {
       await desktop();
       check(`${label}: logs in`, await login(creds.email, creds.password));
@@ -1170,17 +1182,17 @@ async function connect() {
       check(`${label}: Account > My Profile opens /profile and marks Account active`, (await clickEl('#nav-panel-account a[href="/profile"]')) && (await waitFor(`location.pathname === '/profile'`)) && (await ev(`document.querySelector('${trig("account")}').classList.contains('active')`)));
       if (isAdminRole) {
         await clickEl(trig("account"));
-        check("ADMIN: Account > Admin Dashboard opens /admin and marks Account active", (await clickEl('#nav-panel-account a[href="/admin"]')) && (await waitFor(`location.pathname === '/admin'`)) && (await waitText("Admin Dashboard")) && (await ev(`document.querySelector('${trig("account")}').classList.contains('active')`)));
-        check("ADMIN: /admin still loads after a refresh", (await (async () => { await send("Page.reload"); await sleep(700); return waitText("Admin Dashboard"); })()));
-        check("ADMIN: the admin API is reachable (server-side allow), unlike for the lesser roles", (await apiCall("GET", "/users")) === 200);
-      } else {
-        await go("/admin");
-        check(`${label}: typing /admin directly is bounced home (client gate) and the API refuses the call (server gate)`, (await waitFor(`location.pathname === '/'`)) && (await apiCall("GET", "/users")) === 403);
-        check(`${label}: a lab manager/member still cannot reach account APIs by URL: PUT /users/x is 403`, [403, 404].includes(await apiCall("PUT", "/users/doesnotexist", { role: "ADMIN" })) && (await apiCall("PUT", "/users/doesnotexist", { role: "ADMIN" })) === 403);
+        check(`${label}: Account > Admin Dashboard opens /admin and marks Account active`, (await clickEl('#nav-panel-account a[href="/admin"]')) && (await waitFor(`location.pathname === '/admin'`)) && (await waitText("Admin Dashboard")) && (await ev(`document.querySelector('${trig("account")}').classList.contains('active')`)));
+        check(`${label}: /admin still loads after a refresh`, (await (async () => { await send("Page.reload"); await sleep(700); return waitText("Admin Dashboard"); })()));
+        check(`${label}: the admin overview API is reachable, and the ACCOUNT API is ${label === "ADMIN" ? "reachable (admin only)" : "still refused (403)"}`, (await apiCall("GET", "/admin/overview")) === 200 && (await apiCall("GET", "/users")) === (label === "ADMIN" ? 200 : 403));
         if (label === "LAB_MANAGER") {
           await go("/projects");
           check("LAB_MANAGER: keeps their content-management controls on the pages (they never lived in the header)", await waitText("+ New project"));
         }
+      } else {
+        await go("/admin");
+        check(`${label}: typing /admin directly is bounced home (client gate) and the API refuses the call (server gate)`, (await waitFor(`location.pathname === '/'`)) && (await apiCall("GET", "/users")) === 403);
+        check(`${label}: a lab manager/member still cannot reach account APIs by URL: PUT /users/x is 403`, [403, 404].includes(await apiCall("PUT", "/users/doesnotexist", { role: "ADMIN" })) && (await apiCall("PUT", "/users/doesnotexist", { role: "ADMIN" })) === 403);
       }
       // Log out from the Account menu, by mouse.
       await go("/contact");
@@ -1283,7 +1295,7 @@ async function connect() {
     });
   }
   // A member/admin on a phone: account section, Schedule, and logout by tap.
-  for (const [label, creds, isAdminRole] of [["MEMBER", MEMBER, false], ["ADMIN", ADMIN, true]]) {
+  for (const [label, creds, isAdminRole] of [["MEMBER", TRUE_MEMBER, false], ["ADMIN", ADMIN, true]]) { // (the phone menu is exercised for a member and an admin; a manager sees the same Account list as the admin, covered on the desktop)
     await step(`nav mobile ${label}`, async () => {
       await desktop();
       await login(creds.email, creds.password);
@@ -1303,7 +1315,7 @@ async function connect() {
       check(`M390 ${label}: Schedule from the phone menu opens the calendar page`, (await clickEl('.nav__links > li > a[href="/schedule"]')) && (await waitFor(`location.pathname === '/schedule'`)) && (await waitText("Lab Schedule")));
       await openPhoneMenu();
       await openMenu("account");
-      if (isAdminRole) check("M390 ADMIN: Admin Dashboard from the phone menu opens /admin", (await clickEl('#nav-panel-account a[href="/admin"]')) && (await waitFor(`location.pathname === '/admin'`)) && (await waitText("Admin Dashboard")) && (await overflowPx()) <= 1);
+      if (isAdminRole) check("M390 ADMIN: Admin Dashboard from the phone menu opens /admin (with the section nav wrapping, no overflow)", (await clickEl('#nav-panel-account a[href="/admin"]')) && (await waitFor(`location.pathname === '/admin'`)) && (await waitText("Admin Dashboard")) && (await overflowPx()) <= 1);
       else check("M390 MEMBER: there is no Admin Dashboard entry", !(await hrefEverywhere("/admin")));
       await openPhoneMenu();
       await openMenu("account");
@@ -1690,7 +1702,7 @@ async function connect() {
   await step("ui admin", async () => {
     await desktop();
     check("Ad. admin login", await login(ADMIN.email, ADMIN.password));
-    await readyPage("/admin", "Admin Dashboard");
+    await readyPage("/admin/people", "Admin Dashboard"); // Phase 17: accounts live in the People & Accounts section
     await waitFor(`![...document.querySelectorAll('.stat-card__value')].some(e => e.textContent === '–') && document.querySelectorAll('.stat-card__value').length === 5`, 6000);
     const users = await ev(`fetch('/api/users').then((r) => r.json())`);
     const team = await ev(`fetch('/api/team').then((r) => r.json())`);
@@ -1698,8 +1710,10 @@ async function connect() {
     const cards = await ev(`[...document.querySelectorAll('.stat-card')].map((c) => [c.querySelector('.stat-card__label').textContent.trim().toLowerCase(), c.querySelector('.stat-card__value').textContent.trim()])`);
     const expect = [["accounts", users.length], ["admins", users.filter((u) => u.role === "ADMIN").length], ["lab managers", users.filter((u) => u.role === "LAB_MANAGER").length], ["members", users.filter((u) => u.role === "MEMBER").length], ["profiles without login", team.filter((m) => !linked.has(m.id)).length]].map(([a, b]) => [a, String(b)]);
     check("Ad. the dashboard's summary cards are the real numbers (accounts, per-role counts, profiles without a login)", eqJson(cards, expect), JSON.stringify({ cards, expect }));
-    check("Ad. quick links to the six content pages are still there, and the account list keeps its controls (role select per account, Delete)", await ev(`document.querySelectorAll('.tile-link').length === 6 && document.querySelectorAll('.account-row select[aria-label^="Role for"]').length > 3 && [...document.querySelectorAll('.account-row .btn--danger')].length > 3`));
-    check("Ad. the dashboard adds NO new features: no audit viewer, no CMS, no file uploads", await ev(`!/audit log|upload|gallery|translation|CMS/i.test(document.querySelector('#main').innerText)`));
+    check("Ad. the account list keeps its controls (role select per account, Delete)", await ev(`document.querySelectorAll('.account-row select[aria-label^="Role for"]').length > 3 && [...document.querySelectorAll('.account-row .btn--danger')].length > 3`));
+    // Phase 17 test maintenance: this asserted the pre-Phase-17 dashboard had no audit viewer / CMS. Phase 17 adds exactly those,
+    // in their own sections; the account page itself must still be just accounts.
+    check("Ad. the account section stays about accounts (the audit viewer, CMS and files live in their own sections)", await ev(`!/audit log entries|upload a file|CMS/i.test(document.querySelector('#main').innerText)`));
     await readyPage("/schedule", "Lab Schedule");
     check("Sch. schedule keeps the same calendar embed (same calendar id) inside a framed, responsive container", await ev(`(() => { const f = document.querySelector('.calendar-frame iframe'); return !!f && decodeURIComponent(f.src).includes('susmartcomputinglab@gmail.com') && f.title.length > 5 && f.loading === 'lazy'; })()`));
     await readyPage("/profile", "My Profile");
@@ -1741,7 +1755,8 @@ async function connect() {
       check(`Sec. ${who}: team-card edit controls follow the policy (member: only their own card; managers/admin: all; delete only for admin)`, await ev(`(() => { const cs = [...document.querySelectorAll('.team-card')]; const edit = cs.filter((c) => c.querySelector('.card-edit-btn')).length; const del = cs.filter((c) => c.querySelector('.icon-btn--danger')).length; return ${who === "member" ? "edit === 1 && del === 0" : who === "lab manager" ? "edit === cs.length && del === 0" : "edit === cs.length && del === cs.length"}; })()`));
       await go("/admin");
       await sleep(500);
-      check(`Sec. ${who}: /admin is ${who === "admin" ? "open" : "bounced home"}, and the API agrees (users list ${who === "admin" ? "200" : "403"})`, (who === "admin" ? (await pathNow()) === "/admin" : (await pathNow()) === "/") && (await apiCall("GET", "/users")) === (who === "admin" ? 200 : 403));
+      // Phase 17: /admin is open to managers too (a management view); the ACCOUNT api and /admin/people stay admin-only.
+      check(`Sec. ${who}: /admin is ${who === "member" ? "bounced home" : "open"}, and the API agrees (admin overview ${who === "member" ? "403" : "200"}, users list ${who === "admin" ? "200" : "403"})`, (who === "member" ? (await pathNow()) === "/" : (await pathNow()) === "/admin") && (await apiCall("GET", "/admin/overview")) === (who === "member" ? 403 : 200) && (await apiCall("GET", "/users")) === (who === "admin" ? 200 : 403));
       await logout();
     }
     await readyPage("/schedule");
@@ -2082,7 +2097,7 @@ async function connect() {
       for (const attr of ["aria-labelledby"]) { const v = el.getAttribute(attr); if (v && v.split(/\s+/).some((i) => !document.getElementById(i))) a11y.push(attr + " points at a missing id: " + short(el)); }
     }
     const txt = root.innerText || "";
-    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|events|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
+    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|adm|events|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
     if (keyLeak) a11y.push("raw translation key visible: " + keyLeak[0]);
     if (/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/.test(txt)) a11y.push("placeholder/undefined text visible: " + (txt.match(/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/) || [""])[0]);
     if (!rootSel) {
@@ -2978,6 +2993,410 @@ async function connect() {
   await step("events: reset the emulated time zone", async () => { await setTz(""); await desktop(); });
 
 
+  // ================================================================= PHASE 17: ADMIN / CMS
+  section("phase 17: admin / CMS");
+  const A17 = {};
+  const admReady = async (p, mustHave) => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 9000); if (mustHave) await waitText(mustHave, 9000); await sleep(250); };
+  // Scrolls the element to the middle first (html has smooth scrolling, so wait for it), then a REAL mouse click.
+  const admClick = async (sel) => { await ev(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'center' })`); await p15Settle(); return clickEl(sel); };
+  const admRows = () => ev(`[...document.querySelectorAll('.admin-row')].map((r) => ({ title: (r.querySelector('.admin-row__title')?.textContent || '').trim(), text: r.innerText }))`);
+  const admTitles = async () => (await admRows()).map((r) => r.title);
+  const admQ = (k) => ev(`new URLSearchParams(location.search).get(${JSON.stringify(k)})`);
+  const admSubmit = () => ev(`document.querySelector('.admin-filters').requestSubmit()`);
+  const admApi = (method, p, body, locale) => ev(`fetch('/api${p}', { method: ${JSON.stringify(method)}, credentials: 'same-origin', headers: { 'Content-Type': 'application/json'${locale ? `, 'X-Locale': '${locale}'` : ""} }, body: ${body === undefined ? "undefined" : JSON.stringify(JSON.stringify(body))} }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }))`);
+  const admPanelOpen = () => exists('.modal[role="dialog"]');
+  const admNotice = () => ev(`document.querySelector('[role="status"] .form-success, [role="status"].form-success')?.innerText.trim() || ''`);
+  const guestNewsIds = async () => (await (await fetch(`${API}/api/news`)).json()).map((n) => n.id);
+  const admSections = () => ev(`[...document.querySelectorAll('.admin-nav a')].map((a) => a.getAttribute('href'))`);
+
+  await step("admin seed: news, translation, hostile text, unlinked account, hidden forum topic, gallery item", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const asClient = async (email, pw) => { const c = new Client(); await c.req("POST", "/auth/login", { email, password: pw }); return c; };
+    const adm = await asClient(ADMIN.email, ADMIN.password);
+    A17.adm = adm;
+    const plainC = await asClient(D.plain.email, PW);
+    const LONG = "ZZP17" + "x".repeat(80);
+    const LONG_JA = "超長い日本語のタイトルが管理画面のレイアウトを壊さないことを確認するためのテスト用の非常に長い文章です。";
+    const mkNews = async (title, extra = {}) => (await adm.req("POST", "/news", { date: "Jan 2035", sortDate: "2035-01-01", type: "Paper", title, description: "ZZ B9 adm desc", visibility: "PUBLIC", ...extra })).json;
+    A17.alpha = await mkNews("ZZ B9 Adm News Alpha");
+    A17.beta = await mkNews("ZZ B9 Adm News Beta");
+    A17.long = await mkNews("ZZ B9 Adm " + LONG + " " + LONG_JA, { description: LONG });
+    A17.xss = await mkNews("ZZ B9 Adm <img src=x onerror=window.__admXss=1> Hostile", { description: "<script>window.__admXss=2</script>" });
+    A17.plainEv = (await plainC.req("POST", "/events", { title: "ZZ B9 Adm Event Owned", description: "owned by the plain member", startsAt: new Date(Date.now() + 20 * 864e5).toISOString(), kind: "MEETING" })).json;
+    check("admin setup: an event owned by a member", !!A17.plainEv?.id);
+    check("admin setup: four news fixtures", [A17.alpha, A17.beta, A17.long, A17.xss].every((n) => n?.id));
+    const tr = await adm.req("PUT", `/admin/translations/NEWS_ITEM/${A17.long.id}`, { field: "title", value: "ZZ B9 Adm " + LONG_JA + LONG_JA });
+    check("admin setup: a long Japanese override", tr.status === 200);
+    const solo = await adm.req("POST", "/users", { email: "b9-adm-solo@example.test", password: PW, role: "MEMBER" });
+    A17.solo = { id: solo.json?.id, email: "b9-adm-solo@example.test" };
+    check("admin setup: an account without a profile", solo.status === 201);
+    const t = await adm.req("POST", "/forum/posts", { categoryId: D.fCatPub.id, title: "ZZ B9 Adm Hidden Topic", body: "ZZ B9 adm hidden body text that must never reach the admin area" });
+    A17.hiddenTopic = t.json;
+    await adm.req("POST", `/forum/posts/${t.json?.id}/hide`, {});
+    const fd = new FormData();
+    fd.append("file", new Blob([p15Png(600, 400)], { type: "image/png" }), "adm-evil<b>.png");
+    fd.append("caption", "ZZ B9 Adm photo " + LONG_JA);
+    fd.append("category", "RESEARCH");
+    const g = await fetch(`${API}/api/gallery`, { method: "POST", headers: { cookie: adm.cookie }, body: fd });
+    A17.gallery = await g.json().catch(() => null);
+    check("admin setup: hidden forum topic + gallery upload", !!A17.hiddenTopic?.id && g.status === 201, `${g.status}`);
+  });
+
+  // ---------------------------------------------------------------- access by role
+  await step("admin access: guest and member are kept out (client redirect + server refusal)", async () => {
+    await desktop(); await setLocale(null);
+    for (const p of ["/admin", "/admin/content", "/admin/audit", "/admin/people"]) { await go(p); await sleep(400); check(`admin guest: ${p} redirects to /login`, (await pathNow()) === "/login"); }
+    check("admin guest: every admin API is 401", await (async () => { for (const p of ["/admin/overview", "/admin/content?type=news", "/admin/audit", "/admin/translations?type=EVENT", "/admin/community", "/admin/files"]) if ((await admApi("GET", p)).status !== 401) return false; return true; })());
+    check("admin member: login", await login(D.plain.email, PW));
+    for (const p of ["/admin", "/admin/content", "/admin/translations", "/admin/audit", "/admin/people"]) { await go(p); await sleep(500); check(`admin member: ${p} is bounced home`, (await pathNow()) === "/"); }
+    check("admin member: no Admin link in the header, every admin API is 403", !(await exists('.nav a[href^="/admin"]')) && await (async () => { for (const p of ["/admin/overview", "/admin/content?type=news", "/admin/audit", "/admin/translations?type=EVENT", "/admin/community", "/admin/files"]) if ((await admApi("GET", p)).status !== 403) return false; return true; })());
+    check("admin member: the write endpoints are 403 too and change nothing", (await admApi("POST", "/admin/content/visibility", { type: "news", ids: [A17.alpha.id], visibility: "LAB_ONLY" })).status === 403 && (await admApi("PUT", `/admin/translations/NEWS_ITEM/${A17.alpha.id}`, { field: "title", value: "x" })).status === 403 && (await A17.adm.req("GET", `/news`)).json.find((n) => n.id === A17.alpha.id)?.visibility === "PUBLIC");
+    await logout();
+  });
+
+  await step("admin access: manager sees the management sections but not accounts; admin sees all eight", async () => {
+    check("admin manager: login", await login(D.mgr.email, PW));
+    await admReady("/admin", "Admin Dashboard");
+    const secs = await admSections();
+    check("admin manager: the section nav has seven sections and no People & Accounts", eqJson(secs, ["/admin", "/admin/content", "/admin/events", "/admin/community", "/admin/files", "/admin/translations", "/admin/audit"]), JSON.stringify(secs));
+    check("admin manager: the header's Account menu has the Admin Dashboard link", await exists('#nav-panel-account a[href="/admin"]'));
+    check("admin manager: the overview privacy note says private messages are never shown", (await text()).includes("Private messages and notifications are never shown"));
+    await go("/admin/people"); await sleep(500);
+    check("admin manager: /admin/people bounces home and /api/users is 403", (await pathNow()) === "/" && (await admApi("GET", "/users")).status === 403);
+    await logout();
+    check("admin admin: login", await login(ADMIN.email, ADMIN.password));
+    await admReady("/admin", "Admin Dashboard");
+    check("admin admin: eight sections including People & Accounts", eqJson(await admSections(), ["/admin", "/admin/people", "/admin/content", "/admin/events", "/admin/community", "/admin/files", "/admin/translations", "/admin/audit"]));
+    check("admin admin: the section nav is a labelled <nav> with a list, and the current section is marked", await ev(`(() => { const n = document.querySelector('.admin-shell nav[aria-label]'); return !!n && n.querySelectorAll('ul > li > a').length === 8 && document.querySelectorAll('.admin-nav a[aria-current="page"]').length === 1; })()`));
+    await logout();
+  });
+
+  await step("admin overview: real counts, admin-only account block, no private data", async () => {
+    check("admin overview: login (admin)", await login(ADMIN.email, ADMIN.password));
+    await admReady("/admin", "Admin Dashboard");
+    await waitFor(`document.querySelectorAll('.admin-count, .stat-card').length >= 10`);
+    const api = (await admApi("GET", "/admin/overview")).json;
+    const cards = await ev(`[...document.querySelectorAll('.admin-count, .stat-card')].map((c) => [(c.querySelector('.admin-count__label, .stat-card__label')?.textContent || '').trim(), (c.querySelector('.admin-count__value, .stat-card__value')?.textContent || '').trim()])`);
+    const by = Object.fromEntries(cards);
+    check("admin overview: cards show the API's numbers (accounts, news, events, projects, publications, groups)", by["Accounts"] === String(api.accounts.total) && by["News"] === String(api.news.total) && by["Events"] === String(api.events.total) && by["Projects"] === String(api.projects.total) && by["Publications"] === String(api.publications.total) && by["Groups"] === String(api.groups.total), JSON.stringify(by));
+    const t = await mainText();
+    check("admin overview: shows public vs lab-only breakdowns and the upcoming events count", /\d+ public · \d+ lab only/.test(t) && /\d+ upcoming/.test(t));
+    check("admin overview: no email address and no message/notification figure on the page", !/@/.test(t) && !/unread|conversation/i.test(t.replace(/Private messages and notifications are never shown[^.]*\./, "")));
+    check("admin overview: every card is a link into its section", await ev(`[...document.querySelectorAll('a.admin-count')].every((a) => a.getAttribute('href').startsWith('/admin'))`));
+    await logout();
+    check("admin overview: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin", "Admin Dashboard");
+    await waitFor(`document.querySelectorAll('.admin-count, .stat-card').length >= 8`);
+    check("admin overview (manager): no account block, no 'Accounts' card", !(await ev(`[...document.querySelectorAll('.admin-count__label, .stat-card__label')].some((e) => e.textContent.trim() === 'Accounts')`)));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- content browser
+  await step("admin content: filters, search, deep links, pagination, hostile text (manager)", async () => {
+    check("admin content: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin/content", "Research areas");
+    check("admin content: six type chips (events have their own section) and one pressed", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 6 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1);
+    check("admin content: the results are a real list with a live count", (await exists("ul.admin-list")) && (await exists('[role="status"][aria-live="polite"]')));
+    await admReady("/admin/content?type=news", "ZZ B9");
+    check("admin content: the type in the URL is honoured (news)", (await admQ("type")) === "news" && (await ev(`document.querySelector('.admin-types .chip[aria-pressed="true"]').textContent.trim()`)) === "News");
+    // search
+    await setVal("af-q", "ZZ B9 Adm News");
+    await admSubmit();
+    await waitFor(`new URLSearchParams(location.search).get('q') === 'ZZ B9 Adm News'`);
+    await waitFor(`document.querySelectorAll('.admin-row').length === 2`);
+    const found = (await admTitles()).sort();
+    check("admin content: search narrows to the matching records and the URL carries the query", eqJson(found, ["ZZ B9 Adm News Alpha", "ZZ B9 Adm News Beta"]), JSON.stringify(found));
+    check("admin content: the count line says how many were found", (await ev(`document.querySelector('.admin-status').innerText`)).includes("2 found"));
+    await go(`/admin/content?type=news&q=${encodeURIComponent("ZZ B9 Adm News")}`); await navReady();
+    check("admin content: reloading the URL restores the same filtered view (deep link)", (await waitFor(`document.querySelectorAll('.admin-row').length === 2`)) && (await ev(`document.getElementById('af-q').value`)) === "ZZ B9 Adm News");
+    // visibility filter
+    await setVal("af-visibility", "LAB_ONLY");
+    await admSubmit();
+    await waitFor(`new URLSearchParams(location.search).get('visibility') === 'LAB_ONLY'`);
+    await sleep(300);
+    await waitFor(`!document.querySelector('.admin-list[aria-busy="true"]') && (!!document.querySelector('.empty-state') || document.querySelectorAll('.admin-row').length > 0)`);
+    check("admin content: the visibility filter applies (none of the two public fixtures is lab-only -> empty state with a hint)", (await exists(".empty-state")) && (await text()).includes("Nothing matches these filters"));
+    await ev(`[...document.querySelectorAll('.admin-filters button')].find((b) => /reset/i.test(b.textContent)).click()`);
+    await waitFor(`!new URLSearchParams(location.search).get('q')`);
+    check("admin content: Reset clears every filter and returns to the list", !(await admQ("q")) && !(await admQ("visibility")));
+    // bad params in the URL never break the page
+    await admReady("/admin/content?type=nonsense&page=abc&q=%25%27", "Research areas");
+    check("admin content: a nonsense type/page/query in the URL falls back gracefully (no crash, no raw error)", (await exists("ul.admin-list, .empty-state")) && !(await text()).includes("Something went wrong"));
+    // pagination
+    await admReady("/admin/content?type=news&sort=title", "ZZ B9");
+    const total = (await ev(`document.querySelector('.admin-status').innerText`));
+    check("admin content: news has more than one page and a pager appears", (await exists(".admin-pager")) && /Page 1 of \d+/.test(await ev(`document.querySelector('.admin-pager').innerText`)), total);
+    const page1 = await admTitles();
+    await admClick('.admin-pager button:last-of-type');
+    await waitFor(`new URLSearchParams(location.search).get('page') === '2'`);
+    await waitFor(`document.querySelector('.admin-pager__status').textContent.includes('Page 2')`);
+    const page2 = await admTitles();
+    check("admin content: Next goes to page 2 (URL page=2), a different set of records, Previous is enabled", page2.length > 0 && !page2.some((t) => page1.includes(t)) && !(await ev(`document.querySelector('.admin-pager button:first-of-type').disabled`)));
+    // hostile text
+    await admReady(`/admin/content?type=news&q=${encodeURIComponent("ZZ B9 Adm")}&sort=title`, "Hostile");
+    check("admin content: hostile HTML in a title is shown as text; no script or image element came from it", (await ev(`typeof window.__admXss`)) === "undefined" && (await ev(`document.querySelectorAll('.admin-list img, .admin-list script').length`)) === 0 && (await text()).includes("<img src=x"));
+    check("admin content: a very long unbroken title wraps inside its row (no overflow)", (await overflowPx()) <= 1);
+    await logout();
+  });
+
+  await step("admin content: bulk visibility with a confirmation dialog, and the record inspector", async () => {
+    check("admin bulk: manager login", await login(D.mgr.email, PW));
+    await admReady(`/admin/content?type=news&q=${encodeURIComponent("ZZ B9 Adm News")}`, "ZZ B9 Adm News Alpha");
+    await waitFor(`document.querySelectorAll('.admin-row').length === 2`);
+    check("admin bulk: every row has a labelled checkbox; the bulk bar is a named group; Apply is disabled with nothing selected", (await ev(`[...document.querySelectorAll('.admin-row__check')].every((c) => (c.getAttribute('aria-label') || '').startsWith('Select ZZ B9'))`)) && (await exists('.admin-bulk[role="group"]')) && (await ev(`[...document.querySelectorAll('.admin-bulk button')].find((b) => /apply/i.test(b.textContent)).disabled`)));
+    await admClick(".admin-row:nth-child(1) .admin-row__check");
+    await admClick(".admin-row:nth-child(2) .admin-row__check");
+    check("admin bulk: ticking two rows says '2 selected' and enables Apply", (await ev(`document.querySelector('.admin-bulk__count').innerText`)).includes("2 selected") && !(await ev(`[...document.querySelectorAll('.admin-bulk button')].find((b) => /apply/i.test(b.textContent)).disabled`)));
+    await setVal("bulk-visibility", "LAB_ONLY");
+    await ev(`(() => { const b = [...document.querySelectorAll('.admin-bulk button')].find((x) => /apply/i.test(x.textContent)); b.setAttribute('data-adm-op', '1'); })()`);
+    await admClick("[data-adm-op]");
+    check("admin bulk: a confirmation dialog opens, states the count and the consequence, and nothing has changed yet", (await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await ev(`document.querySelector('.modal').innerText`)).includes("2 selected") && (await ev(`document.querySelector('.modal').innerText`)).includes("lab only") && (await guestNewsIds()).includes(A17.alpha.id));
+    check("admin bulk: focus starts on Cancel (the safe choice)", (await ev(`document.activeElement.textContent.trim()`)) === "Cancel");
+    await press("esc");
+    check("admin bulk: Escape closes the dialog, changes nothing and returns focus to Apply", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await ev(`document.activeElement.hasAttribute('data-adm-op')`)) && (await guestNewsIds()).includes(A17.alpha.id));
+    await admClick("[data-adm-op]");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000);
+    await admClick(".modal .btn--primary");
+    await waitFor(`document.querySelector('.admin-status')?.innerText.includes('Updated')`, 6000);
+    check("admin bulk: confirming reports the result in a live region", (await ev(`document.querySelector('.admin-status').innerText`)).includes("Updated 2"));
+    check("admin bulk: the records are now hidden from guests (server-side), and the selection is cleared", !(await guestNewsIds()).some((id) => [A17.alpha.id, A17.beta.id].includes(id)) && (await ev(`document.querySelector('.admin-bulk__count').innerText`)).includes("0 selected"));
+    check("admin bulk: the rows now carry the Lab only badge", (await ev(`[...document.querySelectorAll('.admin-row')].every((r) => /lab only/i.test(r.innerText))`)));
+    // ...and back (public wording of the dialog)
+    await ev(`document.querySelector('.admin-bulk__all input').click()`);
+    await setVal("bulk-visibility", "PUBLIC");
+    await ev(`[...document.querySelectorAll('.admin-bulk button')].find((x) => /apply/i.test(x.textContent)).click()`);
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000);
+    check("admin bulk: publishing warns that logged-out visitors will see the records", (await ev(`document.querySelector('.modal').innerText`)).includes("logged-out visitors"));
+    await admClick(".modal .btn--primary");
+    await waitFor(`document.querySelector('.admin-status')?.innerText.includes('Updated')`, 6000);
+    check("admin bulk: republished; guests see both again", (await guestNewsIds()).includes(A17.alpha.id) && (await guestNewsIds()).includes(A17.beta.id));
+    check("admin bulk: audit rows were written (CONTENT_VISIBILITY_CHANGED) and are visible in the audit viewer", await (async () => { const a = (await admApi("GET", "/admin/audit?action=CONTENT_VISIBILITY_CHANGED&limit=100")).json; return a.entries.filter((e) => [A17.alpha.id, A17.beta.id].includes(e.entityId)).length >= 4; })());
+    // inspector
+    await ev(`(() => { const b = document.querySelector('.admin-row .btn--secondary'); b.setAttribute('data-adm-insp', '1'); })()`);
+    await admClick("[data-adm-insp]");
+    check("admin inspect: the Details dialog names the record and lists connected records and translation state", (await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await waitFor(`document.querySelector('.modal').innerText.includes('Connected records')`, 4000)) && (await ev(`document.querySelector('.modal').innerText`)).includes("Japanese translation"));
+    check("admin inspect: it links to the public page and says where editing happens", (await exists('.modal a[href="/news"]')) && (await ev(`document.querySelector('.modal').innerText`)).includes("Edit this record on its own page"));
+    await press("esc");
+    check("admin inspect: Escape closes it and focus returns to the Details button", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await ev(`document.activeElement.hasAttribute('data-adm-insp')`)));
+    await logout();
+  });
+
+  await step("admin events: filters by when / type / creator, and bulk publish", async () => {
+    check("admin events: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin/events", "ZZ B9 Event");
+    check("admin events: no type chips (only events), a When/Type/Created-by filter set", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 0 && (await exists("#af-scope")) && (await exists("#af-kind")) && (await exists("#af-owner")));
+    const all = (await admApi("GET", "/admin/content?type=event&limit=100")).json;
+    await setVal("af-scope", "past");
+    await admSubmit();
+    await waitFor(`new URLSearchParams(location.search).get('scope') === 'past'`);
+    await sleep(600);
+    const past = (await admApi("GET", "/admin/content?type=event&scope=past&limit=100")).json;
+    check("admin events: 'Past' shows exactly the API's past events (and fewer than all)", (await admTitles()).length === past.rows.length && past.rows.length > 0 && past.rows.length < all.rows.length, `${(await admTitles()).length} vs ${past.rows.length}/${all.rows.length}`);
+    await go("/admin/events?kind=SEMINAR"); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`);
+    check("admin events: the type filter (Seminar) applies", (await admTitles()).includes("ZZ B9 Event Public") && !(await admTitles()).includes("ZZ B9 Event Hidden"));
+    await go(`/admin/events?owner=${D.plain.tmId}`); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`); await sleep(500);
+    const byOwner = (await admApi("GET", `/admin/content?type=event&owner=${D.plain.tmId}&limit=100`)).json;
+    check("admin events: the 'Created by' filter lists the creator's profile name and applies", (await ev(`document.getElementById('af-owner').value`)) === D.plain.tmId && byOwner.rows.length >= 1 && (await admTitles()).length === byOwner.rows.length && (await admTitles()).includes("ZZ B9 Adm Event Owned"));
+    check("admin events: each row shows its owner as a public profile name, never an email or id", await ev(`[...document.querySelectorAll('.admin-row')].every((r) => /By ZZ B9|No owner/.test(r.innerText) && !/@/.test(r.innerText))`));
+    // bulk publish the hidden upcoming event
+    await admReady(`/admin/events?scope=upcoming&q=${encodeURIComponent("ZZ B9 Event Hidden")}`, "ZZ B9 Event Hidden");
+    await waitFor(`document.querySelectorAll('.admin-row').length >= 1`);
+    check("admin events: the hidden event is lab only before", (await A17.adm.req("GET", `/events/${D.evHid.id}`)).json.visibility === "LAB_ONLY" && (await evApi("GET", `/events/${D.evHid.id}`)).status === 200);
+    await admClick(".admin-row:nth-child(1) .admin-row__check");
+    await setVal("bulk-visibility", "PUBLIC");
+    await ev(`[...document.querySelectorAll('.admin-bulk button')].find((x) => /apply/i.test(x.textContent)).click()`);
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000);
+    await admClick(".modal .btn--primary");
+    await waitFor(`document.querySelector('.admin-status')?.innerText.includes('Updated')`, 6000);
+    const guestEv = await fetch(`${API}/api/events/${D.evHid.id}`);
+    check("admin events: after the bulk publish a logged-out visitor can open the event", guestEv.status === 200);
+    await ev(`(() => { const c = document.querySelector('.admin-row .admin-row__check'); if (!c.checked) c.click(); })()`);
+    await setVal("bulk-visibility", "LAB_ONLY");
+    await ev(`[...document.querySelectorAll('.admin-bulk button')].find((x) => /apply/i.test(x.textContent)).click()`);
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000);
+    await admClick(".modal .btn--primary");
+    await waitFor(`document.querySelector('.admin-status')?.innerText.includes('Updated')`, 6000);
+    check("admin events: and it is hidden again (404 for a guest)", (await fetch(`${API}/api/events/${D.evHid.id}`)).status === 404);
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- translations
+  await step("admin translations: view, edit, clear, long text, English base stays readable", async () => {
+    check("admin tr: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin/translations", "English (base text)");
+    check("admin tr: six type chips, one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 6 && (await exists("#at-q")) && (await exists("#at-state")));
+    await admReady(`/admin/translations?type=NEWS_ITEM&q=${encodeURIComponent("ZZ B9 Adm News Alpha")}`, "English (base text)");
+    await waitFor(`document.querySelectorAll('.admin-tr').length === 1`);
+    check("admin tr: the entry shows the English base text (read-only) beside an editable Japanese field", (await ev(`document.querySelector('.admin-tr__base').textContent`)).includes("ZZ B9 Adm News Alpha") && (await ev(`document.querySelector('.admin-tr__base').getAttribute('lang')`)) === "en" && (await ev(`document.querySelector('.admin-tr textarea').getAttribute('lang')`)) === "ja");
+    check("admin tr: the textarea has an accessible label naming the field and the record; the entry says 'Not translated'", (await ev(`document.querySelector('.admin-tr textarea').labels[0].textContent`)).includes("ZZ B9 Adm News Alpha") && (await text()).includes("Not translated"));
+    check("admin tr: Save and Clear are disabled while there is nothing to save / clear", await ev(`(() => { const bs = [...document.querySelectorAll('.admin-tr__actions button')]; return bs.every((b) => b.disabled); })()`));
+    await setVal(await ev(`document.querySelector('.admin-tr textarea').id`), "ZZ B9 管理ニュース アルファ");
+    check("admin tr: typing enables Save and shows the character count", !(await ev(`document.querySelector('.admin-tr__actions .btn--primary').disabled`)) && /\d+ \/ \d+/.test(await ev(`document.querySelector('.admin-tr__count').innerText`)));
+    await admClick(".admin-tr__actions .btn--primary");
+    check("admin tr: saving confirms in a live region and the badge flips to 'Override exists'", (await waitFor(`document.querySelector('.admin-tr [role="status"]')?.innerText.includes('Saved')`, 5000)) && (await text()).includes("Override exists"));
+    const gja = await (await fetch(`${API}/api/news`, { headers: { "X-Locale": "ja" } })).json();
+    const gen = await (await fetch(`${API}/api/news`, { headers: { "X-Locale": "en" } })).json();
+    check("admin tr: a Japanese visitor now sees the override, an English visitor the base title", gja.find((n) => n.id === A17.alpha.id)?.title === "ZZ B9 管理ニュース アルファ" && gen.find((n) => n.id === A17.alpha.id)?.title === "ZZ B9 Adm News Alpha");
+    check("admin tr: the English base column is untouched", (await A17.adm.req("GET", "/news")).json.find((n) => n.id === A17.alpha.id)?.title === "ZZ B9 Adm News Alpha");
+    check("admin tr: Japanese search finds the record (state filter 'with override')", await (async () => { await admReady(`/admin/translations?type=NEWS_ITEM&state=overridden&q=${encodeURIComponent("アルファ")}`); await waitFor(`document.querySelectorAll('.admin-tr').length >= 1`, 5000); return (await admTitles()).includes("ZZ B9 Adm News Alpha"); })());
+    await admClick(".admin-tr__actions .btn--secondary");
+    check("admin tr: Clear override removes it and says so", (await waitFor(`document.querySelector('.admin-tr [role="status"]')?.innerText.includes('cleared')`, 5000)));
+    check("admin tr: the Japanese visitor is back on the English title", ((await (await fetch(`${API}/api/news`, { headers: { "X-Locale": "ja" } })).json()).find((n) => n.id === A17.alpha.id)?.title) === "ZZ B9 Adm News Alpha");
+    check("admin tr: the audit trail recorded field NAMES only (no translated text)", await (async () => { const a = (await admApi("GET", "/admin/audit?action=TRANSLATIONS_CHANGED&limit=100")).json; const mine = a.entries.filter((e) => e.entityId === A17.alpha.id); return mine.length >= 2 && mine.every((e) => e.details.fields === "title" && !JSON.stringify(e).includes("アルファ")); })());
+    await admReady(`/admin/translations?type=NEWS_ITEM&q=${encodeURIComponent("ZZP17")}`, "English (base text)");
+    check("admin tr: the long English + Japanese record wraps inside its columns (no overflow)", (await overflowPx()) <= 1);
+    await admReady("/admin/translations?type=EVENT", "English (base text)");
+    check("admin tr: events are supported (Phase 16)", (await admTitles()).some((t) => t.startsWith("ZZ B9 Event")));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- audit
+  await step("admin audit: manager vs admin, filters, pagination, no sensitive values", async () => {
+    check("admin audit: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin/audit", "Audit log");
+    await waitFor(`document.querySelectorAll('.admin-audit').length > 0`);
+    check("admin audit: manager: entries are listed newest first with time, actor and record type", (await ev(`document.querySelectorAll('.admin-audit time').length`)) > 5);
+    const optsM = await ev(`[...document.querySelectorAll('#au-entity option')].map((o) => o.value)`);
+    const actsM = await ev(`[...document.querySelectorAll('#au-action option')].map((o) => o.value)`);
+    check("admin audit: manager: no 'Account' record type or account action offered, no actor filter field", !optsM.includes("USER") && !actsM.includes("USER_CREATED") && !(await exists("#au-actor")));
+    check("admin audit: manager: the page carries no email address", !/@/.test(await mainText()));
+    await setVal("au-action", "CONTENT_VISIBILITY_CHANGED");
+    await admSubmit();
+    await waitFor(`new URLSearchParams(location.search).get('action') === 'CONTENT_VISIBILITY_CHANGED'`);
+    await sleep(600);
+    const filtered = await ev(`[...document.querySelectorAll('.admin-audit .admin-row__title')].map((e) => e.textContent.trim())`);
+    check("admin audit: the action filter applies and the labels are human text, not codes", filtered.length > 0 && filtered.every((l) => l === "Visibility changed"), JSON.stringify(filtered.slice(0, 3)));
+    check("admin audit: details are shown as name/value pairs (from/to), never long text", (await ev(`document.querySelector('.admin-audit__details').innerText`)).includes("from"));
+    const future = new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 10);
+    await go(`/admin/audit?from=${future}`); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`);
+    check("admin audit: a date range with no activity shows the empty state", (await waitFor(`!!document.querySelector('.empty-state')`, 4000)) && (await text()).includes("No entries match"));
+    await go("/admin/audit?limit=5"); await navReady(); await waitFor(`document.querySelectorAll('.admin-audit').length > 0`);
+    check("admin audit: the pager appears and page 2 differs from page 1", await (async () => { if (!(await exists(".admin-pager"))) return false; const p1 = await ev(`[...document.querySelectorAll('.admin-audit time')].map((e) => e.getAttribute('datetime')).join()`); await admClick('.admin-pager button:last-of-type'); await waitFor(`document.querySelector('.admin-pager__status').textContent.includes('Page 2')`); await sleep(400); return (await ev(`[...document.querySelectorAll('.admin-audit time')].map((e) => e.getAttribute('datetime')).join()`)) !== p1; })());
+    await logout();
+    check("admin audit: admin login", await login(ADMIN.email, ADMIN.password));
+    await admReady("/admin/audit", "Audit log");
+    await waitFor(`document.querySelectorAll('.admin-audit').length > 0`);
+    const optsA = await ev(`[...document.querySelectorAll('#au-entity option')].map((o) => o.value)`);
+    check("admin audit: admin: account events, the 'Account' record type and the actor filter exist", optsA.includes("USER") && (await exists("#au-actor")));
+    await setVal("au-actor", "admin@");
+    await admSubmit();
+    await waitFor(`new URLSearchParams(location.search).get('actor') === 'admin@'`);
+    await sleep(600);
+    check("admin audit: admin: filtering by actor email works and shows the email", (await ev(`document.querySelectorAll('.admin-audit').length`)) > 0 && (await mainText()).includes("admin@smartcomputinglab.org"));
+    check("admin audit: no password / hash / session value appears anywhere on the page", !/\$2[aby]\$|scl\.sid|passwordHash/.test(await ev(`document.documentElement.outerHTML`)));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- people & accounts
+  await step("admin people: filters, link and unlink a team profile (admin only)", async () => {
+    check("admin people: admin login", await login(ADMIN.email, ADMIN.password));
+    await admReady("/admin/people", "b9-manager@example.test");
+    check("admin people: summary cards (5) and the account list are there", (await ev(`document.querySelectorAll('.stat-card').length`)) === 5 && (await ev(`document.querySelectorAll('.account-row').length`)) > 3);
+    const rows0 = await ev(`document.querySelectorAll('.account-row').length`);
+    await setVal("ap-q", "b9-adm-solo");
+    await waitFor(`document.querySelectorAll('.account-row').length === 1`);
+    check("admin people: the search box filters the account list live", (await text()).includes("b9-adm-solo@example.test") && rows0 > 1);
+    await setVal("ap-q", "");
+    await setVal("ap-role", "LAB_MANAGER");
+    await waitFor(`document.querySelectorAll('.account-row').length < ${rows0}`);
+    check("admin people: the role filter applies", await ev(`[...document.querySelectorAll('.account-row select[aria-label^="Role for"]')].every((s) => s.value === 'LAB_MANAGER')`));
+    await setVal("ap-role", "");
+    await setVal("ap-link", "unlinked");
+    check("admin people: the 'not linked' filter shows only accounts without a profile", (await waitFor(`document.querySelectorAll('.account-row').length >= 1 && [...document.querySelectorAll('.account-row__meta')].every((m) => /No team profile linked/.test(m.innerText))`)));
+    await setVal("ap-link", "");
+    check("admin people: the admin's own row can't change its own role or delete itself", await ev(`(() => { const r = [...document.querySelectorAll('.account-row')].find((x) => /\\(you\\)/.test(x.innerText)); return !!r && r.querySelector('select').disabled && r.querySelector('.btn--danger').disabled; })()`));
+    // link
+    await setVal("ap-q", "b9-adm-solo");
+    await waitFor(`document.querySelectorAll('.account-row').length === 1`);
+    await ev(`(() => { const b = [...document.querySelectorAll('.account-row .btn--secondary')].find((x) => /link profile/i.test(x.textContent)); b.setAttribute('data-adm-link', '1'); })()`);
+    await admClick("[data-adm-link]");
+    check("admin people: 'Link profile' opens a dialog offering only UNLINKED profiles", (await waitFor(`!!document.getElementById('link-profile')`, 2500)) && (await ev(`[...document.getElementById('link-profile').options].some((o) => o.text === ${JSON.stringify(D.unlinkedSeed.name)}) && ![...document.getElementById('link-profile').options].some((o) => /ZZ B9 (Member|Lead|Manager)/.test(o.text))`)));
+    check("admin people: Submit is disabled until a profile is chosen", await ev(`document.querySelector('.modal button[type="submit"]').disabled`));
+    await setVal("link-profile", D.unlinkedSeed.id);
+    await admClick('.modal button[type="submit"]');
+    check("admin people: linking confirms and the row now shows the linked profile", (await waitFor(`document.querySelector('[role="status"] .form-success')?.innerText.includes('Linked')`, 5000)) && (await waitFor(`document.querySelector('.account-row__meta').innerText.includes(${JSON.stringify(D.unlinkedSeed.name)})`, 5000)));
+    check("admin people: the server agrees", (await admApi("GET", "/users")).json.find((u) => u.id === A17.solo.id)?.teamMemberId === D.unlinkedSeed.id);
+    // unlink
+    await ev(`(() => { const b = [...document.querySelectorAll('.account-row .btn--secondary')].find((x) => /unlink/i.test(x.textContent)); b.setAttribute('data-adm-unlink', '1'); })()`);
+    await admClick("[data-adm-unlink]");
+    check("admin people: 'Unlink' opens a confirmation that names the account and the profile; focus starts on Cancel", (await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2500)) && (await ev(`document.querySelector('.modal').innerText`)).includes(D.unlinkedSeed.name) && (await ev(`document.activeElement.textContent.trim()`)) === "Cancel");
+    await press("esc");
+    check("admin people: Escape cancels (still linked) and returns focus to the Unlink button", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await ev(`document.activeElement.hasAttribute('data-adm-unlink')`)) && (await admApi("GET", "/users")).json.find((u) => u.id === A17.solo.id)?.teamMemberId === D.unlinkedSeed.id);
+    await admClick("[data-adm-unlink]");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 2000);
+    await admClick(".modal .btn--danger");
+    check("admin people: confirming unlinks it", (await waitFor(`document.querySelector('[role="status"] .form-success')?.innerText.includes('Unlinked')`, 5000)) && (await admApi("GET", "/users")).json.find((u) => u.id === A17.solo.id)?.teamMemberId === null);
+    await logout();
+  });
+
+  await step("admin community + files: overviews without private text or storage paths", async () => {
+    check("admin community/files: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin/community", "Forum categories");
+    check("admin community: categories with counts, and the hidden topic is listed by title with a review link", (await text()).includes("ZZ B9 Forum Public Category") && (await text()).includes("ZZ B9 Adm Hidden Topic") && (await exists(`a[href="/community/forum/topic/${A17.hiddenTopic.id}"]`)));
+    check("admin community: NO post text reaches the page (only titles and counts)", !(await ev(`document.documentElement.outerHTML`)).includes("must never reach the admin area") && !(await text()).includes("Seeded topic body"));
+    check("admin community: it says moderation happens in the forum and that words are never edited", (await text()).includes("never edit another member's words"));
+    await admReady("/admin/files", "adm-evil");
+    check("admin files: the gallery upload is listed with a sanitised name, category, visibility, size and uploader", (await text()).includes("adm-evil<b>.png") && (await text()).includes("Research") && /image\/png/.test(await text()));
+    const html = await ev(`document.documentElement.outerHTML`);
+    check("admin files: no storage key, path or file URL on the page (metadata only)", !/storageKey|storage\/files|\/api\/files\/|sha256/i.test(html));
+    check("admin files: hostile filename text is inert (no <b> element created)", (await ev(`document.querySelectorAll('.admin-row__title b').length`)) === 0);
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- responsive + accessibility sweep (nine widths, EN + JA)
+  const admPagesM = () => [["overview", "/admin"], ["content", "/admin/content?type=news&q=ZZ%20B9%20Adm&sort=title"], ["content team", "/admin/content?type=team-member"], ["events", "/admin/events"], ["community", "/admin/community"], ["files", "/admin/files"], ["translations", "/admin/translations?type=NEWS_ITEM&q=ZZP17"], ["audit", "/admin/audit"]];
+  const admDialogs = async (T, ja, w) => {
+    await p15Ready("/admin/content?type=news&q=ZZ%20B9%20Adm%20News");
+    await waitFor(`document.querySelectorAll('.admin-row').length >= 2`, 6000);
+    await p15Dialog(`${T} record details dialog`, ".admin-row .btn--secondary", 0, ja);
+    await ev(`document.querySelector('.admin-row .admin-row__check')?.click()`);
+    await p15Dialog(`${T} bulk visibility confirmation`, ".admin-bulk .btn--primary", 0, ja);
+    await ev(`document.querySelectorAll('.admin-row__check:checked').forEach((c) => c.click())`);
+  };
+  await step("admin sweep: manager -- every section, dialogs, keyboard (EN+JA, 390..1920)", async () => {
+    await p15Loop("admin-manager", () => login(D.mgr.email, PW), admPagesM(), async (loc, w) => {
+      const T = `admin ${loc} ${w}px manager`;
+      await admDialogs(T, loc === "ja", w);
+      if (P15_TAB_WIDTHS.includes(w)) {
+        for (const [lbl, p] of [["overview", "/admin"], ["content", "/admin/content?type=news&q=ZZ%20B9%20Adm%20News"], ["translations", "/admin/translations?type=NEWS_ITEM&q=ZZ%20B9%20Adm%20News"], ["audit", "/admin/audit"]]) {
+          await p15Ready(p);
+          const tw = await p15TabWalk(70);
+          check(`${T} keyboard ${lbl}: Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 8 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | "));
+        }
+      }
+    });
+    check("admin sweep manager: no script from hostile admin text ever ran", (await ev(`typeof window.__admXss`)) === "undefined");
+  });
+  await step("admin sweep: admin -- people & accounts, link dialog, filters (EN+JA, 390..1920)", async () => {
+    await p15Loop("admin-admin", () => login(ADMIN.email, ADMIN.password), [["people", "/admin/people"], ["overview", "/admin"], ["audit", "/admin/audit"]], async (loc, w) => {
+      const T = `admin ${loc} ${w}px admin`;
+      await p15Ready("/admin/people");
+      await waitFor(`document.querySelectorAll('.account-row').length > 3`, 6000);
+      await p15Dialog(`${T} link-profile dialog`, ".account-row .btn--secondary", 0, loc === "ja");
+      await p15Dialog(`${T} delete-account confirmation`, ".account-row .btn--danger:not([disabled])", 0, loc === "ja");
+      if (P15_TAB_WIDTHS.includes(w)) {
+        await p15Ready("/admin/people");
+        const tw = await p15TabWalk(80);
+        check(`${T} keyboard people: Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 8 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | "));
+      }
+    });
+  });
+  await step("admin ja: the admin area is fully Japanese (labels, filters, statuses)", async () => {
+    check("admin ja: manager login", await login(D.mgr.email, PW));
+    await go("/"); await ev(`localStorage.setItem('scl.locale','ja')`);
+    await admReady("/admin", "監査ログ");
+    check("admin ja: header, sections and privacy note are Japanese", (await text()).includes("管理") && (await text()).includes("研究コンテンツ") && (await text()).includes("非公開のメッセージや通知") && (await ev(`document.documentElement.lang`)) === "ja");
+    await admReady("/admin/content?type=news&q=ZZ%20B9%20Adm%20News", "絞り込み");
+    check("admin ja: filters, badges and buttons are Japanese", (await text()).includes("公開範囲") && (await text()).includes("詳細") && (await text()).includes("ページを開く") && /日本語 \d\/\d/.test(await text()));
+    await admReady("/admin/audit", "監査ログ");
+    check("admin ja: audit actions are Japanese labels (no raw codes)", !/[A-Z]{3,}_[A-Z_]{3,}/.test(await ev(`[...document.querySelectorAll('.admin-audit .admin-row__title')].map((e) => e.textContent).join(' ')`)));
+    check("admin ja: authorization is unchanged in Japanese (members still refused, manager still in)", (await admApi("GET", "/admin/overview", undefined, "ja")).status === 200 && (await admApi("GET", "/users", undefined, "ja")).status === 403);
+    await ev(`localStorage.removeItem('scl.locale')`);
+    await logout();
+  });
+  await step("admin: restore fixtures (the moved profile stays unlinked; hidden events stay hidden)", async () => { await setLocale(null); await desktop(); });
+
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -3070,12 +3489,16 @@ async function connect() {
     /^400 GET .*\/api\/events\/bad%20id$/,
     /^401 GET .*\/api\/translations\/EVENT\//,
     /^500 GET .*\/api\/events/,
+    // Phase 17: guests / members / managers probing the admin API and account routes on purpose (401/403), a manager's
+    // /admin/people bounce, and the deliberate malformed-URL fallbacks (400).
+    /^40[13] (GET|POST|PUT) .*\/api\/(admin|users)/,
+    /^400 GET .*\/api\/admin\/content\?/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

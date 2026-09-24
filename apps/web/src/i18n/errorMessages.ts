@@ -41,6 +41,11 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "Japanese description must be at most 5000 characters.": "events.err.jaDescriptionMax",
   "Only lab managers and admins can link an event to a project.": "events.err.projectLinkForbidden",
   "Project not found.": "events.err.projectNotFound",
+  // Admin / CMS (Phase 17): account link/unlink.
+  "That account is already linked to a team profile. Unlink it first.": "adm.err.alreadyLinked",
+  "That account isn't linked to a team profile.": "adm.err.notLinked",
+  "Selected team member does not exist.": "adm.err.memberMissing",
+  "That team member already has a linked account.": "adm.err.memberTaken",
 };
 
 /** The localized text for a known server/schema message, else the message itself (the same rule as `apiErrorMessage`). */

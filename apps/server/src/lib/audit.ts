@@ -16,6 +16,8 @@ export type AuditAction =
   | "USER_CREATED"
   | "ROLE_CHANGED"
   | "USER_DELETED"
+  | "USER_LINKED"
+  | "USER_UNLINKED"
   // visibility (one row per change, on top of the ordinary *_UPDATED row)
   | "CONTENT_VISIBILITY_CHANGED"
   // curated content
@@ -77,7 +79,9 @@ export type AuditAction =
   | "EVENT_CREATED"
   | "EVENT_UPDATED"
   | "EVENT_DELETED"
-  | "EVENT_TRANSLATIONS_CHANGED";
+  | "EVENT_TRANSLATIONS_CHANGED"
+  // admin / CMS (Phase 17): a Japanese override edited from the admin translations view (events keep EVENT_TRANSLATIONS_CHANGED)
+  | "TRANSLATIONS_CHANGED";
 
 export type AuditEntityType =
   | "USER"

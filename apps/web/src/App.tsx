@@ -1,5 +1,5 @@
 import { Route, Routes, useLocation } from "react-router-dom";
-import { canManageUsers } from "@scl/shared";
+import { canAccessAdmin, canManageUsers } from "@scl/shared";
 import { Nav } from "./components/Nav";
 import { Footer } from "./components/Footer";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
@@ -25,7 +25,15 @@ import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SchedulePage } from "./pages/SchedulePage";
-import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
+import { AdminLayout } from "./pages/admin/AdminLayout";
+import { AdminOverviewPage } from "./pages/admin/AdminOverviewPage";
+import { AdminPeoplePage } from "./pages/admin/AdminPeoplePage";
+import { AdminContentPage } from "./pages/admin/AdminContentPage";
+import { AdminEventsPage } from "./pages/admin/AdminEventsPage";
+import { AdminCommunityPage } from "./pages/admin/AdminCommunityPage";
+import { AdminFilesPage } from "./pages/admin/AdminFilesPage";
+import { AdminTranslationsPage } from "./pages/admin/AdminTranslationsPage";
+import { AdminAuditPage } from "./pages/admin/AdminAuditPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { ConversationPage } from "./pages/ConversationPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
@@ -101,14 +109,31 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        {/* Phase 17: the admin area is for managers and admins; only /admin/people (accounts) stays admin-only. The API re-checks every request. */}
         <Route
           path="/admin"
           element={
-            <ProtectedRoute allow={canManageUsers}>
-              <AdminDashboardPage />
+            <ProtectedRoute allow={canAccessAdmin}>
+              <AdminLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<AdminOverviewPage />} />
+          <Route
+            path="people"
+            element={
+              <ProtectedRoute allow={canManageUsers}>
+                <AdminPeoplePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="content" element={<AdminContentPage />} />
+          <Route path="events" element={<AdminEventsPage />} />
+          <Route path="community" element={<AdminCommunityPage />} />
+          <Route path="files" element={<AdminFilesPage />} />
+          <Route path="translations" element={<AdminTranslationsPage />} />
+          <Route path="audit" element={<AdminAuditPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       </main>

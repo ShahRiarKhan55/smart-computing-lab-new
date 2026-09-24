@@ -1,3 +1,4 @@
+import { en } from "@scl/shared";
 import type { Category, EventKind, GalleryCategory, ProjectStatus, SearchFilter, SearchType, TranslationKey } from "@scl/shared";
 
 /** Localized label for a team member's category — same `Record<value, TranslationKey>`
@@ -72,3 +73,14 @@ export const EVENT_KIND_LABEL_KEY: Record<EventKind, TranslationKey> = {
   SOCIAL: "events.kind.SOCIAL",
   OTHER: "events.kind.OTHER",
 };
+
+/**
+ * Admin (Phase 17) labels whose VALUE set is open-ended on the server (audit actions and entity types
+ * grow with every phase; relation and translation-field names are plain strings on the wire). Looks
+ * `prefix + value` up in the dictionary and falls back to the raw value, so an action added later
+ * without a label still renders as readable text instead of a missing-key string.
+ */
+export function dictLabel(t: (key: TranslationKey) => string, prefix: string, value: string): string {
+  const key = `${prefix}${value}` as TranslationKey;
+  return Object.prototype.hasOwnProperty.call(en, key) ? t(key) : value;
+}

@@ -84,7 +84,7 @@ const like = <W>(field: string, op: "contains" | "startsWith", value: string) =>
  * this is plain `contains`, nothing new). Never called for an English-locale search: Phase 14 never
  * stores English in `Translation`, so there would be nothing to find (§4).
  */
-async function translationMatchIds(entityType: TranslatableEntityType, terms: string[]): Promise<Set<string>> {
+export async function translationMatchIds(entityType: TranslatableEntityType, terms: string[]): Promise<Set<string>> {
   const fields = translatableFieldsOf(entityType) as string[];
   let matched: Set<string> | null = null;
   for (const term of terms) {

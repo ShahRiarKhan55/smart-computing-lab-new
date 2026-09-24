@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import type { UserSummary } from "@scl/shared";
-import { canManageUsers, createUserSchema, roleChangeError, updateUserRoleSchema } from "@scl/shared";
+import { canManageUsers, createUserSchema, linkAccountSchema, roleChangeError, updateUserRoleSchema } from "@scl/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireCan } from "../middleware/auth.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
@@ -131,6 +131,39 @@ router.put(
           details: { email: target.email, from: target.role, to: role },
         });
       }
+    });
+
+    res.json({ success: true });
+  }),
+);
+
+// PUT /api/users/:id/link { teamMemberId } -> link this account to an existing, unlinked team profile, or
+// (teamMemberId: null) unlink its current profile. ADMIN only (router-level guard). Both directions are
+// conditional writes, so two concurrent requests can never claim one profile twice or unlink it twice.
+router.put(
+  "/:id/link",
+  asyncHandler(async (req, res) => {
+    assertValidId(req.params.id);
+    const { teamMemberId } = parseOrThrow(linkAccountSchema, req.body);
+
+    await prisma.$transaction(async (tx) => {
+      const account = await tx.user.findUnique({ where: { id: req.params.id }, select: { id: true, email: true, teamMember: { select: { id: true } } } });
+      if (!account) throw new HttpError(404, "Not found");
+
+      if (teamMemberId === null) {
+        if (!account.teamMember) throw new HttpError(409, "That account isn't linked to a team profile.");
+        const unlinked = await tx.teamMember.updateMany({ where: { id: account.teamMember.id, userId: account.id }, data: { userId: null } });
+        if (unlinked.count !== 1) throw new HttpError(409, "That account isn't linked to a team profile.");
+        await recordAudit(tx, { actor: req.user!, action: "USER_UNLINKED", entityType: "USER", entityId: account.id, details: { email: account.email, teamMemberId: account.teamMember.id } });
+        return;
+      }
+
+      if (account.teamMember) throw new HttpError(409, "That account is already linked to a team profile. Unlink it first.");
+      const member = await tx.teamMember.findUnique({ where: { id: teamMemberId }, select: { id: true } });
+      if (!member) throw new HttpError(400, "Selected team member does not exist.");
+      const linked = await tx.teamMember.updateMany({ where: { id: teamMemberId, userId: null }, data: { userId: account.id } });
+      if (linked.count !== 1) throw new HttpError(409, "That team member already has a linked account.");
+      await recordAudit(tx, { actor: req.user!, action: "USER_LINKED", entityType: "USER", entityId: account.id, details: { email: account.email, teamMemberId } });
     });
 
     res.json({ success: true });

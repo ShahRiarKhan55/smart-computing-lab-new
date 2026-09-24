@@ -54,3 +54,8 @@ export function formatBytes(bytes: number, locale: Locale): string {
   if (bytes < 1024 * 1024) return `${formatNumber(Math.round(bytes / 1024), locale)} KB`;
   return `${formatNumber(Math.round((bytes / (1024 * 1024)) * 10) / 10, locale)} MB`;
 }
+
+/** "Sep 22, 2026" from an ISO datetime string (admin lists), locale-aware via `Intl.DateTimeFormat`. */
+export function formatDate(iso: string, locale: Locale): string {
+  return new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric" });
+}

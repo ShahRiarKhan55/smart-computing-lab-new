@@ -17,6 +17,7 @@ import filesRoutes from "./files.routes.js";
 import galleryRoutes from "./gallery.routes.js";
 import translationsRoutes from "./translations.routes.js";
 import eventsRoutes from "./events.routes.js";
+import adminRoutes from "./admin.routes.js";
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use("/files", filesRoutes);
 router.use("/gallery", galleryRoutes);
 router.use("/translations", translationsRoutes);
 router.use("/events", eventsRoutes);
+router.use("/admin", adminRoutes);
 
 export default router;

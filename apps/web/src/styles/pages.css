@@ -1252,3 +1252,377 @@ a.conversation-header__name:focus-visible {
   margin: 0 0 var(--space-4);
   font-size: var(--text-sm);
 }
+
+/* ------------------------------------------------------------
+   Admin / CMS (Phase 17). Same design system as the rest of the site (tokens, .chip, .badge, .btn,
+   .form-group, .stat-grid); only the admin-specific shapes live here. Lists are stacked rows, not
+   wide tables, so nothing forces horizontal scrolling on a phone; long titles, Japanese text and
+   unbroken tokens wrap instead of overflowing.
+   ------------------------------------------------------------ */
+.admin-shell {
+  padding-bottom: var(--space-12);
+}
+
+.admin-nav {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+}
+
+.admin-nav .chip {
+  text-decoration: none;
+}
+
+.admin-types {
+  margin-bottom: var(--space-4);
+}
+
+.admin-note {
+  max-width: var(--measure);
+  margin: 0 0 var(--space-5);
+  overflow-wrap: anywhere;
+}
+
+.admin-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: var(--space-3) var(--space-4);
+  align-items: end;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.admin-filters .form-group {
+  margin: 0;
+  min-width: 0;
+}
+
+.admin-filters__wide {
+  grid-column: span 2;
+}
+
+.admin-filters__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.admin-status {
+  min-height: 1.5rem;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.admin-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.admin-bulk__all,
+.admin-bulk__count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-size: var(--text-sm);
+}
+
+.admin-bulk__count {
+  color: var(--muted);
+}
+
+.admin-bulk__field {
+  margin: 0;
+}
+
+.admin-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
+}
+
+.admin-row--select {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.admin-row + .admin-row {
+  border-top: 1px solid var(--border);
+}
+
+.admin-row__check {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.admin-row__main {
+  min-width: 0;
+}
+
+.admin-row__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.admin-row__sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.admin-row__meta > span,
+.admin-row__meta > time {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 720px) {
+  .admin-filters__wide {
+    grid-column: 1 / -1;
+  }
+
+  .admin-row,
+  .admin-row--select {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-row--select {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .admin-row__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+.admin-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.admin-pager__status {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.admin-count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-base);
+}
+
+.admin-count:hover {
+  border-color: var(--primary);
+}
+
+.admin-count__value {
+  font-family: var(--font-heading);
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.admin-count__label {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.admin-count__detail {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-detail__dates {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.admin-detail__heading {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.admin-detail__list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-detail__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-detail__hint {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-xs);
+}
+
+.admin-tr {
+  display: block;
+}
+
+.admin-tr__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.admin-tr__field {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--border);
+}
+
+.admin-tr__col {
+  min-width: 0;
+}
+
+.admin-tr__label {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.admin-tr__base {
+  max-height: 12rem;
+  margin: 0;
+  overflow: auto;
+  font-size: var(--text-sm);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.admin-tr__col textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+/* The label names the record ("Japanese title for <title>"), so it can hold an unbroken token: let it wrap. */
+.admin-tr .form-group label {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-tr__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.admin-tr__count {
+  margin-right: auto;
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 720px) {
+  .admin-tr__field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.admin-audit {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.admin-audit__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+}
+
+.admin-audit__details > div {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-audit__details dt {
+  font-family: var(--font-heading);
+  color: var(--muted);
+}
+
+.admin-audit__details dt::after {
+  content: ":";
+}
+
+.admin-audit__details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-list[aria-busy="true"] {
+  opacity: 0.6;
+  transition: opacity var(--dur-base);
+}
