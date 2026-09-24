@@ -18,6 +18,8 @@ import { ForumIndexPage } from "./pages/community/ForumIndexPage";
 import { ForumCategoryPage } from "./pages/community/ForumCategoryPage";
 import { ForumTopicPage } from "./pages/community/ForumTopicPage";
 import { GalleryPage } from "./pages/GalleryPage";
+import { EventsPage } from "./pages/EventsPage";
+import { EventDetailPage } from "./pages/EventDetailPage";
 import { SearchPage } from "./pages/SearchPage";
 import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -50,6 +52,8 @@ export default function App() {
         <Route path="/community/forum/category/:slug" element={<ForumCategoryPage />} />
         <Route path="/community/forum/topic/:id" element={<ForumTopicPage />} />
         <Route path="/gallery" element={<GalleryPage />} />
+        <Route path="/events" element={<EventsPage />} />
+        <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
         <Route path="/publications" element={<PublicationsPage />} />

@@ -89,6 +89,13 @@ const rows: Row[] = [
   ["canEditGalleryItem (is the owner)", (a) => P.canEditGalleryItem(a, true), [F, T, T, T]],
   ["canDeleteGalleryItem (not the owner)", (a) => P.canDeleteGalleryItem(a, false), [F, F, T, T]],
   ["canDeleteGalleryItem (is the owner)", (a) => P.canDeleteGalleryItem(a, true), [F, T, T, T]],
+  // Phase 16: events are OWNED content too (creator or manager); visibility and the project link are manager-only.
+  ["canCreateEvent", P.canCreateEvent, [F, T, T, T]],
+  ["canEditEvent (not the owner)", (a) => P.canEditEvent(a, false), [F, F, T, T]],
+  ["canEditEvent (is the owner)", (a) => P.canEditEvent(a, true), [F, T, T, T]],
+  ["canDeleteEvent (not the owner)", (a) => P.canDeleteEvent(a, false), [F, F, T, T]],
+  ["canDeleteEvent (is the owner)", (a) => P.canDeleteEvent(a, true), [F, T, T, T]],
+  ["canLinkEventToProject", P.canLinkEventToProject, [F, F, T, T]],
 ];
 
 const cell = (b: boolean) => (b ? "✔" : "·");
@@ -123,6 +130,7 @@ for (const [name, fn] of rows) {
       "canViewNotifications",
       "canUploadFile",
       "canCreateGalleryItem",
+      "canCreateEvent",
     ].includes(name)
   )
     continue;

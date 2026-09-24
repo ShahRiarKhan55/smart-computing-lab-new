@@ -129,3 +129,16 @@ export const canUploadFile = isMember;
 export const canCreateGalleryItem = isMember;
 export const canEditGalleryItem = (a: MaybeActor, isOwner: boolean): boolean => isManager(a) || (isMember(a) && isOwner);
 export const canDeleteGalleryItem = canEditGalleryItem;
+
+// ---- events (Phase 16) -----------------------------------------------------
+// Events are OWNED content, like a gallery item: any signed-in account may create one, and only its
+// creator or a manager may edit/delete it. `isOwner` comes from the server's own lookup
+// (Event.createdById === the acting account), never from the client. An event whose creator's
+// account was deleted has no owner, so only managers can change it. Visibility and the project
+// link are manager-only (same as news/publications visibility and project settings). Translation
+// edits ride on the event's own PUT, so they follow `canEditEvent` exactly.
+// See docs/architecture/phase16-events.md.
+export const canCreateEvent = isMember;
+export const canEditEvent = (a: MaybeActor, isOwner: boolean): boolean => isManager(a) || (isMember(a) && isOwner);
+export const canDeleteEvent = canEditEvent;
+export const canLinkEventToProject = isManager;

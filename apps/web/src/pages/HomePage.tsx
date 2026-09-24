@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import type { NewsItem, ProjectSummary, Publication, ResearchArea, TeamMember } from "@scl/shared";
+import type { LabEvent, NewsItem, ProjectSummary, Publication, ResearchArea, TeamMember } from "@scl/shared";
 import { useApiResource } from "../hooks/useApiResource";
 import { HeroCircuit } from "../components/HeroCircuit";
 import { Icon } from "../components/Icon";
@@ -12,11 +12,13 @@ import { EmptyState } from "../components/EmptyState";
 import { ProjectCard } from "../components/ProjectCard";
 import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
+import { EventCard } from "../components/EventCard";
 import { useT } from "../i18n/LocaleContext";
 
 const FEATURED_PROJECTS = 3;
 const RECENT_PUBLICATIONS = 4;
 const LATEST_NEWS = 3;
+const NEXT_EVENTS = 3;
 
 function ViewAll({ to, children }: { to: string; children: string }) {
   return (
@@ -34,6 +36,7 @@ export function HomePage() {
   const publications = useApiResource<Publication[]>("/publications");
   const team = useApiResource<TeamMember[]>("/team");
   const news = useApiResource<NewsItem[]>("/news");
+  const events = useApiResource<LabEvent[]>(`/events?scope=upcoming&limit=${NEXT_EVENTS}`);
 
   // Selected projects: the ones under way first, then the rest, in the API's own order.
   const featured = useMemo(() => {
@@ -211,6 +214,23 @@ export function HomePage() {
             <div className="grid">
               {news.data.slice(0, LATEST_NEWS).map((item) => (
                 <NewsCard key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ===================== UPCOMING EVENTS (Phase 16; the page never depends on there being any) ===================== */}
+      <section className={network.length > 0 ? "band" : "section"} aria-labelledby="home-events">
+        <div className={network.length > 0 ? "band__inner" : undefined}>
+          <SectionHeader id="home-events" eyebrow={t("home.eventsEyebrow")} title={t("home.eventsTitle")} action={<ViewAll to="/events">{t("home.allEvents")}</ViewAll>} />
+          {events.loading && !events.data && <LoadingState label={t("home.loadingEvents")} />}
+          {events.error && <ErrorState message={t("home.errorEvents")} onRetry={events.reload} />}
+          {events.data && events.data.length === 0 && <EmptyState title={t("home.emptyEvents")} compact />}
+          {events.data && events.data.length > 0 && (
+            <div className="grid">
+              {events.data.map((e) => (
+                <EventCard key={e.id} event={e} />
               ))}
             </div>
           )}

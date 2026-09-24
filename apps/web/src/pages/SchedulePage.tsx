@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { AdminBar } from "../components/AdminBar";
 import { Icon } from "../components/Icon";
@@ -26,6 +27,13 @@ export function SchedulePage() {
             </a>
           }
         />
+
+        <p className="schedule-events-link">
+          <Link to="/events" className="link">
+            {t("schedule.eventsLink")} <Icon name="arrow-right" size={14} />
+          </Link>{" "}
+          <span className="text-muted">{t("schedule.eventsHint")}</span>
+        </p>
 
         <div className="calendar-frame">
           <iframe title={t("schedule.calendarIframeTitle")} src={EMBED_SRC} loading="lazy" scrolling="no" />

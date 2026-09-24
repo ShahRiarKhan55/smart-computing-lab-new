@@ -400,6 +400,38 @@ const sources = [
       ...visibilityField(viewer, r.category.visibility),
     }),
   }),
+
+  // Events (Phase 16): own `visibility` column, so the SAME visibleTo() as news/projects. The linked
+  // project is never searched or returned, so a hidden project can't surface (or be inferred from) an
+  // event. The meta line is language-neutral (ISO date + location) so a Japanese result has no English words.
+  defineSource<
+    Prisma.EventWhereInput,
+    { id: string; title: string; description: string; location: string; startsAt: Date; visibility: string }
+  >({
+    type: "event",
+    title: "title",
+    fields: ["description", "location"],
+    translatable: "EVENT",
+    base: visibleTo,
+    count: (where) => prisma.event.count({ where }),
+    find: (where, skip, take) =>
+      prisma.event.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ startsAt: "desc" }, { id: "asc" }],
+        select: { id: true, title: true, description: true, location: true, startsAt: true, visibility: true },
+      }),
+    toResult: (r, viewer, terms) => ({
+      type: "event",
+      id: r.id,
+      title: r.title,
+      description: describe([r.description, r.location], terms),
+      meta: joinMeta(toIsoDate(r.startsAt), r.location),
+      href: `/events/${r.id}`,
+      ...visibilityField(viewer, r.visibility),
+    }),
+  }),
 ];
 
 // Sources are listed in SEARCH_TYPES order: that order IS the "type" step of the sort above.

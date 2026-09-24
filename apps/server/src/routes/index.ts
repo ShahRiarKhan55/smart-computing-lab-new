@@ -16,6 +16,7 @@ import notificationsRoutes from "./notifications.routes.js";
 import filesRoutes from "./files.routes.js";
 import galleryRoutes from "./gallery.routes.js";
 import translationsRoutes from "./translations.routes.js";
+import eventsRoutes from "./events.routes.js";
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use("/notifications", notificationsRoutes);
 router.use("/files", filesRoutes);
 router.use("/gallery", galleryRoutes);
 router.use("/translations", translationsRoutes);
+router.use("/events", eventsRoutes);
 
 export default router;

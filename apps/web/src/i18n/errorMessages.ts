@@ -24,7 +24,29 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "Nothing to update.": "error.nothingToUpdate",
   "Request body must be a JSON object.": "error.requestBodyInvalid",
   "Incorrect email or password.": "auth.invalidCredentials",
+  // Events (Phase 16): the fixed validation/permission messages the events API and the shared
+  // event schema can produce, so the form and the API errors read the same in both locales.
+  "Only lab managers and admins can change visibility.": "error.visibilityForbidden",
+  "Title is required.": "events.err.titleRequired",
+  "Title must be at most 200 characters.": "events.err.titleMax",
+  "Description must be at most 5000 characters.": "events.err.descriptionMax",
+  "Location must be at most 200 characters.": "events.err.locationMax",
+  "Link must be a valid URL starting with http:// or https://.": "events.err.urlInvalid",
+  "Start is required.": "events.err.startRequired",
+  "Start must be a valid date and time.": "events.err.startInvalid",
+  "End must be a valid date and time.": "events.err.endInvalid",
+  "End can't be before the start.": "events.err.endBeforeStart",
+  "Event type must be one of SEMINAR, MEETING, DEADLINE, SOCIAL or OTHER.": "events.err.kindInvalid",
+  "Japanese title must be at most 200 characters.": "events.err.jaTitleMax",
+  "Japanese description must be at most 5000 characters.": "events.err.jaDescriptionMax",
+  "Only lab managers and admins can link an event to a project.": "events.err.projectLinkForbidden",
+  "Project not found.": "events.err.projectNotFound",
 };
+
+/** The localized text for a known server/schema message, else the message itself (the same rule as `apiErrorMessage`). */
+export function knownMessage(message: string, t: Translator): string {
+  return KNOWN_MESSAGES[message] ? t(KNOWN_MESSAGES[message]) : message;
+}
 
 type Translator = (key: TranslationKey, vars?: Record<string, string | number>) => string;
 
@@ -37,9 +59,7 @@ type Translator = (key: TranslationKey, vars?: Record<string, string | number>) 
  * that allow-list — is shown exactly as received.
  */
 export function apiErrorMessage(err: unknown, t: Translator): string {
-  if (err instanceof ApiError) {
-    return KNOWN_MESSAGES[err.message] ? t(KNOWN_MESSAGES[err.message]) : err.message || t("error.somethingWentWrong");
-  }
+  if (err instanceof ApiError) return knownMessage(err.message, t) || t("error.somethingWentWrong");
   if (err instanceof TypeError) return t("error.network");
   return t("error.somethingWentWrong");
 }

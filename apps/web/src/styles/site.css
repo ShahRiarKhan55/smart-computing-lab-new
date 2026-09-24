@@ -406,6 +406,10 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* A very long last item (an event or project title with an unbroken token) wraps instead of pushing the page wider than the screen. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .breadcrumbs li + li::before {

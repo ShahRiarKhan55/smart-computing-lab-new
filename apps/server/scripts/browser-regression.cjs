@@ -4,6 +4,8 @@
 //   ONLY_UI=1 runs just the Phase 10.5 UI/UX section (steps named "ui ...").
 //   ONLY_FORUM=1 runs just the Phase 11 forum section (steps named "forum ...").
 //   ONLY_I18N=1 runs just the Phase 14 localization section (steps named "i18n ...").
+//   ONLY_STEPS=<regex> runs just the steps whose name matches (independent of the ONLY_* flags above).
+//   ONLY_EVENTS=1 runs just the Phase 16 events section (steps named "events ..."; P15_W narrows its widths too).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
 //          Vite on :5180 (`vite --port 5180 --strictPort`), then
 //          node scripts/browser-regression.cjs http://localhost:5180 http://localhost:4001 ./shots
@@ -39,6 +41,7 @@ const ONLY_NAV = !!process.env.ONLY_NAV;
 const ONLY_UI = !!process.env.ONLY_UI;
 const ONLY_FORUM = !!process.env.ONLY_FORUM;
 const ONLY_I18N = !!process.env.ONLY_I18N;
+const ONLY_EVENTS = !!process.env.ONLY_EVENTS;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -98,7 +101,16 @@ async function seed() {
   const fCatHid = ok(await a.req("POST", "/forum/categories", { name: "ZZ B9 Forum Hidden Category", description: "Lab only", visibility: "LAB_ONLY" }));
   const fTopic = ok(await a.req("POST", "/forum/posts", { categoryId: fCatPub.id, title: "ZZ B9 Forum Seed Topic", body: "Seeded topic body for browser tests." }));
   const fXss = ok(await a.req("POST", "/forum/posts", { categoryId: fCatPub.id, title: "ZZ B9 Forum XSS Topic", body: "<img src=x onerror=window.__forumXss=1> <script>window.__forumXss=2</script>" }));
-  return { userIds, unlinkedSeed, mgr, mem, lead, plain, areaPub, areaHid, pubPub, pubHid, newsPub, newsHid, gPub, gHid, p1, p2, p3, p4, jpArea, jpHid, markup, fCatPub, fCatHid, fTopic, fXss };
+  // Phase 16 (events): a public upcoming event with a Japanese translation, a LAB_ONLY one, a past public
+  // one, and one with very long text in both languages (layout stress).
+  const DAY = 864e5;
+  const at = (days, hours = 0) => new Date(Date.now() + days * DAY + hours * 36e5).toISOString();
+  const evPub = ok(await a.req("POST", "/events", { title: "ZZ B9 Event Public", description: "A public seminar for the browser tests.", location: "ZZ B9 Hall 1", kind: "SEMINAR", startsAt: at(3), endsAt: at(3, 2), visibility: "PUBLIC", url: "https://example.org/zz-b9-event", projectId: p1.id, translations: { ja: { title: "ZZ B9 公開イベント", description: "ブラウザテスト用の公開セミナーです。" } } }));
+  const evHid = ok(await a.req("POST", "/events", { title: "ZZ B9 Event Hidden", description: "Lab-only planning meeting.", location: "ZZ B9 Room 2", kind: "MEETING", startsAt: at(4), visibility: "LAB_ONLY", translations: { ja: { title: "ZZ B9 非公開イベント" } } }));
+  const evPast = ok(await a.req("POST", "/events", { title: "ZZ B9 Event Past", description: "A finished workshop.", location: "ZZ B9 Hall 3", kind: "OTHER", startsAt: at(-10), endsAt: at(-10, 3), visibility: "PUBLIC" }));
+  const evPastHid = ok(await a.req("POST", "/events", { title: "ZZ B9 Event Past Hidden", kind: "SOCIAL", startsAt: at(-12), visibility: "LAB_ONLY" }));
+  const evLong = ok(await a.req("POST", "/events", { title: "ZZ B9 Event ZZP16" + "x".repeat(70) + " long title", description: "ZZP16" + "y".repeat(80) + " " + "A very long description sentence. ".repeat(30), location: "ZZP16" + "z".repeat(70) + " Building, Floor 12, Room 1204", kind: "DEADLINE", startsAt: at(5), endsAt: at(6), visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 超長い日本語のイベントタイトルがレイアウトを壊さないことを確認するためのテスト用の非常に長いイベント名です", description: "超長い日本語の説明文。".repeat(40) } } }));
+  return { userIds, unlinkedSeed, evPub, evHid, evPast, evPastHid, evLong, mgr, mem, lead, plain, areaPub, areaHid, pubPub, pubHid, newsPub, newsHid, gPub, gHid, p1, p2, p3, p4, jpArea, jpHid, markup, fCatPub, fCatHid, fTopic, fXss };
 }
 
 // ---------------------------------------------------------------- CDP plumbing
@@ -192,10 +204,17 @@ async function connect() {
   };
   // Phase 10.1: Log out lives inside the Account dropdown. Clicking it programmatically works while the panel is folded away;
   // the real mouse/keyboard path is covered by the nav section.
-  const logout = async () => { await ev(`(() => { const b = [...document.querySelectorAll('.nav__panel button')].find((x) => /log out/i.test(x.textContent)); if (!b) return false; b.click(); return true; })()`); await waitFor(`!!document.querySelector('.nav__account > a[href="/login"]')`); };
+  const logout = async () => { await ev(`(() => { const b = [...document.querySelectorAll('.nav__panel button')].find((x) => /log out/i.test(x.textContent)); if (!b) return false; b.click(); return true; })()`); await waitFor(`!!document.querySelector('.nav__account > a[href="/login"]')`);
+    // The header flips to "Log in" as soon as the click lands; make sure the SERVER also ended the session before
+    // anything navigates away (a navigation can cancel the in-flight logout request and leave a stale session that
+    // makes every later "guest" step run as a signed-in user). Under load this race was seen once.
+    for (let i = 0; i < 20; i++) { if (!(await ev(`fetch('/api/auth/me', { credentials: 'same-origin' }).then((r) => r.json()).then((j) => !!j.user)`))) return; await sleep(150); }
+    await ev(`fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).then(() => true)`);
+  };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n"))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events"))) return;
+    if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
     } catch (e) {
@@ -675,7 +694,7 @@ async function connect() {
     check("keyboard: Tab from the box reaches the Search button", (await ev(`document.activeElement.innerText.trim()`)) === "Search");
     await key("Tab", "Tab", 9);
     check("keyboard: ...then the first filter chip (All)", (await ev(`document.activeElement.innerText.trim().startsWith('All')`)) === true);
-    for (let i = 0; i < 8; i++) await key("Tab", "Tab", 9);
+    for (let i = 0; i < 9; i++) await key("Tab", "Tab", 9); // the 8 other chips (Phase 16 added Events), then the first result
     check("keyboard: ...then the first result's link, with a visible focus ring on its card", await ev(`(() => { const a = document.activeElement; return a.classList.contains('search-result__link') && getComputedStyle(a.closest('.search-result')).outlineStyle === 'solid'; })()`));
     check("labels: the /search box has a real <label>, the chips are a labelled group", await ev(`!!document.querySelector('label[for="search-page-input"]') && document.querySelector('.search-filters').getAttribute('aria-label') === 'Filter results by type' && document.querySelector('.search-filters').getAttribute('role') === 'group'`));
     check("semantic headings + list: h1, each result is an <article> with an h3 inside an ordered list", await ev(`document.querySelectorAll('h1').length === 1 && document.querySelectorAll('ol.search-results > li > article.search-result h3 a[href]').length > 0`));
@@ -684,9 +703,9 @@ async function connect() {
     await go("/search?q=FPGA");
     await statusIs("FPGA");
     const chips = await ev(`[...document.querySelectorAll('.search-filters a')].map(a => a.innerText.replace(/\\s+/g, ' ').trim())`);
-    check("chips: All + the seven types, each with a count", chips.length === 8 && chips[0].startsWith("All") && ["Research Areas", "Projects", "Groups", "Researchers", "Publications", "News", "Forum Topics"].every((l) => chips.some((c) => c.startsWith(l) && /\d+$/.test(c))), chips.join(" | "));
+    check("chips: All + the eight types, each with a count", chips.length === 9 && chips[0].startsWith("All") && ["Research Areas", "Projects", "Groups", "Researchers", "Publications", "News", "Forum Topics", "Events"].every((l) => chips.some((c) => c.startsWith(l) && /\d+$/.test(c))), chips.join(" | "));
     const apiCounts = (await searchJson("q=FPGA")).counts;
-    check("chip counts equal the API counts (nothing is invented client-side)", chips.every((c) => { const m = c.match(/^(.*?)\s+(\d+)$/); const map = { All: "all", "Research Areas": "research-area", Projects: "project", Groups: "group", Researchers: "researcher", Publications: "publication", News: "news", "Forum Topics": "forum-topic" }; return m && apiCounts[map[m[1]]] === Number(m[2]); }));
+    check("chip counts equal the API counts (nothing is invented client-side)", chips.every((c) => { const m = c.match(/^(.*?)\s+(\d+)$/); const map = { All: "all", "Research Areas": "research-area", Projects: "project", Groups: "group", Researchers: "researcher", Publications: "publication", News: "news", "Forum Topics": "forum-topic", Events: "event" }; return m && apiCounts[map[m[1]]] === Number(m[2]); }));
     check("the active chip is marked (aria-current)", await ev(`document.querySelector('.search-filters a[aria-current]').innerText.startsWith('All')`));
     await clickText("Publications", ".search-filters a");
     check("7. Publications filter: URL gets type=publication, only publication cards", (await waitFor(`location.search === '?q=FPGA&type=publication'`)) && (await waitFor(`document.querySelectorAll('.search-result').length > 0 && [...document.querySelectorAll('.search-result')].every(c => c.classList.contains('search-result--publication'))`)) && (await statusText()).includes("in Publications"));
@@ -1307,6 +1326,7 @@ async function connect() {
   const GUEST_PAGES = [
     ["/", "Smart Computing Lab"], ["/research", "Research Areas"], ["/projects", "Research Projects"], [`/projects/${D.p1.id}`, "Long description of the public project."], ["/groups", "Research Groups"],
     [`/groups/${D.gPub.id}`, "ZZ B9 Group Public"], ["/team", "Our Team"], [`/team/${D.lead.tmId}`, "ZZ B9 Lead"], ["/publications", "Publications"], ["/news", "News & Events"],
+    ["/events", "ZZ B9 Event Public"], [`/events/${D.evPub.id}`, "A public seminar for the browser tests."],
     ["/search?q=FPGA", "FPGA"], ["/search", "Search the Smart Computing Lab"], ["/contact", "Get in Touch"], ["/login", "Log in"], ["/nope-not-a-page", "Page not found"],
   ];
   const pageStructure = () => ev(`(() => {
@@ -2062,7 +2082,7 @@ async function connect() {
       for (const attr of ["aria-labelledby"]) { const v = el.getAttribute(attr); if (v && v.split(/\s+/).some((i) => !document.getElementById(i))) a11y.push(attr + " points at a missing id: " + short(el)); }
     }
     const txt = root.innerText || "";
-    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
+    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|events|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
     if (keyLeak) a11y.push("raw translation key visible: " + keyLeak[0]);
     if (/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/.test(txt)) a11y.push("placeholder/undefined text visible: " + (txt.match(/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/) || [""])[0]);
     if (!rootSel) {
@@ -2452,6 +2472,512 @@ async function connect() {
   });
 
   // ---------------------------------------------------------------- source hygiene (static)
+  // ================================================================= PHASE 16: EVENTS
+  section("phase 16: events");
+  const E16 = {};
+  const setTz = (id) => send("Emulation.setTimezoneOverride", { timezoneId: id });
+  const setLocale = async (loc) => { await go("/"); await ev(loc ? `localStorage.setItem('scl.locale','${loc}')` : `localStorage.removeItem('scl.locale')`); };
+  const evReady = async (p, mustHave) => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 8000); if (mustHave) await waitText(mustHave, 9000); await sleep(250); };
+  // The event cards on the page: title, classes, full text.
+  const evCards = () => ev(`[...document.querySelectorAll('.event-card')].map((c) => ({ title: c.querySelector('.event-card__title')?.textContent.trim() || '', past: c.classList.contains('event-card--past'), text: c.innerText, when: c.querySelector('time')?.textContent.trim() || '', editBtns: c.querySelectorAll('.card-edit-btn .icon-btn').length }))`);
+  const titlesOf = async () => (await evCards()).map((c) => c.title);
+  const evApi = (method, p, body, locale) => ev(`fetch('/api${p}', { method: ${JSON.stringify(method)}, credentials: 'same-origin', headers: { 'Content-Type': 'application/json'${locale ? `, 'X-Locale': '${locale}'` : ""} }, body: ${body === undefined ? "undefined" : JSON.stringify(JSON.stringify(body))} }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }))`);
+  const mainText = () => ev(`document.getElementById('main').innerText`);
+  const fillEventForm = async (v) => {
+    for (const [id, val] of Object.entries(v)) {
+      if (id === "event_allday") await ev(`(() => { const el = document.getElementById('event_allday'); if (el.checked !== ${!!val}) el.click(); })()`);
+      else await setVal(id, val);
+    }
+  };
+  // Marks one card's edit/delete icon, scrolls it to the middle of the screen (html has smooth scrolling) and clicks it for real.
+  const clickCardBtn = async (cardTitle, danger) => {
+    const ok = await ev(`(() => { document.querySelectorAll('[data-op]').forEach((e) => e.removeAttribute('data-op')); const c = [...document.querySelectorAll('.event-card')].find((x) => x.querySelector('.event-card__title').textContent.trim() === ${JSON.stringify(cardTitle)}); const b = c && c.querySelector(${JSON.stringify(danger ? ".card-edit-btn .icon-btn--danger" : ".card-edit-btn .icon-btn:not(.icon-btn--danger)")}); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.setAttribute('data-op', '1'); return true; })()`);
+    if (!ok) return false;
+    await p15Settle();
+    return clickEl("[data-op]");
+  };
+  const dialogOpen = () => exists('.modal[role="dialog"]');
+  const errText = () => ev(`document.getElementById('event_form_error')?.innerText.trim() || ''`);
+  const iso = (days, hours = 0) => new Date(Date.now() + days * 864e5 + hours * 36e5).toISOString();
+  // The steps below emulate Asia/Tokyo (fixed UTC+9, no DST), so a datetime-local value is the instant + 9h.
+  const localInput = (isoStr) => new Date(new Date(isoStr).getTime() + 9 * 36e5).toISOString().slice(0, 16);
+
+  await step("events seed: fixtures for time formatting, hostile text, member-owned events", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const asClient = async (email, pw) => { const c = new Client(); await c.req("POST", "/auth/login", { email, password: pw }); return c; };
+    const adm = await asClient(ADMIN.email, ADMIN.password);
+    const plainC = await asClient(D.plain.email, PW);
+    Object.assign(E16, { adm, plainC });
+    const mk = async (c, body) => (await c.req("POST", "/events", body)).json;
+    E16.fixed = await mk(adm, { title: "ZZ B9 Event Fixed Time", startsAt: "2031-05-05T00:00:00.000Z", endsAt: "2031-05-05T01:30:00.000Z", visibility: "PUBLIC", location: "ZZ B9 Fixed Hall" });
+    E16.allDay = await mk(adm, { title: "ZZ B9 Event All Day", allDay: true, startsAt: "2031-05-06T00:00:00.000Z", visibility: "PUBLIC" });
+    E16.multi = await mk(adm, { title: "ZZ B9 Event Multi Day", allDay: true, startsAt: "2031-05-08T00:00:00.000Z", endsAt: "2031-05-10T00:00:00.000Z", visibility: "PUBLIC" });
+    E16.xss = await mk(adm, { title: "ZZ B9 Event <img src=x onerror=window.__evXss=1>", description: "\"><svg onload=window.__evXss=3> <script>window.__evXss=4</script>", location: "<script>window.__evXss=2</script>", startsAt: iso(7), visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 <img src=x onerror=window.__evXss=5> 日本語", description: "<script>window.__evXss=6</script>" } } });
+    E16.plainKeep = await mk(plainC, { title: "ZZ B9 Event Plain Keep", description: "Owned by the plain member.", location: "ZZ B9 Lab", kind: "MEETING", startsAt: iso(9), translations: { ja: { title: "ZZ B9 プレーン会議" } } });
+    E16.plainEdit = await mk(plainC, { title: "ZZ B9 Event Plain Edit", description: "To be edited in the browser.", location: "ZZ B9 Old Place", startsAt: iso(10), translations: { ja: { title: "ZZ B9 編集前" } } });
+    check("events setup: fixed/all-day/multi-day/hostile and member-owned events seeded", [E16.fixed, E16.allDay, E16.multi, E16.xss, E16.plainKeep, E16.plainEdit].every((e) => e?.id), JSON.stringify([E16.fixed?.id, E16.allDay?.id, E16.multi?.id, E16.xss?.id, E16.plainKeep?.id, E16.plainEdit?.id]));
+    check("events setup: a member-created event is LAB_ONLY until a manager publishes it", E16.plainKeep.visibility === undefined && (await adm.req("GET", `/events/${E16.plainKeep.id}`)).json.visibility === "LAB_ONLY");
+  });
+
+  // ---------------------------------------------------------------- guest
+  await step("events guest: list, upcoming vs past, hidden, no edit controls", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    await evReady("/events", "ZZ B9 Event Public");
+    const st = await pageStructure();
+    check("events guest: exactly one <h1> 'Events' and one <main>; the tab title names the page", st.h1 === 1 && st.main === 1 && /^Events · /.test(st.title) && (await ev(`document.querySelector('h1').textContent`)) === "Events", JSON.stringify(st));
+    const titles = await titlesOf();
+    check("events guest: the upcoming list shows public upcoming events and never a LAB_ONLY one", titles.includes("ZZ B9 Event Public") && titles.includes("ZZ B9 Event Fixed Time") && !titles.some((t) => /Hidden|Plain Keep|Plain Edit/.test(t)), titles.join(" | "));
+    check("events guest: no past event in the upcoming list", !titles.includes("ZZ B9 Event Past") && (await evCards()).every((c) => !c.past));
+    const apiUp = (await evApi("GET", "/events?scope=upcoming&limit=200")).json.map((e) => e.title);
+    check("events guest: the cards are in the API's order (soonest first) and the two agree on which events exist", JSON.stringify(titles) === JSON.stringify(apiUp) && titles.indexOf("ZZ B9 Event Public") < titles.indexOf("ZZ B9 Event Fixed Time"), titles.join(" | "));
+    check("events guest: no add button, no edit/delete controls, no visibility badge", !(await exists(".admin-bar")) && !(await exists(".card-edit-btn")) && !(await exists(".vis-badge")));
+    check("events guest: the Upcoming chip is current (aria-current) and Past is not", await ev(`(() => { const c = [...document.querySelectorAll('.chips .chip')]; return c.length === 2 && c[0].getAttribute('aria-current') === 'true' && c[0].classList.contains('active') && !c[1].hasAttribute('aria-current'); })()`));
+    check("events guest: each card's title is the one link (to its detail page) and the date is a <time> element with a datetime", await ev(`[...document.querySelectorAll('.event-card')].every((c) => c.querySelectorAll('.event-card__title a').length === 1 && /^\\/events\\/[\\w-]+$/.test(c.querySelector('.event-card__title a').getAttribute('href')) && /^\\d{4}-\\d\\d-\\d\\dT/.test(c.querySelector('time').getAttribute('datetime')))`));
+    check("events guest: the Schedule shortcut is not offered to a guest (that page is members-only)", !(await exists('#main a[href="/schedule"]')));
+    await shot("events-guest-list");
+
+    await evReady("/events?view=past", "ZZ B9 Event Past");
+    const past = await evCards();
+    const pt = past.map((c) => c.title);
+    check("events guest: the Past tab lists past public events, never a LAB_ONLY one", pt.includes("ZZ B9 Event Past") && !pt.some((t) => /Hidden/.test(t)), pt.join(" | "));
+    check("events guest: past cards are visibly distinct (muted class) AND say 'Past' in words", past.every((c) => c.past && /past/i.test(c.text)));
+    check("events guest: past events are in the API's order (newest first)", JSON.stringify(pt) === JSON.stringify((await evApi("GET", "/events?scope=past&limit=200")).json.map((e) => e.title)), pt.join(" | "));
+    check("events guest: the Past chip is now the current one", await ev(`document.querySelectorAll('.chips .chip')[1].getAttribute('aria-current') === 'true'`));
+    await ev(`(() => { const a = [...document.querySelectorAll('.chips .chip')][0]; a.click(); })()`);
+    check("events guest: clicking Upcoming goes back (client-side navigation, URL /events)", (await waitFor(`location.pathname === '/events' && !location.search`, 3000)) && (await waitText("ZZ B9 Event Public")));
+    await shot("events-guest-past");
+  });
+
+  await step("events guest: API authorization from the browser", async () => {
+    await evReady("/events", "ZZ B9 Event Public");
+    check("events guest (browser fetch): POST /api/events is 401", (await evApi("POST", "/events", { title: "ZZ B9 nope", startsAt: iso(1) })).status === 401);
+    check("events guest (browser fetch): PUT and DELETE are 401", (await evApi("PUT", `/events/${D.evPub.id}`, { title: "x" })).status === 401 && (await evApi("DELETE", `/events/${D.evPub.id}`)).status === 401);
+    check("events guest (browser fetch): a hidden event is 404 and its list omits it", (await evApi("GET", `/events/${D.evHid.id}`)).status === 404 && !JSON.stringify((await evApi("GET", "/events?scope=all&limit=200")).json).includes("ZZ B9 Event Hidden"));
+    check("events guest (browser fetch): the hidden event's Japanese title is not reachable either", (await evApi("GET", `/events/${D.evHid.id}`, undefined, "ja")).status === 404);
+    check("events guest (browser fetch): GET /api/translations/EVENT/:id is 401", (await evApi("GET", `/translations/EVENT/${D.evPub.id}`)).status === 401);
+  });
+
+  await step("events guest: detail page, hidden and missing events", async () => {
+    await evReady(`/events/${D.evPub.id}`, "A public seminar for the browser tests.");
+    const st = await pageStructure();
+    check("events guest detail: one <h1> equal to the title, one <main>, tab title names the event", st.h1 === 1 && st.main === 1 && (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 Event Public" && /^ZZ B9 Event Public · /.test(st.title), JSON.stringify(st));
+    check("events guest detail: breadcrumb is Home / Events / <title>", JSON.stringify(await ev(`[...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim())`)) === JSON.stringify(["Home", "Events", "ZZ B9 Event Public"]));
+    const facts = await ev(`[...document.querySelectorAll('.event-facts > div')].map((d) => [d.querySelector('dt').textContent.trim().toLowerCase(), d.querySelector('dd').innerText.trim()])`);
+    const fmap = Object.fromEntries(facts);
+    check("events guest detail: When / Where / Related project / More information are shown", !!fmap["when"] && fmap["where"] === "ZZ B9 Hall 1" && /ZZ B9 Project Public/.test(fmap["related project"] || "") && /example\.org\/zz-b9-event/.test(fmap["more information"] || ""), JSON.stringify(facts));
+    check("events guest detail: the related project links to its page", await ev(`!!document.querySelector('.event-facts a[href="/projects/${D.p1.id}"]')`));
+    check("events guest detail: the external link opens in a new tab safely and says so to screen readers", await ev(`(() => { const a = document.querySelector('.event-facts a[target=_blank]'); return !!a && /noopener/.test(a.rel) && /noreferrer/.test(a.rel) && /new tab/i.test(a.querySelector('.sr-only')?.textContent || '') && a.href === 'https://example.org/zz-b9-event'; })()`));
+    check("events guest detail: the type is shown in words", /seminar/i.test(await ev(`document.querySelector('.detail-meta').innerText`)));
+    check("events guest detail: no edit/delete controls for a guest", !(await exists(".admin-bar")) && !(await exists(".btn--danger")));
+    await shot("events-guest-detail");
+
+    await evReady(`/events/${D.evHid.id}`, "Event not found");
+    const hiddenTxt = await mainText();
+    await evReady("/events/nonexistentid123", "Event not found");
+    const missingTxt = await mainText();
+    check("events guest: a hidden event's URL shows the same not-found page as a missing one (nothing leaks: no title, no time, no place)", hiddenTxt === missingTxt && !/Hidden|Room 2|planning/i.test(hiddenTxt), hiddenTxt.slice(0, 120));
+    check("events guest: the not-found page has one <h1>, a link back to all events, and no breadcrumb title leak", (await ev(`document.querySelectorAll('h1').length`)) === 1 && (await exists('a[href="/events"].btn')) && !/ZZ B9 Event Hidden/.test(await ev(`document.title + ' ' + document.querySelector('.breadcrumbs').innerText`)));
+    await evReady("/events/bad%20id", "Event not found");
+    check("events guest: a malformed id also shows not-found, not a crash", (await mainText()).includes("Event not found"));
+  });
+
+  await step("events guest: dates and times (EN/JA, time zones, all-day)", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    await evReady("/events", "ZZ B9 Event Fixed Time");
+    const byTitle = async () => Object.fromEntries((await evCards()).map((c) => [c.title, c]));
+    let c = await byTitle();
+    check("events dates EN (Asia/Tokyo): 2031-05-05 00:00Z shows 9:00 – 10:30 AM on May 5, 2031", /May 5, 2031/.test(c["ZZ B9 Event Fixed Time"].when) && /9:00/.test(c["ZZ B9 Event Fixed Time"].when) && /10:30\s?AM/.test(c["ZZ B9 Event Fixed Time"].when), c["ZZ B9 Event Fixed Time"].when);
+    check("events dates EN: an all-day event is a bare calendar date with no time", c["ZZ B9 Event All Day"].when === "May 6, 2031" && /all day/i.test(c["ZZ B9 Event All Day"].text), c["ZZ B9 Event All Day"].when);
+    check("events dates EN: a multi-day all-day event shows one collapsed range", /^May 8\s?[–-]\s?10, 2031$/.test(c["ZZ B9 Event Multi Day"].when), c["ZZ B9 Event Multi Day"].when);
+    await setTz("America/Los_Angeles");
+    await evReady("/events", "ZZ B9 Event Fixed Time");
+    c = await byTitle();
+    check("events dates EN (America/Los_Angeles): the same instant shows in the viewer's own time zone (May 4, 5:00 – 6:30 PM)", /May 4, 2031/.test(c["ZZ B9 Event Fixed Time"].when) && /5:00/.test(c["ZZ B9 Event Fixed Time"].when) && /6:30\s?PM/.test(c["ZZ B9 Event Fixed Time"].when),c["ZZ B9 Event Fixed Time"].when);
+    check("events dates: an all-day event stays on its calendar day in EVERY time zone (May 6 in Los Angeles too)", c["ZZ B9 Event All Day"].when === "May 6, 2031" && /^May 8\s?[–-]\s?10, 2031$/.test(c["ZZ B9 Event Multi Day"].when));
+    await setTz("Pacific/Kiritimati"); // UTC+14
+    await evReady("/events", "ZZ B9 Event All Day");
+    c = await byTitle();
+    check("events dates: ...and in the far east (UTC+14) as well", c["ZZ B9 Event All Day"].when === "May 6, 2031");
+    await setTz("Asia/Tokyo");
+    await setLocale("ja");
+    await evReady("/events", "ZZ B9 Event Fixed Time");
+    c = await byTitle();
+    const fx = c["ZZ B9 Event Fixed Time"].when;
+    check("events dates JA: Japanese format (2031/05/05 9時00分～10時30分), no AM/PM", /2031\/0?5\/0?5/.test(fx) && /9[:時]00/.test(fx) && /10[:時]30/.test(fx) && !/AM|PM/.test(fx), fx);
+    check("events dates JA: all-day is a bare Japanese date and the badge says 終日", /^2031\/0?5\/0?6$/.test(c["ZZ B9 Event All Day"].when) && /終日/.test(c["ZZ B9 Event All Day"].text), c["ZZ B9 Event All Day"].when);
+    check("events dates JA: the multi-day range is one Japanese range from 2031/05/08 to the 10th, with no time", /^2031\/0?5\/0?8/.test(c["ZZ B9 Event Multi Day"].when) && /10$/.test(c["ZZ B9 Event Multi Day"].when) && !/:/.test(c["ZZ B9 Event Multi Day"].when), c["ZZ B9 Event Multi Day"].when);
+    await setLocale(null);
+  });
+
+  await step("events guest: Japanese localization + English fallback", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale("ja");
+    await evReady("/events", "ZZ B9 公開イベント");
+    const cards = await evCards();
+    const pub = cards.find((x) => x.title === "ZZ B9 公開イベント");
+    check("events JA: a Japanese title override is shown on the card, with the kind in Japanese (セミナー)", !!pub && /セミナー/.test(pub.text) && /ブラウザテスト用の公開セミナーです。/.test(pub.text), pub?.text);
+    check("events JA: the English title is NOT shown for an event that has a Japanese one", !cards.some((x) => x.title === "ZZ B9 Event Public"));
+    check("events JA: an event without a Japanese override falls back to its English title", cards.some((x) => x.title === "ZZ B9 Event Fixed Time"));
+    check("events JA: <html lang> is ja, the page title/heading/chips/description are Japanese", (await ev(`document.documentElement.lang`)) === "ja" && (await ev(`document.querySelector('h1').textContent`)) === "イベント" && /今後/.test(await ev(`document.querySelector('.chips').innerText`)) && /過去/.test(await ev(`document.querySelector('.chips').innerText`)));
+    check("events JA: no raw translation key or English UI chrome leaks into the Japanese page", !/\bevents\.[a-z]|\bnav\.events|Upcoming events|No upcoming/.test(await mainText()));
+    check("events JA: the tab title is Japanese", /^イベント · /.test(await ev(`document.title`)));
+    await evReady(`/events/${D.evPub.id}`, "ZZ B9 公開イベント");
+    check("events JA detail: title, description, type, labels are Japanese; heading equals the override", (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 公開イベント" && /ブラウザテスト用の公開セミナーです。/.test(await mainText()) && /日時/.test(await mainText()) && /場所/.test(await mainText()));
+    check("events JA detail: the breadcrumb uses the Japanese section name", (await ev(`[...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim())`))[1] === "イベント");
+    await evReady(`/events/${E16.fixed.id}`, "ZZ B9 Event Fixed Time");
+    check("events JA detail: with no override, the English title/description stay (never blank)", (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 Event Fixed Time");
+    await evReady(`/events/${D.evHid.id}`, "見つかりません");
+    check("events JA: a hidden event is the same not-found for a guest, in Japanese — its Japanese title never appears", !(await mainText()).includes("非公開イベント") && /イベントが見つかりません/.test(await mainText()));
+    await evReady("/events?view=past", "ZZ B9 Event Past");
+    check("events JA: the past tab is Japanese and shows 終了", /終了/.test(await mainText()));
+    // live switch, no reload
+    await setLocale("en");
+    await evReady("/events", "ZZ B9 Event Public");
+    await ev(`(() => { const t = document.querySelector('.lang-switch > .nav__trigger'); t.click(); })()`);
+    await sleep(150);
+    await ev(`(() => { const b = [...document.querySelectorAll('.lang-switch__panel button')].find((x) => x.getAttribute('aria-current') !== 'true'); b.click(); })()`);
+    check("events: the language switcher flips the page chrome live (heading, tabs, buttons) with no reload", await waitFor(`document.querySelector('h1').textContent === 'イベント' && document.documentElement.lang === 'ja'`, 4000));
+    await evReady("/events", "ZZ B9 公開イベント");
+    check("events: after the switch the next load shows the Japanese title (domain text follows the stored locale, like every other content type)", (await titlesOf()).includes("ZZ B9 公開イベント"));
+    await setLocale(null);
+  });
+
+  await step("events guest: hostile text renders as text (XSS)", async () => {
+    await desktop(); await setTz("Asia/Tokyo");
+    for (const loc of [null, "ja"]) {
+      await setLocale(loc);
+      for (const p of ["/events", `/events/${E16.xss.id}`, `/search?q=${encodeURIComponent("ZZ B9 Event <img")}&type=event`]) {
+        await evReady(p, "ZZ B9");
+        await sleep(300);
+        const r = await ev(`({ flag: typeof window.__evXss, scripts: document.querySelectorAll('#main script').length, imgs: document.querySelectorAll('#main img').length, svgs: document.querySelectorAll('#main svg[onload]').length, onerr: document.querySelectorAll('#main [onerror], #main [onload]').length })`);
+        check(`events XSS (${loc || "en"}) ${p.slice(0, 30)}: nothing executed and no injected script/img/handler element exists`, r.flag === "undefined" && r.scripts === 0 && r.imgs === 0 && r.svgs === 0 && r.onerr === 0, JSON.stringify(r));
+      }
+    }
+    await setLocale(null);
+    await evReady("/events", "ZZ B9");
+    check("events XSS: the hostile title is visible as literal text", (await mainText()).includes("<img src=x onerror=window.__evXss=1>") || (await mainText()).includes("ZZ B9 Event <img"));
+    await setLocale(null);
+  });
+
+  await step("events guest: home preview", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    await evReady("/", "Upcoming events");
+    const sec = await ev(`(() => { const h = document.getElementById('home-events'); if (!h) return null; const s = h.closest('section'); return { h: h.tagName, title: h.textContent.trim(), cards: [...s.querySelectorAll('.event-card')].map((c) => c.querySelector('.event-card__title').textContent.trim()), all: s.querySelector('a[href="/events"]')?.textContent.trim(), edit: s.querySelectorAll('.card-edit-btn').length }; })()`);
+    check("events home: a labelled 'Upcoming events' section (h2) with a 'View all events' link to /events", !!sec && sec.h === "H2" && sec.title === "Upcoming events" && /View all events/.test(sec.all || ""), JSON.stringify(sec));
+    check("events home: at most 3 events, soonest first, public only, no edit controls", !!sec && sec.cards.length === 3 && sec.cards[0] === "ZZ B9 Event Public" && !sec.cards.some((t) => /Hidden|Plain/.test(t)) && sec.edit === 0, JSON.stringify(sec?.cards));
+    check("events home: the home page still has exactly one <h1>", (await ev(`document.querySelectorAll('h1').length`)) === 1);
+    await shot("events-home-guest");
+    await fake("*/api/events*", 200, "[]");
+    await evReady("/", "Upcoming events");
+    check("events home: with no events the section shows an empty state (no broken layout, no error)", await waitFor(`document.body.innerText.includes('No upcoming events.')`, 4000) && !(await exists("#main [role=alert]")) && (await ev(`document.querySelectorAll('.hero, #home-events').length`)) === 2);
+    await unfake();
+    await fake("*/api/events*", 500, JSON.stringify({ error: "SQLITE boom at /srv/app/db.ts:44" }));
+    await evReady("/", "Upcoming events");
+    check("events home: if the events request fails, a friendly message shows — not the raw error — and the rest of the page is intact", await waitFor(`document.body.innerText.includes('Could not load events.')`, 4000) && !/SQLITE|boom|\/srv\/app/.test(await text()) && (await exists("#home-news")) && (await exists("#home-projects")) && (await exists(".hero")));
+    await unfake();
+    await fake("*/api/events*", 200, "[]");
+    await evReady("/events", "Events");
+    check("events page: with no upcoming events the empty state explains it", await waitFor(`document.body.innerText.includes('No upcoming events.') && document.body.innerText.includes('New seminars')`, 4000) && !(await exists("#main [role=alert]")));
+    await evReady("/events?view=past", "Events");
+    check("events page: with no past events the empty state explains that", await waitFor(`document.body.innerText.includes('No past events.')`, 4000));
+    await unfake();
+    await fake("*/api/events*", 500, JSON.stringify({ error: "boom" }));
+    await evReady("/events", "Events");
+    check("events page: a failed load shows one alert with Try again (localized message, no raw error)", await waitFor(`!!document.querySelector('#main [role=alert]')`, 4000) && /Could not load events/.test(await mainText()) && !/boom/.test(await mainText()) && (await exists("#main [role=alert] button")));
+    await unfake();
+    await ev(`(() => { document.querySelector('#main [role=alert] button')?.click(); })()`);
+    await evReady("/events", "ZZ B9 Event Public");
+  });
+
+  await step("events guest: search", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    const q = encodeURIComponent("ZZ B9 Event Public");
+    await evReady(`/search?q=${q}`, "ZZ B9 Event Public");
+    const chips = await ev(`[...document.querySelectorAll('.search-filters .chip')].map((c) => c.textContent.trim())`);
+    check("events search: an Events filter chip exists with a count", chips.some((c) => /^Events\s*\d+$/.test(c)), chips.join(" | "));
+    const res = await ev(`[...document.querySelectorAll('.search-result')].map((r) => ({ type: r.querySelector('.search-result__type').textContent.trim().toLowerCase(), title: r.querySelector('.search-result__title').textContent.trim(), href: r.querySelector('a').getAttribute('href'), cta: r.querySelector('.search-result__cta').textContent.trim() }))`);
+    const hit = res.find((r) => r.title === "ZZ B9 Event Public");
+    check("events search: the result is typed 'Event', links to /events/:id, and has its own call to action", !!hit && hit.type === "event" && hit.href === `/events/${D.evPub.id}` && /View event/.test(hit.cta), JSON.stringify(hit));
+    await evReady(`/search?q=${q}&type=event`, "ZZ B9 Event Public");
+    check("events search: filtering to Events keeps only events", await ev(`[...document.querySelectorAll('.search-result')].every((r) => /event/i.test(r.querySelector('.search-result__type').textContent))`));
+    await evReady(`/search?q=${encodeURIComponent("ZZ B9 Event Hidden")}&type=event`, "ZZ B9");
+    check("events search: a LAB_ONLY event is not found by a guest and no count/snippet reveals it", (await ev(`document.querySelectorAll('.search-result').length`)) === 0 && !/Room 2|planning meeting/.test(await mainText()) && !/[1-9]/.test((await ev(`document.querySelector('.search-filters').innerText`)).replace(/\s+/g, " ")) && !/Events\s*[1-9]/.test(await ev(`document.querySelector('.search-filters').innerText.replace(/\\s+/g, ' ')`)));
+    await setLocale("ja");
+    await evReady(`/search?q=${encodeURIComponent("公開イベント")}`, "ZZ B9 公開イベント");
+    check("events search (Japanese): a Japanese translation is found, shown as Japanese, typed イベント", (await ev(`document.querySelector('.search-result__title').textContent`)).includes("公開イベント") && /イベント/.test(await ev(`document.querySelector('.search-result__type').textContent`)));
+    await evReady(`/search?q=${encodeURIComponent("非公開イベント")}`, "ZZ B9");
+    await sleep(500);
+    check("events search (Japanese): a hidden event's Japanese title is not found by a guest", (await ev(`document.querySelectorAll('.search-result').length`)) === 0);
+    await setLocale(null);
+  });
+
+  await step("events navigation: Community menu, hamburger, keyboard, active state, Schedule", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    await evReady("/events", "ZZ B9 Event Public");
+    check("events nav: Events is in the Community menu (after Forum, before Gallery), with the right href", JSON.stringify(await panelHrefs("community")) === JSON.stringify(["/community/forum", "/events", "/gallery"]) && JSON.stringify(await panelLabels("community")) === JSON.stringify(["forum", "events", "gallery"]), JSON.stringify(await panelHrefs("community")));
+    check("events nav: the current page is marked (aria-current=page) and the Community trigger looks active", await ev(`document.querySelector('#nav-panel-community a[href="/events"]').getAttribute('aria-current') === 'page'`) && (await ev(`document.querySelector('button.nav__trigger[aria-controls="nav-panel-community"]').className`)).includes("active"));
+    await evReady(`/events/${D.evPub.id}`, "ZZ B9 Event Public");
+    check("events nav: on an event's detail page Events is still the current section", await ev(`document.querySelector('#nav-panel-community a[href="/events"]').getAttribute('aria-current') === 'page'`));
+    await go("/"); await navReady();
+    check("events nav: opening Community with a REAL click lists Events and it is clickable", (await openMenu("community")) && (await clickEl('#nav-panel-community a[href="/events"]')) && (await waitFor(`location.pathname === '/events'`, 3000)));
+    await go("/"); await navReady();
+    await focusSel(trig("community"));
+    await press("down"); await press("down"); // ArrowDown opens the menu on Forum; the next one lands on Events
+    check("events nav: keyboard — ArrowDown moves through the Community items to Events", (await focusDesc()) === "events", await focusDesc());
+    await press("enter");
+    check("events nav: Enter on Events navigates there", await waitFor(`location.pathname === '/events'`, 3000));
+    await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await go("/"); await navReady();
+    check("events nav (390px): the hamburger menu contains an Events link", (await openPhoneMenu()) && (await hrefEverywhere("/events")));
+    await desktop();
+    await evReady("/events", "ZZ B9 Event Public");
+    check("events nav: the header search box, language switcher and Log in link are all still present", await ev(`!!document.querySelector('.nav__search input[type=search], .nav__search input') && !!document.querySelector('.lang-switch') && !!document.querySelector('.nav__account > a[href="/login"]')`));
+    check("events nav: the guest's top-level list is unchanged (Events is inside Community, not a new top-level entry)", JSON.stringify(await topLevel()) === JSON.stringify(["research", "people", "community", "contact", "log in"]), JSON.stringify(await topLevel()));
+  });
+
+  // ---------------------------------------------------------------- member
+  await step("events member: sees LAB_ONLY events, add dialog, validation", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    check("events member: login", await login(D.plain.email, PW));
+    await evReady("/events", "ZZ B9 Event Plain Keep");
+    const titles = await titlesOf();
+    check("events member: LAB_ONLY events are listed for a signed-in member", titles.includes("ZZ B9 Event Hidden") && titles.includes("ZZ B9 Event Plain Keep"), titles.join(" | "));
+    check("events member: the toolbar offers 'Add event' and links to the Schedule calendar", (await exists(".admin-bar .btn--primary")) && /Add event/.test(await ev(`document.querySelector('.admin-bar .btn--primary').innerText`)) && (await exists('a[href="/schedule"]')));
+    check("events member: the member does not see a visibility badge (only managers receive visibility)", !(await exists(".vis-badge")));
+    const cards = await evCards();
+    const own = cards.filter((c) => /Plain (Keep|Edit)/.test(c.title));
+    const others = cards.filter((c) => !/Plain (Keep|Edit)/.test(c.title));
+    check("events member: edit + delete controls appear ONLY on the member's own events", own.length === 2 && own.every((c) => c.editBtns === 2) && others.every((c) => c.editBtns === 0), JSON.stringify(cards.map((c) => [c.title, c.editBtns])));
+    check("events member: the controls have accessible names that include the event title", await ev(`[...document.querySelectorAll('.card-edit-btn .icon-btn')].every((b) => /ZZ B9 Event Plain/.test(b.getAttribute('aria-label')))`));
+
+    await clickEl(".admin-bar .btn--primary");
+    check("events member: the Add event dialog opens (role=dialog, named, focus inside)", await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000) && (await ev(`document.querySelector('.modal').contains(document.activeElement)`)) && (await ev(`document.getElementById(document.querySelector('.modal').getAttribute('aria-labelledby')).textContent`)) === "Add event");
+    check("events member: the form has no visibility or project control, but does explain the LAB_ONLY default", !(await exists("#event_visibility")) && !(await exists("#event_project")) && /until a lab manager makes them public/.test(await ev(`document.querySelector('.modal').innerText`)));
+    check("events member: every form control has a label", await ev(`[...document.querySelectorAll('.modal input:not([type=hidden]), .modal select, .modal textarea')].every((e) => e.labels && e.labels.length > 0)`));
+    check("events member: start/end are date-time controls; the Japanese fields sit in a fieldset labelled 日本語", (await ev(`document.getElementById('event_start').type`)) === "datetime-local" && (await ev(`document.getElementById('event_end').type`)) === "datetime-local" && (await ev(`document.querySelector('.modal fieldset legend').textContent`)) === "日本語");
+
+    await submitModal();
+    await waitFor(`!!document.getElementById('event_form_error')`, 2000);
+    check("events form: submitting empty says 'Title is required.' in an alert, focuses the title, and ties them together (aria-invalid + aria-describedby)", (await errText()) === "Title is required." && (await ev(`document.activeElement.id`)) === "event_title" && (await ev(`document.getElementById('event_title').getAttribute('aria-invalid')`)) === "true" && (await ev(`document.getElementById('event_title').getAttribute('aria-describedby')`)) === "event_form_error" && (await ev(`document.getElementById('event_form_error').getAttribute('role')`)) === "alert");
+    await fillEventForm({ event_title: "ZZ B9 Event Form Test" });
+    await submitModal();
+    await waitFor(`document.getElementById('event_form_error')?.innerText.includes('Start')`, 2000);
+    check("events form: a missing start is reported and focused", (await errText()) === "Start is required." && (await ev(`document.activeElement.id`)) === "event_start", JSON.stringify({ err: await errText(), active: await ev(`document.activeElement.id`) }));
+    await fillEventForm({ event_start: localInput(iso(20)), event_end: localInput(iso(19)) });
+    await submitModal();
+    await waitFor(`document.getElementById('event_form_error')?.innerText.includes('End')`, 2000);
+    check("events form: an end before the start is rejected and the END field is the one marked", (await errText()) === "End can't be before the start." && (await ev(`document.activeElement.id`)) === "event_end" && (await ev(`document.getElementById('event_end').getAttribute('aria-invalid')`)) === "true" && !(await ev(`document.getElementById('event_start').hasAttribute('aria-invalid')`)), JSON.stringify({ err: await errText(), active: await ev(`document.activeElement.id`), endInvalid: await ev(`document.getElementById('event_end').getAttribute('aria-invalid')`), startInvalid: await ev(`document.getElementById('event_start').getAttribute('aria-invalid')`) }));
+    await fillEventForm({ event_end: "", event_url: "javascript:alert(1)" });
+    await submitModal();
+    await waitFor(`document.getElementById('event_form_error')?.innerText.includes('Link')`, 2000);
+    check("events form: a javascript: link is rejected before anything is sent", /^Link must be a valid URL/.test(await errText()) && (await ev(`document.activeElement.id`)) === "event_url");
+    await fillEventForm({ event_url: "", event_title: "x".repeat(201) });
+    check("events form: the title input stops typing at 200 characters (maxLength)", (await ev(`document.getElementById('event_title').maxLength`)) === 200);
+    check("events form: no request reached the server for the invalid submissions", !(await evApi("GET", "/events?scope=all&limit=200")).json.some((e) => e.title.startsWith("ZZ B9 Event Form Test")));
+    await press("esc");
+    check("events member: Escape closes the dialog and returns focus to the Add event button", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await ev(`document.activeElement.classList.contains('btn--primary') && document.activeElement.closest('.admin-bar') !== null`)));
+  });
+
+  await step("events member: create, edit (incl. clearing a translation), delete", async () => {
+    await desktop(); await setTz("Asia/Tokyo");
+    await evReady("/events", "ZZ B9 Event Plain Keep");
+    // ---- create through the real form
+    await clickEl(".admin-bar .btn--primary");
+    await waitFor(`!!document.getElementById('event_title')`, 3000);
+    const start = localInput(iso(15));
+    await fillEventForm({ event_title: "ZZ B9 Event Created By Member", event_kind: "SOCIAL", event_start: start, event_end: localInput(iso(15, 2)), event_location: "ZZ B9 Cafeteria", event_description: "Made from the browser form.", event_url: "https://example.org/made", event_title_ja: "ZZ B9 メンバー作成イベント", event_description_ja: "ブラウザから作成。" });
+    await submitModal();
+    check("events member: a valid form saves, closes the dialog and the new card appears", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 5000)) && (await waitText("ZZ B9 Event Created By Member", 5000)));
+    const created = (await evApi("GET", "/events?scope=all&limit=200")).json.find((e) => e.title === "ZZ B9 Event Created By Member");
+    E16.created = created;
+    check("events member: the saved event has the typed values (kind, place, link) and the exact instant the form's local time means", !!created && created.kind === "SOCIAL" && created.location === "ZZ B9 Cafeteria" && created.url === "https://example.org/made" && Math.abs(new Date(created.startsAt).getTime() - new Date(start + ":00+09:00").getTime()) < 1000 && created.canEdit === true, JSON.stringify(created));
+    check("events member: the Japanese fields were saved as a translation, not as another event", (await evApi("GET", `/events/${created.id}`, undefined, "ja")).json.title === "ZZ B9 メンバー作成イベント" && (await evApi("GET", "/events?scope=all&limit=200")).json.filter((e) => /Created By Member|メンバー作成/.test(e.title)).length === 1);
+    check("events member: it is LAB_ONLY (the member cannot publish) — a guest cannot see it", (await E16.adm.req("GET", `/events/${created.id}`)).json.visibility === "LAB_ONLY");
+    // ---- edit
+    await evReady("/events", "ZZ B9 Event Plain Edit");
+    await clickCardBtn("ZZ B9 Event Plain Edit", false);
+    check("events member: Edit opens the dialog prefilled with the event's values", (await waitFor(`!!document.getElementById('event_title')`, 3000)) && (await ev(`document.getElementById('event_title').value`)) === "ZZ B9 Event Plain Edit" && (await ev(`document.getElementById('event_location').value`)) === "ZZ B9 Old Place" && (await ev(`document.getElementById('event_description').value`)) === "To be edited in the browser.");
+    check("events member: the Japanese fields are prefilled from the saved translation", await waitFor(`document.getElementById('event_title_ja').value === 'ZZ B9 編集前'`, 3000));
+    check("events member: the start control shows the event's own local time", (await ev(`document.getElementById('event_start').value`)) === localInput(E16.plainEdit.startsAt));
+    await fillEventForm({ event_location: "ZZ B9 New Place", event_title_ja: "" });
+    await submitModal();
+    check("events member: saving closes the dialog and the card shows the new place", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 5000)) && (await waitText("ZZ B9 New Place", 5000)));
+    const ja1 = (await evApi("GET", `/events/${E16.plainEdit.id}`, undefined, "ja")).json;
+    check("events member: clearing the Japanese title restores the English fallback (and removes the override)", ja1.title === "ZZ B9 Event Plain Edit" && ja1.location === "ZZ B9 New Place");
+    // ---- the owner's own dialog: Cancel does nothing
+    await clickCardBtn("ZZ B9 Event Plain Edit", false);
+    await waitFor(`!!document.getElementById('event_title')`, 3000);
+    await fillEventForm({ event_title: "ZZ B9 Should Not Save" });
+    await ev(`[...document.querySelectorAll('.modal .btn--secondary')].find((b) => /cancel/i.test(b.textContent)).click()`);
+    check("events member: Cancel discards changes", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await evApi("GET", `/events/${E16.plainEdit.id}`)).json.title === "ZZ B9 Event Plain Edit");
+    // ---- delete with confirmation
+    await clickCardBtn("ZZ B9 Event Created By Member", true);
+    check("events member: Delete opens a confirmation dialog naming the event; focus starts on Cancel (the safe choice)", (await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000)) && /ZZ B9 Event Created By Member/.test(await ev(`document.querySelector('.modal').innerText`)) && (await ev(`document.activeElement.textContent.trim()`)) === "Cancel");
+    await press("esc");
+    check("events member: Escape cancels the deletion, focus returns to the Delete button, and the event still exists", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await ev(`document.activeElement.hasAttribute('data-op')`)) && (await evApi("GET", `/events/${created.id}`)).status === 200);
+    await clickEl("[data-op]");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+    await ev(`document.querySelector('.modal .btn--danger').click()`);
+    check("events member: confirming deletes it — the card disappears and the API says 404", (await waitGone("ZZ B9 Event Created By Member", 5000)) && (await evApi("GET", `/events/${created.id}`)).status === 404);
+    // ---- detail page of an event she does not own
+    await evReady(`/events/${D.evPub.id}`, "ZZ B9 Event Public");
+    check("events member: another person's event has no edit or delete controls", !(await exists(".admin-bar")));
+    await evReady(`/events/${E16.plainKeep.id}`, "ZZ B9 Event Plain Keep");
+    check("events member: her own event's detail page offers Edit and Delete", (await exists(".admin-bar")) && /Edit/.test(await ev(`document.querySelector('.admin-bar').innerText`)) && /Delete/.test(await ev(`document.querySelector('.admin-bar').innerText`)));
+    await evReady(`/events/${D.evHid.id}`, "ZZ B9 Event Hidden");
+    check("events member: a LAB_ONLY event's detail page opens for a signed-in member", (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 Event Hidden");
+    check("events member (browser fetch): the API refuses another person's event — 403 for PUT and DELETE, and visibility/project 403 on her own", (await evApi("PUT", `/events/${D.evPub.id}`, { title: "hijack" })).status === 403 && (await evApi("DELETE", `/events/${D.evPub.id}`)).status === 403 && (await evApi("PUT", `/events/${E16.plainKeep.id}`, { visibility: "PUBLIC" })).status === 403 && (await evApi("PUT", `/events/${E16.plainKeep.id}`, { projectId: D.p1.id })).status === 403);
+    await evReady("/schedule");
+    check("events member: the Google Calendar Schedule page is unchanged (calendar iframe present) and links to Events", (await ev(`document.querySelector('iframe')?.src.startsWith('https://calendar.google.com/calendar/embed')`)) && (await exists('#main a[href="/events"]')));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- Japanese form + validation messages
+  await step("events member (Japanese): form labels and validation messages are Japanese", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale("ja");
+    check("events JA member: login", await login(D.plain.email, PW));
+    await evReady("/events", "ZZ B9");
+    await clickEl(".admin-bar .btn--primary");
+    await waitFor(`!!document.getElementById('event_title')`, 3000);
+    const labels = await ev(`[...document.querySelectorAll('.modal label')].map((l) => l.innerText.trim())`);
+    check("events JA form: labels are Japanese (タイトル / 開始 / 場所 / 説明 / 種類)", ["タイトル", "開始", "場所", "説明", "種類"].every((w) => labels.some((l) => l.includes(w))), labels.join(" | "));
+    check("events JA form: the kind options are Japanese", (await ev(`[...document.querySelectorAll('#event_kind option')].map((o) => o.textContent.trim())`)).join() === "セミナー,ミーティング,締め切り,交流会,その他");
+    await submitModal();
+    await waitFor(`!!document.getElementById('event_form_error')`, 2000);
+    check("events JA form: the 'title required' error is Japanese and focuses the title", (await errText()) === "タイトルを入力してください。" && (await ev(`document.activeElement.id`)) === "event_title");
+    await fillEventForm({ event_title: "ZZ B9 Event JA Form", event_start: localInput(iso(30)), event_end: localInput(iso(29)) });
+    await submitModal();
+    await waitFor(`document.getElementById('event_form_error')?.innerText.includes('終了')`, 2000);
+    check("events JA form: 'end before start' is Japanese", (await errText()) === "終了日時は開始日時より前にできません。");
+    await fillEventForm({ event_end: "", event_url: "javascript:x" });
+    await submitModal();
+    await waitFor(`document.getElementById('event_form_error')?.innerText.includes('リンク')`, 2000);
+    check("events JA form: the URL error is Japanese", /^リンクは/.test(await errText()));
+    await press("esc");
+    // a server-side error also localizes: a member cannot set visibility (409/403 path is exercised through the API allow-list)
+    await evReady("/events", "ZZ B9");
+    await logout();
+    await setLocale(null);
+  });
+
+  // ---------------------------------------------------------------- manager
+  await step("events manager: visibility, project link, all-day toggle, publishing", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    check("events manager: login", await login(D.mgr.email, PW));
+    await evReady("/events", "ZZ B9 Event Hidden");
+    const cards = await evCards();
+    check("events manager: edit and delete controls appear on EVERY event", cards.length >= 6 && cards.every((c) => c.editBtns === 2), JSON.stringify(cards.map((c) => [c.title, c.editBtns])));
+    check("events manager: LAB_ONLY events carry a 'Lab only' badge (managers receive visibility)", (await ev(`[...document.querySelectorAll('.event-card')].filter((c) => c.querySelector('.vis-badge')).length`)) >= 3);
+    check("events manager: the toolbar text names the manager role", /manager/i.test(await ev(`document.querySelector('.admin-bar__text').innerText`)) && /edit any event/.test(await ev(`document.querySelector('.admin-bar__text').innerText`)));
+    await clickEl(".admin-bar .btn--primary");
+    await waitFor(`!!document.getElementById('event_title')`, 3000);
+    check("events manager: the form has a Visibility select (default Lab only) and a Related project select listing projects", (await ev(`document.getElementById('event_visibility').value`)) === "LAB_ONLY" && (await ev(`[...document.querySelectorAll('#event_project option')].map((o) => o.textContent.trim())`)).some((t) => t === "ZZ B9 Project Hidden") && (await ev(`document.getElementById('event_project').value`)) === "");
+    check("events manager: the 'until a lab manager makes them public' note is NOT shown to a manager", !/until a lab manager/.test(await ev(`document.querySelector('.modal').innerText`)));
+    await fillEventForm({ event_allday: true });
+    check("events manager: All-day switches Start/End to date-only controls with date labels", (await ev(`document.getElementById('event_start').type`)) === "date" && (await ev(`document.getElementById('event_end').type`)) === "date" && /Start date/.test(await ev(`document.querySelector('label[for=event_start]').textContent`)));
+    await fillEventForm({ event_title: "ZZ B9 Event Manager Made", event_start: "2032-03-04", event_end: "2032-03-05", event_visibility: "PUBLIC", event_project: D.p2.id, event_location: "ZZ B9 Mgr Place" });
+    await submitModal();
+    check("events manager: an all-day, public, project-linked event saves", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 5000)) && (await waitText("ZZ B9 Event Manager Made", 5000)));
+    const made = (await evApi("GET", "/events?scope=all&limit=200")).json.find((e) => e.title === "ZZ B9 Event Manager Made");
+    E16.mgrMade = made;
+    check("events manager: stored as all-day UTC dates (2032-03-04..05), PUBLIC, linked to the hidden project", !!made && made.allDay && made.startsAt === "2032-03-04T00:00:00.000Z" && made.endsAt === "2032-03-05T00:00:00.000Z" && made.visibility === "PUBLIC" && made.project?.id === D.p2.id, JSON.stringify(made));
+    // edit someone else's event (the public seminar): make it lab-only, then restore it
+    await evReady(`/events/${D.evPub.id}`, "ZZ B9 Event Public");
+    check("events manager: another person's event shows Edit and Delete on its detail page", /Edit/.test(await ev(`document.querySelector('.admin-bar').innerText`)) && !!(await exists(".admin-bar .btn--danger")));
+    await ev(`(() => { [...document.querySelectorAll('.admin-bar button')].find((b) => /edit/i.test(b.textContent)).click(); })()`);
+    await waitFor(`!!document.getElementById('event_title')`, 3000);
+    check("events manager: editing prefills the Japanese title, visibility and the linked project", (await waitFor(`document.getElementById('event_title_ja').value === 'ZZ B9 公開イベント'`, 3000)) && (await ev(`document.getElementById('event_visibility').value`)) === "PUBLIC" && (await ev(`document.getElementById('event_project').value`)) === D.p1.id);
+    await fillEventForm({ event_visibility: "LAB_ONLY" });
+    await submitModal();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 5000);
+    check("events manager: after making it Lab only the detail page shows the Lab-only badge", await waitFor(`!!document.querySelector('.detail-meta .vis-badge')`, 4000));
+    check("events manager (audit trail visible via API): a visibility change happened", (await E16.adm.req("GET", `/events/${D.evPub.id}`)).json.visibility === "LAB_ONLY");
+    await logout();
+    // a guest can no longer see it, and the hidden project's title is not shown on the manager's public event
+    await evReady("/events", "ZZ B9 Event Fixed Time");
+    check("events guest (after the manager hid it): the public seminar is gone from the list", !(await titlesOf()).includes("ZZ B9 Event Public"));
+    await evReady(`/events/${D.evPub.id}`, "Event not found");
+    check("events guest (after the manager hid it): its direct URL is now a not-found page", (await mainText()).includes("Event not found"));
+    await evReady(`/events/${E16.mgrMade.id}`, "ZZ B9 Event Manager Made");
+    check("events guest: a public event linked to a HIDDEN project shows no project (title and link absent)", !/ZZ B9 Project Hidden/.test(await text()) && !(await exists(`a[href="/projects/${D.p2.id}"]`)) && !(await exists(".event-facts a[href^='/projects/']")));
+    check("events guest: an all-day multi-day event by a manager shows the collapsed date range", /Mar 4\s?[–-]\s?5, 2032/.test(await ev(`document.querySelector('.event-facts time').textContent`)));
+    // restore the seminar, log in as a member, check the project shows there
+    check("events manager: login again", await login(D.mgr.email, PW));
+    await evReady(`/events/${D.evPub.id}`, "ZZ B9 Event Public");
+    await ev(`(() => { [...document.querySelectorAll('.admin-bar button')].find((b) => /edit/i.test(b.textContent)).click(); })()`);
+    await waitFor(`!!document.getElementById('event_visibility')`, 3000);
+    await fillEventForm({ event_visibility: "PUBLIC" });
+    await submitModal();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 5000);
+    check("events manager: the seminar is public again", (await E16.adm.req("GET", `/events/${D.evPub.id}`)).json.visibility === "PUBLIC");
+    // remove the project link from the manager-made event through the form (test removal, not just addition)
+    await evReady(`/events/${E16.mgrMade.id}`, "ZZ B9 Event Manager Made");
+    await ev(`(() => { [...document.querySelectorAll('.admin-bar button')].find((b) => /edit/i.test(b.textContent)).click(); })()`);
+    await waitFor(`!!document.getElementById('event_project')`, 3000);
+    check("events manager: the project select is prefilled with the linked project", (await ev(`document.getElementById('event_project').value`)) === D.p2.id);
+    await fillEventForm({ event_project: "" });
+    await submitModal();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 5000);
+    check("events manager: choosing 'None' removes the project link", (await E16.adm.req("GET", `/events/${E16.mgrMade.id}`)).json.project === null);
+    // delete from the detail page -> back to the list
+    await ev(`(() => { [...document.querySelectorAll('.admin-bar .btn--danger')].find((b) => /delete/i.test(b.textContent)).click(); })()`);
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+    await ev(`document.querySelector('.modal .btn--danger').click()`);
+    check("events manager: deleting from the detail page returns to /events and the event is gone", (await waitFor(`location.pathname === '/events'`, 5000)) && (await E16.adm.req("GET", `/events/${E16.mgrMade.id}`)).status === 404);
+    await logout();
+  });
+
+  await step("events admin: sees every control", async () => {
+    await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
+    check("events admin: login", await login(ADMIN.email, ADMIN.password));
+    await evReady("/events", "ZZ B9 Event Hidden");
+    const cards = await evCards();
+    check("events admin: edit and delete on every event, including other people's", cards.length >= 5 && cards.every((c) => c.editBtns === 2));
+    await evReady("/events?view=past", "ZZ B9 Event Past");
+    check("events admin: the past list is manageable too", (await evCards()).every((c) => c.editBtns === 2 && c.past));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- responsive + accessibility sweep (nine widths, EN + JA)
+  const evPages = () => [["events", "/events"], ["events past", "/events?view=past"], ["event detail", `/events/${D.evPub.id}`], ["event detail long", `/events/${D.evLong.id}`], ["event detail hostile", `/events/${E16.xss.id}`], ["event not found", `/events/${D.evHid.id}`], ["search events", "/search?q=ZZ%20B9%20Event&type=event"], ["home", "/"]];
+  await step("events sweep: guest -- list, past, detail, long text, not found, search, home (EN+JA, 390..1920)", async () => {
+    await setTz("Asia/Tokyo");
+    await p15Loop("events-guest", null, evPages());
+    check("events sweep guest: no script from hostile event text ever ran", (await ev(`typeof window.__evXss`)) === "undefined");
+  });
+  await step("events sweep: member -- own events, dialogs (add / edit / delete) (EN+JA, 390..1920)", async () => {
+    await setTz("Asia/Tokyo");
+    const pages = [...evPages(), ["event detail (own)", `/events/${E16.plainKeep.id}`], ["schedule", "/schedule"]];
+    await p15Loop("events-member", () => login(D.plain.email, PW), pages, async (loc, w) => {
+      const ja = loc === "ja";
+      const T = `events ${loc} ${w}px`;
+      await p15Ready("/events");
+      await p15Dialog(`${T} add-event dialog`, ".admin-bar .btn--primary", 0, ja);
+      await p15Dialog(`${T} edit-event dialog`, ".card-edit-btn .icon-btn:not(.icon-btn--danger)", 0, ja);
+      await p15Dialog(`${T} delete-event confirmation`, ".card-edit-btn .icon-btn--danger", 0, ja);
+      await p15Ready(`/events/${E16.plainKeep.id}`);
+      await p15Dialog(`${T} detail edit dialog`, ".admin-bar .btn--secondary", 0, ja);
+      await p15Dialog(`${T} detail delete confirmation`, ".admin-bar .btn--danger", 0, ja);
+      if (P15_TAB_WIDTHS.includes(w)) {
+        for (const [lbl, p] of [["events", "/events"], ["event detail", `/events/${D.evPub.id}`]]) {
+          await p15Ready(p);
+          const tw = await p15TabWalk(60);
+          check(`${T} keyboard ${lbl} (member): Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 5 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | "));
+        }
+      }
+    });
+  });
+  await step("events sweep: manager -- the full form (visibility + project) fits every viewport (EN+JA, 390..1920)", async () => {
+    await setTz("Asia/Tokyo");
+    await p15Loop("events-manager", () => login(D.mgr.email, PW), [["events", "/events"], ["event detail", `/events/${D.evLong.id}`]], async (loc, w) => {
+      const T = `events ${loc} ${w}px manager`;
+      await p15Ready("/events");
+      await p15Dialog(`${T} add-event dialog (visibility + project)`, ".admin-bar .btn--primary", 0, loc === "ja");
+      await p15Dialog(`${T} edit-event dialog`, ".event-card .card-edit-btn .icon-btn:not(.icon-btn--danger)", 0, loc === "ja");
+    });
+  });
+  await step("events: reset the emulated time zone", async () => { await setTz(""); await desktop(); });
+
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -2536,12 +3062,20 @@ async function connect() {
     // ProjectDetailPage's Phase 13 "Gallery" preview section makes the exact same kind of request
     // (/api/gallery?project=:id) as the forum one above, and the same malformed :id 400s there too.
     /^400 GET .*\/api\/gallery\?project=bad!id/,
+    // Phase 16: guest write attempts (401), a non-owner's edit/delete (403), a hidden / missing / deleted event
+    // opened directly (404), a malformed id (400), the guest's translations read (401) and faked list failures (500).
+    /^401 (POST|PUT|DELETE) .*\/api\/events/,
+    /^403 (PUT|DELETE) .*\/api\/events\/[\w-]+$/,
+    /^404 GET .*\/api\/events\/[\w-]+$/,
+    /^400 GET .*\/api\/events\/bad%20id$/,
+    /^401 GET .*\/api\/translations\/EVENT\//,
+    /^500 GET .*\/api\/events/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

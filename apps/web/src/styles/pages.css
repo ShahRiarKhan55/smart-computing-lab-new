@@ -1157,3 +1157,98 @@ a.conversation-header__name:focus-visible {
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
+
+/* ------------------------------------------------------------
+   Events (Phase 16). Reuses .card / .chip / .badge / .detail-layout / .panel; only the
+   event-specific lines live here. Long titles, locations and unbroken tokens wrap instead of overflowing.
+   ------------------------------------------------------------ */
+.events-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.events-toolbar__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
+.event-card {
+  min-width: 0;
+}
+
+.event-card--past {
+  background: var(--surface-alt);
+  border-style: dashed;
+}
+
+.event-card--past .event-card__title,
+.event-card--past .event-card__desc {
+  color: var(--muted);
+}
+
+.event-card__title,
+.event-card__line,
+.event-card__desc,
+.event-card__byline {
+  overflow-wrap: anywhere;
+}
+
+.event-card__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.event-card__line svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.event-card__desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.event-detail__desc {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.event-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.event-facts dt {
+  margin-bottom: 2px;
+  font-family: var(--font-heading);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.event-facts dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.schedule-events-link {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+}

@@ -21,6 +21,27 @@ export function formatDateTime(iso: string, locale: Locale): string {
   return new Date(iso).toLocaleString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+interface EventTimes {
+  startsAt: string;
+  endsAt: string | null;
+  allDay: boolean;
+}
+
+/**
+ * "Oct 3, 2026, 3:00 – 4:30 PM" / "Oct 3 – 5, 2026" for an event, locale-aware via `Intl.DateTimeFormat`.
+ * A timed event is shown in the viewer's own time zone; an all-day event is a calendar date (stored as
+ * UTC midnight), so it is formatted in UTC and can never slip to the neighbouring day.
+ */
+export function formatEventWhen(e: EventTimes, locale: Locale): string {
+  const start = new Date(e.startsAt);
+  const end = e.endsAt ? new Date(e.endsAt) : null;
+  const fmt = new Intl.DateTimeFormat(
+    INTL_LOCALE[locale],
+    e.allDay ? { dateStyle: "medium", timeZone: "UTC" } : { dateStyle: "medium", timeStyle: "short" },
+  );
+  return end && end.getTime() !== start.getTime() ? fmt.formatRange(start, end) : fmt.format(start);
+}
+
 /** A plain integer/decimal with the locale's digit grouping, via `Intl.NumberFormat`. */
 export function formatNumber(n: number, locale: Locale): string {
   return new Intl.NumberFormat(INTL_LOCALE[locale]).format(n);

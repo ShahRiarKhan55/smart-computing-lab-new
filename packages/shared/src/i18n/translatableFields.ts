@@ -12,6 +12,7 @@ export const TRANSLATABLE_FIELDS = {
   RESEARCH_PROJECT: ["title", "summary", "description"],
   RESEARCH_GROUP: ["name", "description"],
   NEWS_ITEM: ["title", "description"],
+  EVENT: ["title", "description"],
   TEAM_MEMBER: ["bio"],
 } as const;
 

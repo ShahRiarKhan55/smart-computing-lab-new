@@ -63,6 +63,7 @@ export const MAIN_NAV: NavEntry[] = [
     labelKey: "nav.community",
     items: [
       { to: "/community/forum", labelKey: "nav.forum" },
+      { to: "/events", labelKey: "nav.events" },
       { to: "/gallery", labelKey: "nav.gallery" },
     ],
   },

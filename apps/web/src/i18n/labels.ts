@@ -1,4 +1,4 @@
-import type { Category, GalleryCategory, ProjectStatus, SearchFilter, SearchType, TranslationKey } from "@scl/shared";
+import type { Category, EventKind, GalleryCategory, ProjectStatus, SearchFilter, SearchType, TranslationKey } from "@scl/shared";
 
 /** Localized label for a team member's category — same `Record<value, TranslationKey>`
  * convention as `ROLE_LABEL_KEY` in `auth/usePolicy.ts`. The stored value is unchanged in every
@@ -36,6 +36,7 @@ export const SEARCH_TYPE_LABEL_KEY: Record<SearchType, TranslationKey> = {
   publication: "search.type.publication",
   news: "search.type.news",
   "forum-topic": "search.type.forum-topic",
+  event: "search.type.event",
 };
 
 /** Localized label for a search type filter chip. */
@@ -48,6 +49,7 @@ export const SEARCH_FILTER_LABEL_KEY: Record<SearchFilter, TranslationKey> = {
   publication: "search.filter.publication",
   news: "search.filter.news",
   "forum-topic": "search.filter.forum-topic",
+  event: "search.filter.event",
 };
 
 /** Localized call-to-action text on a search result card. */
@@ -59,4 +61,14 @@ export const SEARCH_CTA_LABEL_KEY: Record<SearchType, TranslationKey> = {
   publication: "search.cta.publication",
   news: "search.cta.news",
   "forum-topic": "search.cta.forum-topic",
+  event: "search.cta.event",
+};
+
+/** Localized label for an event's type. The stored `kind` value is unchanged in every locale. */
+export const EVENT_KIND_LABEL_KEY: Record<EventKind, TranslationKey> = {
+  SEMINAR: "events.kind.SEMINAR",
+  MEETING: "events.kind.MEETING",
+  DEADLINE: "events.kind.DEADLINE",
+  SOCIAL: "events.kind.SOCIAL",
+  OTHER: "events.kind.OTHER",
 };

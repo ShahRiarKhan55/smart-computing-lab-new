@@ -72,7 +72,12 @@ export type AuditAction =
   | "FILE_DELETED"
   | "GALLERY_ITEM_CREATED"
   | "GALLERY_ITEM_UPDATED"
-  | "GALLERY_ITEM_DELETED";
+  | "GALLERY_ITEM_DELETED"
+  // events (Phase 16)
+  | "EVENT_CREATED"
+  | "EVENT_UPDATED"
+  | "EVENT_DELETED"
+  | "EVENT_TRANSLATIONS_CHANGED";
 
 export type AuditEntityType =
   | "USER"
@@ -86,7 +91,8 @@ export type AuditEntityType =
   | "FORUM_POST"
   | "FORUM_COMMENT"
   | "STORED_FILE"
-  | "GALLERY_ITEM";
+  | "GALLERY_ITEM"
+  | "EVENT";
 
 type AuditDb = Prisma.TransactionClient | PrismaClient;
 type AuditDetails = Record<string, string | number | boolean | null>;

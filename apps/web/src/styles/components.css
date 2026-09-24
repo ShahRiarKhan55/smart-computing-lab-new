@@ -599,6 +599,11 @@
   gap: 0 var(--space-4);
 }
 
+/* One control per line, for rows whose controls are too wide to share a 472px dialog (date-time pickers). */
+.form-row--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .form-actions {
   display: flex;
   flex-wrap: wrap;
