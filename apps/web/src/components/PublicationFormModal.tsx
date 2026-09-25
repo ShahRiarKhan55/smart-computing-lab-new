@@ -3,7 +3,8 @@ import type { FormEvent } from "react";
 import { createPublicationSchema, type Publication, type Visibility } from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
-import { ApiError } from "../lib/api";
+import { apiErrorMessage } from "../i18n/errorMessages";
+import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { useT } from "../i18n/LocaleContext";
 
 /** What the form hands to the page: the validated, trimmed publication fields. */
@@ -17,6 +18,8 @@ export interface PublicationFormFields {
   extraUrl: string;
   extraLabel: string;
   visibility?: Visibility;
+  /** Japanese title/venue overrides (Phase 19). An empty box on an existing publication clears that override. */
+  translations?: { ja: Record<string, string> };
 }
 
 interface FormState {
@@ -71,6 +74,7 @@ export function PublicationFormModal({
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "PUBLIC");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { values: ja, setField: setJa, base } = useEntityTranslations("PUBLICATION", initial?.id, open);
 
   useEffect(() => {
     if (open) {
@@ -81,6 +85,13 @@ export function PublicationFormModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
+
+  // A page fetched in Japanese already carries the Japanese override in title/venue; saving that back would
+  // overwrite the English text. Once the publication's own English text arrives, it replaces the prefill.
+  useEffect(() => {
+    if (!open || !base) return;
+    setValues((v) => ({ ...v, ...(base.title != null ? { title: base.title } : {}), ...(base.venue != null ? { venue: base.venue } : {}) }));
+  }, [open, base]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -95,14 +106,17 @@ export function PublicationFormModal({
       setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
       return;
     }
-    const { teamMemberIds: _unused, ...fields } = validation.data;
+    const { teamMemberIds: _unused, translations: _tr, ...fields } = validation.data;
+    // An existing publication sends every box (an empty one clears its override); a new one only what was typed.
+    const jaPayload = initial ? ja : Object.fromEntries(Object.entries(ja).filter(([, v]) => v.trim() !== ""));
+    const withTranslations = Object.keys(jaPayload).length > 0 ? { ...fields, translations: { ja: jaPayload } } : fields;
 
     setSubmitting(true);
     try {
-      await onSubmit((canSetVisibility ? { ...fields, visibility } : fields) as PublicationFormFields, linkSelf);
+      await onSubmit((canSetVisibility ? { ...withTranslations, visibility } : withTranslations) as PublicationFormFields, linkSelf);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
+      setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -112,6 +126,8 @@ export function PublicationFormModal({
     <Modal open={open} onClose={submitting ? () => {} : onClose} title={title}>
       {error && <div className="form-error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit} noValidate>
+        <fieldset className="form-fieldset">
+          <legend>{t("publications.form.groupDetails")}</legend>
         <div className="form-row">
           <div className="form-group">
             <label htmlFor="pub_year">{t("common.yearLabel")}</label>
@@ -145,7 +161,10 @@ export function PublicationFormModal({
             required
           />
         </div>
+        </fieldset>
 
+        <fieldset className="form-fieldset">
+          <legend>{t("publications.form.groupLinks")}</legend>
         <div className="form-row">
           <div className="form-group">
             <label htmlFor="pub_pdfUrl">{t("publications.pdfUrlLabel")}</label>
@@ -187,6 +206,25 @@ export function PublicationFormModal({
             />
           </div>
         </div>
+
+        </fieldset>
+
+        {/* Phase 19: Japanese title/venue, next to the English ones, in the same form (the Phase 14 pattern). */}
+        <fieldset className="form-fieldset">
+          <legend>{t("lang.ja.name")}</legend>
+          <div className="form-group">
+            <label htmlFor="pub_title_ja">
+              {t("common.optional")}: {t("publications.form.titleJaLabel")}
+            </label>
+            <textarea id="pub_title_ja" lang="ja" value={ja.title ?? ""} onChange={(e) => setJa("title", e.target.value)} maxLength={500} />
+          </div>
+          <div className="form-group">
+            <label htmlFor="pub_venue_ja">
+              {t("common.optional")}: {t("publications.form.venueJaLabel")}
+            </label>
+            <input id="pub_venue_ja" lang="ja" value={ja.venue ?? ""} onChange={(e) => setJa("venue", e.target.value)} maxLength={500} />
+          </div>
+        </fieldset>
 
         {canSetVisibility && <VisibilityField id="pub_visibility" value={visibility} onChange={setVisibility} />}
 

@@ -22,9 +22,10 @@
     "test:events": "node scripts/events-regression.mjs",
     "test:admin": "node scripts/admin-regression.mjs",
     "test:research": "node scripts/research-regression.mjs",
+    "test:publication": "node scripts/publication-regression.mjs",
     "test:i18n": "node scripts/i18n-regression.mjs",
     "test:locale-independence": "node scripts/locale-independence-regression.mjs",
-    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts"
+    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

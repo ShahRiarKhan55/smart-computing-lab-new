@@ -51,8 +51,8 @@ t(
 );
 
 // ---- TRANSLATABLE_FIELDS allow-list ---------------------------------------------------
-const KNOWN_TYPES = ["RESEARCH_AREA", "RESEARCH_PROJECT", "RESEARCH_GROUP", "NEWS_ITEM", "TEAM_MEMBER", "EVENT"];
-t("TRANSLATABLE_FIELDS covers exactly the six documented entity types (Phase 16 added EVENT), no more, no less", Object.keys(TRANSLATABLE_FIELDS).sort().join() === [...KNOWN_TYPES].sort().join());
+const KNOWN_TYPES = ["RESEARCH_AREA", "RESEARCH_PROJECT", "RESEARCH_GROUP", "NEWS_ITEM", "TEAM_MEMBER", "EVENT", "PUBLICATION"];
+t("TRANSLATABLE_FIELDS covers exactly the seven documented entity types (Phase 16 added EVENT, Phase 19 added PUBLICATION), no more, no less", Object.keys(TRANSLATABLE_FIELDS).sort().join() === [...KNOWN_TYPES].sort().join());
 for (const type of KNOWN_TYPES) {
   t(`isTranslatableEntityType("${type}") is true`, isTranslatableEntityType(type));
   t(`${type} lists at least one field, and every field is a non-empty string`, TRANSLATABLE_FIELDS[type as keyof typeof TRANSLATABLE_FIELDS].length > 0 && TRANSLATABLE_FIELDS[type as keyof typeof TRANSLATABLE_FIELDS].every((f) => typeof f === "string" && f.length > 0));

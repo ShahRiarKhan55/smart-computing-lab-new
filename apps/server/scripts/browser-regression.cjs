@@ -7,6 +7,7 @@
 //   ONLY_STEPS=<regex> runs just the steps whose name matches (independent of the ONLY_* flags above).
 //   ONLY_EVENTS=1 runs just the Phase 16 events section (steps named "events ..."; P15_W narrows its widths too).
 //   ONLY_ADMIN=1 runs just the Phase 17 admin/CMS section (steps named "admin ..."; P15_W / P15_USERS=admin-manager,admin-admin narrow the sweeps).
+//   ONLY_PUBS=1 runs just the Phase 19 publications section (steps named "publications ..."; P15_W / P15_USERS=pubs-guest,pubs-member,pubs-manager narrow the sweeps).
 //   ONLY_RESEARCH=1 runs just the Phase 18 research-structure section (steps named "research ..."; P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
 //          Vite on :5180 (`vite --port 5180 --strictPort`), then
@@ -46,6 +47,7 @@ const ONLY_I18N = !!process.env.ONLY_I18N;
 const ONLY_EVENTS = !!process.env.ONLY_EVENTS;
 const ONLY_ADMIN = !!process.env.ONLY_ADMIN;
 const ONLY_RESEARCH = !!process.env.ONLY_RESEARCH;
+const ONLY_PUBS = !!process.env.ONLY_PUBS;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -217,7 +219,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research "))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -841,7 +843,7 @@ async function connect() {
     await go("/search?q=ZZ+B9");
     await statusIs("ZZ B9");
     const hrefs = await ev(`[...document.querySelectorAll('.search-result')].map(c => [c.className.match(/search-result--([a-z-]+)/)[1], c.querySelector('a').getAttribute('href')])`);
-    const hrefOk = { project: /^\/projects\/[A-Za-z0-9_-]+$/, group: /^\/groups\/[A-Za-z0-9_-]+$/, researcher: /^\/team\/[A-Za-z0-9_-]+$/, publication: /^\/publications$/, news: /^\/news$/, "research-area": /^\/research\/[A-Za-z0-9_-]+$/ /* Phase 18: the area has its own detail page */ };
+    const hrefOk = { project: /^\/projects\/[A-Za-z0-9_-]+$/, group: /^\/groups\/[A-Za-z0-9_-]+$/, researcher: /^\/team\/[A-Za-z0-9_-]+$/, publication: /^\/publications\/[A-Za-z0-9_-]+$/ /* Phase 19: a publication has its own detail page */, news: /^\/news$/, "research-area": /^\/research\/[A-Za-z0-9_-]+$/ /* Phase 18: the area has its own detail page */ };
     check("every result links to an existing page for its type", hrefs.length > 5 && hrefs.every(([t, h]) => hrefOk[t].test(h)), JSON.stringify(hrefs.slice(0, 3)));
     await go("/search?q=" + encodeURIComponent("<img src=x onerror=window.__xss=1>"));
     await waitText("No results found for");
@@ -1559,7 +1561,7 @@ async function connect() {
     await clickText("Try again", "#main [role=alert] button");
     check("S. Try again reloads the list and the error goes away", await waitFor(`document.body.innerText.includes('ZZ B9 Project Public') && !document.querySelector('#main [role=alert]')`, 5000));
     // empty: an empty list gets a helpful empty state, not a blank page
-    await fake("*/api/publications*", 200, "[]");
+    await fake("*/api/publications*", 200, JSON.stringify({ items: [], total: 0, page: 1, limit: 20, pageCount: 1, years: [] })); /* Phase 19: the hub reads the /browse envelope */
     await readyPage("/publications", "Publications");
     check("S. no publications: an empty state explains it (not a blank page, not an error)", await waitFor(`document.body.innerText.includes('No publications yet.')`, 4000) && !(await exists("#main [role=alert]")));
     await unfake();
@@ -1659,7 +1661,7 @@ async function connect() {
     check("P. a project page answers 'who works on it': the Project lead panel names the lead, and the team panel lists the other members with their roles", leadPanel.some((t) => t.includes("ZZ B9 Lead") && t.includes("Lead")) && pd.team.some((t) => t.includes("ZZ B9 Member") && t.toLowerCase().includes("member")) && !pd.team.some((t) => t.includes("ZZ B9 Lead")), JSON.stringify({ leadPanel, team: pd.team }));
     check("P. ...'which area': only the PUBLIC area is listed; the hidden one is not", pd.areas.some((a) => a.includes("ZZ B9 Area Public")) && !pd.areas.some((a) => a.includes("Hidden")), JSON.stringify(pd.areas));
     check("P. ...'what is it': status badge (a word, not just a colour), dates and group are shown", /active/i.test(pd.status) && pd.group === "ZZ B9 Group Public", JSON.stringify(pd));
-    check("P. ...'what came out of it': publications and news follow the team and areas, each with a count", eqJson(pd.order.filter((h) => /Publications|News/.test(h)), ["Publications", "News"]));
+    check("P. ...'what came out of it': research outputs (Phase 19 name for the publications section) and news follow the team and areas, each with a count", eqJson(pd.order.filter((h) => /Research outputs|News/.test(h)), ["Research outputs", "News"]));
     check("P. the team and area panels sit BESIDE the description on desktop, and BEFORE publications/news on a phone", await (async () => {
       const d = await ev(`(() => { const a = document.querySelector('.detail-layout__aside').getBoundingClientRect(); const b = document.querySelector('.detail-layout__b').getBoundingClientRect(); return a.left > b.left; })()`);
       await phone(390); await readyPage(`/projects/${D.p1.id}`, "Long description of the public project.");
@@ -1674,12 +1676,13 @@ async function connect() {
 
     await readyPage("/publications", "ZZ B9 Pub Public");
     const pubs = await ev(`(() => ({ years: [...document.querySelectorAll('h2.year-heading')].map((h) => +h.textContent.trim().slice(0, 4)), ext: [...document.querySelectorAll('.pub-link')].every((a) => a.target === '_blank' && /noopener/.test(a.rel) && /opens in a new tab/.test(a.textContent)), api: null }))()`);
-    const apiYears = await ev(`fetch('/api/publications').then((r) => r.json()).then((a) => [...new Set(a.map((p) => p.year))])`);
+    const apiYears = await ev(`fetch('/api/publications/browse').then((r) => r.json()).then((j) => [...new Set(j.items.map((p) => p.year))])`); /* Phase 19: the page shows the first page of the hub */
     check("L. publications are grouped under year headings, newest year first, one heading per year that has papers", eqJson(pubs.years, apiYears.slice().sort((a, b) => b - a)) && pubs.years.length > 0, JSON.stringify({ pubs, apiYears }));
     check("L. every external link opens in a new tab, has rel=noopener, and says so to screen readers", pubs.ext);
     check("L. each entry shows title, authors and venue with year (dense academic list, not marketing cards)", await ev(`[...document.querySelectorAll('.pub-item')].every((i) => i.querySelector('.pub-item__title') && i.querySelector('.pub-item__authors') && /\\d{4}$/.test(i.querySelector('.pub-item__venue').textContent.trim()))`));
-    await clickText("2031", ".chips .chip");
-    check("L. a year chip filters the list and reports pressed state + the count", await waitFor(`document.querySelectorAll('h2.year-heading').length === 1 && document.querySelector('.chips .chip.active').getAttribute('aria-pressed') === 'true' && /Showing \\d+ of \\d+/.test(document.querySelector('.filters__count').innerText)`));
+    await setVal("pub_f_year", "2031");
+    await clickText("Apply filters", "form button");
+    check("L. picking a year and applying it filters the list to that year (in the URL) and reports the count", await waitFor(`location.search.includes('year=2031') && document.querySelectorAll('h2.year-heading').length === 1 && /^\\d+ publications?$/.test(document.querySelector('.filters__count').innerText.trim())`));
 
     await readyPage("/news", "ZZ B9 News Public");
     check("N. news cards show date, type and title; recent items first", await ev(`(() => { const cs = [...document.querySelectorAll('#main .news-card')]; return cs.length > 2 && cs.every((c) => c.querySelector('time') && c.querySelector('.badge') && c.querySelector('.card__title')); })()`));
@@ -3228,7 +3231,7 @@ async function connect() {
   await step("admin translations: view, edit, clear, long text, English base stays readable", async () => {
     check("admin tr: manager login", await login(D.mgr.email, PW));
     await admReady("/admin/translations", "English (base text)");
-    check("admin tr: six type chips, one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 6 && (await exists("#at-q")) && (await exists("#at-state")));
+    check("admin tr: seven type chips (Phase 19 added publications), one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 7 && (await exists("#at-q")) && (await exists("#at-state")));
     await admReady(`/admin/translations?type=NEWS_ITEM&q=${encodeURIComponent("ZZ B9 Adm News Alpha")}`, "English (base text)");
     await waitFor(`document.querySelectorAll('.admin-tr').length === 1`);
     check("admin tr: the entry shows the English base text (read-only) beside an editable Japanese field", (await ev(`document.querySelector('.admin-tr__base').textContent`)).includes("ZZ B9 Adm News Alpha") && (await ev(`document.querySelector('.admin-tr__base').getAttribute('lang')`)) === "en" && (await ev(`document.querySelector('.admin-tr textarea').getAttribute('lang')`)) === "ja");
@@ -3868,6 +3871,365 @@ async function connect() {
   });
   await step("research: restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
 
+  // ================================================================= PHASE 19: publication knowledge hub
+  // The Publications page (filters, sort, pagination, URL state), the /publications/:id detail page and the relationships it
+  // exposes, what a guest / member / manager / admin may see and change, the Japanese-edit guard, search, admin, hostile text,
+  // and the nine-width sweep. (Steps are named "publications ..."; ONLY_PUBS=1 runs just them; P15_W / P15_USERS=pubs-guest,
+  // pubs-member,pubs-manager narrow the sweeps.)
+  section("phase 19: publications (hub, detail, relationships)");
+  const R19 = {};
+  const pMain = () => ev(`document.querySelector('main').innerText`);
+  const pHtml = () => ev(`document.querySelector('main').outerHTML`);
+  const pReady = async (p, mustHave) => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 9000); if (mustHave) await waitText(mustHave, 9000); await sleep(250); };
+  const pClick = async (sel, textMatch) => {
+    const marked = await ev(`(() => { const els = [...document.querySelectorAll(${JSON.stringify(sel)})]; const el = ${textMatch ? `els.find((e) => e.textContent.includes(${JSON.stringify(textMatch)}))` : "els[0]"}; if (!el) return false; el.setAttribute('data-p19-click', '1'); return true; })()`);
+    if (!marked) return false;
+    const r = await admClick("[data-p19-click]");
+    await ev(`document.querySelectorAll('[data-p19-click]').forEach((e) => e.removeAttribute('data-p19-click'))`);
+    return r;
+  };
+  const pCount = (sel) => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+  const pBar = () => ev(`[...document.querySelectorAll('.admin-bar button')].map((b) => b.textContent.trim())`);
+  const pSec = (id) => ev(`document.getElementById(${JSON.stringify(id)})?.textContent.trim() || ''`);
+  const pTitles = () => ev(`[...document.querySelectorAll('.pub-item__title a')].map((a) => a.textContent.trim())`);
+  const P19_HID = ["ZZ B9 R19 Paper Hidden", "ZZ B9 R19 Area Hidden", "ZZ B9 R19 Project Hidden", "ZZ B9 R19 News Hidden", "ZZ B9 R19 Event Hidden"];
+  const pEnvelope = { items: [], total: 0, page: 1, limit: 20, pageCount: 1, years: [] };
+
+  await step("publications seed: a hub with public, hidden, long, hostile-free and bulk publications, links and Japanese overrides", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const a = new Client();
+    await a.req("POST", "/auth/login", ADMIN);
+    R19.a = a;
+    const J = (r) => r.json;
+    R19.area = J(await a.req("POST", "/research", { title: "ZZ B9 R19 Area Alpha", description: "R19 area", tag: "ZZR19", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R19 アルファ分野" } } }));
+    R19.areaHid = J(await a.req("POST", "/research", { title: "ZZ B9 R19 Area Hidden", description: "R19 hidden area", tag: "ZZR19", visibility: "LAB_ONLY" }));
+    R19.grp = J(await a.req("POST", "/groups", { name: "ZZ B9 R19 Group", description: "g", visibility: "PUBLIC", translations: { ja: { name: "ZZ B9 R19 グループ" } } }));
+    R19.prj = J(await a.req("POST", "/projects", { title: "ZZ B9 R19 Project", summary: "R19 project summary", description: "d", status: "ACTIVE", visibility: "PUBLIC", groupId: R19.grp.id, translations: { ja: { title: "ZZ B9 R19 プロジェクト" } } }));
+    R19.prjHid = J(await a.req("POST", "/projects", { title: "ZZ B9 R19 Project Hidden", summary: "hidden", status: "PLANNED", visibility: "LAB_ONLY", groupId: R19.grp.id }));
+    await a.req("PUT", `/projects/${R19.prj.id}/areas`, { areaIds: [R19.area.id, R19.areaHid.id] });
+    await a.req("PUT", `/projects/${R19.prjHid.id}/areas`, { areaIds: [R19.area.id] });
+    const mkPub = async (body) => J(await a.req("POST", "/publications", body));
+    R19.pub = await mkPub({ year: 2036, title: "ZZ B9 R19 Paper Alpha", authors: "ZZ B9 R19 Author One, ZZ B9 R19 Author Two", venue: "ZZ B9 R19 Journal", pdfUrl: "https://example.test/r19.pdf", doiUrl: "https://doi.org/10.0/r19", extraUrl: "https://example.test/code", extraLabel: "Code", teamMemberIds: [D.lead.tmId], translations: { ja: { title: "ZZ B9 R19 アルファ論文", venue: "ZZ B9 R19 日本ジャーナル" } } });
+    R19.pubHid = await mkPub({ year: 2036, title: "ZZ B9 R19 Paper Hidden", authors: "x", venue: "v", visibility: "LAB_ONLY" });
+    R19.pubHidPrj = await mkPub({ year: 2035, title: "ZZ B9 R19 Paper On Hidden Project", authors: "x", venue: "v" });
+    R19.pubLong = await mkPub({ year: 2035, title: "ZZ B9 R19 Long " + "W".repeat(120) + " https://example.test/" + "a".repeat(120), authors: Array.from({ length: 30 }, (_, i) => `ZZ Author Number ${i + 1}`).join(", ") + " " + "V".repeat(90), venue: "ZZ B9 R19 " + "Q".repeat(100), translations: { ja: { title: "ZZ B9 R19 超長い日本語の論文タイトルがレイアウトを壊さないことを確認するための非常に長いテスト用の題名です" + "あ".repeat(60), venue: "ZZ B9 R19 " + "会".repeat(80) } } });
+    R19.pubOld = await mkPub({ year: 2034, title: "ZZ B9 R19 Paper Old", authors: "ZZ B9 R19 Author One", venue: "ZZ B9 R19 Journal" });
+    R19.bulk = [];
+    for (let i = 1; i <= 22; i++) R19.bulk.push(await mkPub({ year: 2033, title: `ZZ B9 R19 Bulk ${String(i).padStart(2, "0")}`, authors: "ZZ Bulk", venue: "ZZ Bulk Venue" }));
+    await a.req("PUT", `/projects/${R19.prj.id}/publications`, { publicationIds: [R19.pub.id, R19.pubHid.id, R19.pubLong.id] });
+    await a.req("PUT", `/projects/${R19.prjHid.id}/publications`, { publicationIds: [R19.pubHidPrj.id] });
+    R19.news = J(await a.req("POST", "/news", { date: "Jan 2036", sortDate: "2036-01-01", type: "Paper", title: "ZZ B9 R19 News Public", description: "d", visibility: "PUBLIC" }));
+    R19.newsHid = J(await a.req("POST", "/news", { date: "Jan 2036", sortDate: "2036-01-02", type: "Paper", title: "ZZ B9 R19 News Hidden", description: "d", visibility: "LAB_ONLY" }));
+    await a.req("PUT", `/projects/${R19.prj.id}/news`, { newsIds: [R19.news.id, R19.newsHid.id] });
+    const at = new Date(Date.now() + 6 * 864e5).toISOString();
+    R19.ev = J(await a.req("POST", "/events", { title: "ZZ B9 R19 Event Public", kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", projectId: R19.prj.id }));
+    R19.evHid = J(await a.req("POST", "/events", { title: "ZZ B9 R19 Event Hidden", kind: "MEETING", startsAt: at, visibility: "LAB_ONLY", projectId: R19.prj.id }));
+    check("publications setup: the fixtures exist", [R19.area, R19.areaHid, R19.grp, R19.prj, R19.prjHid, R19.pub, R19.pubHid, R19.pubHidPrj, R19.pubLong, R19.pubOld, R19.news, R19.ev, ...R19.bulk].every((x) => x?.id));
+    const det = await a.req("GET", `/publications/${R19.pub.id}`);
+    check("publications setup: the detail API links the researcher, project, public area and group", det.json.researchers.length === 1 && det.json.projects.length === 1 && det.json.areas.length === 2 && det.json.groups.length === 1);
+  });
+
+  // ---------------------------------------------------------------- guest: the hub
+  await step("publications guest: the hub filters, sorts, pages and keeps its state in the URL", async () => {
+    await desktop(); await setLocale(null);
+    await pReady("/publications?q=ZZ+B9+R19", "ZZ B9 R19 Paper Alpha");
+    let t = await pMain();
+    check("publications guest: one h1 (Publications), a labelled filter form, and a result count announced politely", (await pCount("h1")) === 1 && (await ev(`document.querySelector('h1').textContent`)) === "Publications" && (await exists('form[aria-label="Filter publications"]')) && (await ev(`document.querySelector('.filters__count').getAttribute('role')`)) === "status");
+    check("publications guest: every filter control has a real <label> and a unique id", await ev(`(() => { const ctl = [...document.querySelectorAll('form[aria-label="Filter publications"] input, form[aria-label="Filter publications"] select')]; return ctl.length >= 7 && ctl.every((c) => c.id && document.querySelectorAll('label[for="' + c.id + '"]').length === 1 && document.querySelector('label[for="' + c.id + '"]').textContent.trim().length > 0); })()`));
+    check("publications guest: no visibility filter is offered to a guest", !(await exists("#pub_f_visibility")));
+    const listHtml = await pHtml();
+    check("publications guest: the hidden publications and hidden records are nowhere in the page text or markup", P19_HID.every((w) => !t.includes(w)) && !listHtml.includes(R19.pubHid.id));
+    check("publications guest: the count matches the API (guest total) and no title is shown twice", await ev(`fetch('/api/publications/browse?q=ZZ+B9+R19').then((r) => r.json()).then((j) => new RegExp(String(j.total)).test(document.querySelector('.filters__count').innerText) && j.total >= 25)`) && new Set(await pTitles()).size === (await pTitles()).length);
+    check("publications guest: 20 rows on page 1, grouped under year headings newest first", (await pCount(".pub-item")) === 20 && await ev(`(() => { const ys = [...document.querySelectorAll('h2.year-heading')].map((h) => +h.textContent.trim().slice(0, 4)); return ys.length >= 2 && ys.every((y, i) => i === 0 || ys[i - 1] > y); })()`));
+    check("publications guest: every title is a link to /publications/:id", await ev(`[...document.querySelectorAll('.pub-item__title a')].every((a) => /^\\/publications\\/[\\w-]+$/.test(a.getAttribute('href')))`));
+    check("publications guest: the pager is a labelled nav with Previous disabled and Next a real link", (await exists('nav[aria-label="Publication pages"]')) && (await ev(`document.querySelector('nav[aria-label="Publication pages"] .is-disabled').getAttribute('aria-disabled')`)) === "true" && (await exists('nav[aria-label="Publication pages"] a[rel="next"]')) && /Page 1 of 2/.test(await ev(`document.querySelector('.search-pager__pos').innerText`)));
+    const p1Titles = await pTitles();
+    await pClick('nav[aria-label="Publication pages"] a[rel="next"]');
+    check("publications guest: Next opens page 2 -- the URL carries page=2 and the rest of the state", (await waitFor(`location.search.includes('page=2') && location.search.includes('q=ZZ+B9+R19')`, 6000)) && (await waitFor(`!document.querySelector('[aria-busy="true"]') && /Page 2 of 2/.test(document.querySelector('.search-pager__pos')?.innerText || '')`, 6000)));
+    const p2 = await pTitles();
+    await ev(`history.back()`);
+    await waitFor(`!location.search.includes('page=2')`, 4000);
+    await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000);
+    check("publications guest: Back returns to page 1 (state lives in the URL); page 2 had different rows", (await pCount(".pub-item")) === 20 && p2.length > 0 && p2.every((x) => !p1Titles.includes(x)));
+    // filter by year through the UI
+    await pReady("/publications?q=ZZ+B9+R19", "ZZ B9 R19 Paper Alpha");
+    await setVal("pub_f_year", "2036");
+    await pClick('form[aria-label="Filter publications"] button[type="submit"]');
+    check("publications guest: picking a year and applying puts year=2036 in the URL and narrows the list to that year", (await waitFor(`location.search.includes('year=2036')`, 5000)) && (await waitFor(`document.querySelectorAll('h2.year-heading').length === 1`, 6000)) && (await pTitles()).join("|") === "ZZ B9 R19 Paper Alpha");
+    check("publications guest: the count says one publication and 'Clear filters' appears", (await waitFor(`/^1 publication$/.test(document.querySelector('.filters__count').innerText.trim())`, 4000)) && (await exists('a.btn[href="/publications"]')));
+    // sort A-Z: flat list, no year headings
+    await pReady("/publications?q=ZZ+B9+R19&sort=title", "ZZ B9 R19");
+    const az = await pTitles();
+    check("publications guest: sort=title is one flat A-Z list (no year headings)", (await pCount("h2.year-heading")) === 0 && az.length === 20 && az.every((x, i) => i === 0 || az[i - 1].localeCompare(x, "en") <= 0), az.slice(0, 3).join("|"));
+    await pReady("/publications?q=ZZ+B9+R19&sort=oldest", "ZZ B9 R19");
+    check("publications guest: sort=oldest starts with the oldest year (the bulk year, 2033)", await ev(`(() => { const ys = [...document.querySelectorAll('h2.year-heading')].map((h) => +h.textContent.trim().slice(0, 4)); return ys.length >= 1 && ys[0] === 2033; })()`));
+    await pReady("/publications?q=ZZ+B9+R19&sort=oldest&page=2", "ZZ B9 R19");
+    check("publications guest: on page 2 of oldest-first the years keep ascending", await ev(`(() => { const ys = [...document.querySelectorAll('h2.year-heading')].map((h) => +h.textContent.trim().slice(0, 4)); return ys.length >= 2 && ys.every((y, k) => k === 0 || ys[k - 1] < y); })()`));
+    // researcher, project, area, group filters (values are ids in the URL)
+    await pReady(`/publications?researcher=${D.lead.tmId}`, "ZZ B9 R19 Paper Alpha");
+    check("publications guest: the researcher filter shows only that researcher's visible publications (the hidden one is absent)", (await pTitles()).includes("ZZ B9 R19 Paper Alpha") && !(await pTitles()).some((x) => x.includes("Paper Hidden")) && (await ev(`document.getElementById('pub_f_researcher').value`)) === D.lead.tmId);
+    await pReady(`/publications?project=${R19.prj.id}`, "ZZ B9 R19 Paper Alpha");
+    check("publications guest: the project filter shows the project's visible publications only", (await pTitles()).sort().join("|") === ["ZZ B9 R19 Paper Alpha", (await pTitles()).find((x) => x.startsWith("ZZ B9 R19 Long"))].sort().join("|"));
+    await pReady(`/publications?area=${R19.area.id}`, "ZZ B9 R19 Paper Alpha");
+    check("publications guest: the area filter reaches publications through visible projects only (the hidden project's is absent)", (await pTitles()).includes("ZZ B9 R19 Paper Alpha") && !(await pTitles()).some((x) => x.includes("Hidden Project")));
+    await pReady(`/publications?group=${R19.grp.id}`, "ZZ B9 R19 Paper Alpha");
+    check("publications guest: the group filter likewise", (await pTitles()).includes("ZZ B9 R19 Paper Alpha") && !(await pTitles()).some((x) => x.includes("Hidden Project")));
+    // hidden / unknown / malformed
+    await pReady(`/publications?project=${R19.prjHid.id}`, "No publications match");
+    t = await pMain();
+    check("publications guest: filtering by a hidden project is the plain empty state (no title leaks, same as an unknown id)", t.includes("No publications match these filters.") && P19_HID.every((w) => !t.includes(w)) && (await pCount(".pub-item")) === 0);
+    await pReady("/publications?year=abc&page=-5&sort=zz&project=..%2Fx&q=" + "x".repeat(150), "were not valid");
+    check("publications guest: malformed URL parameters are ignored with a polite notice -- the list still renders, no error state", (await pMain()).includes("were not valid and were ignored") && (await pCount(".pub-item")) > 0 && !(await exists("#main [role=alert]")));
+    await pReady("/publications?page=999", "No publications match");
+    check("publications guest: a page past the end is an empty state with a working way back, not a crash", (await pMain()).includes("No publications match") && (await exists('a.btn[href="/publications"]')));
+    // keyboard
+    await pReady("/publications?q=ZZ+B9+R19+Paper+Alpha", "ZZ B9 R19 Paper Alpha");
+    await ev(`document.querySelector('.pub-item__title a').setAttribute('data-r19-focus', '1')`);
+    await focusSel("[data-r19-focus]");
+    check("publications guest: the focused title link shows a visible focus ring", await ev(`(() => { const s = getComputedStyle(document.activeElement); return s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 2; })()`));
+    await press("enter");
+    check("publications guest: Enter on the title opens the detail page (one h1, one main)", (await waitFor(`location.pathname === '/publications/${R19.pub.id}'`, 6000)) && (await waitText("ZZ B9 R19 Journal", 6000)) && (await pCount("h1")) === 1 && (await pCount("main")) === 1);
+  });
+
+  // ---------------------------------------------------------------- guest: the detail page
+  await step("publications guest: the detail page shows real relationships only, and a hidden publication is a clean 404", async () => {
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    let t = await pMain();
+    const html = await pHtml();
+    check("publications guest: title is the h1, the breadcrumb ends at it (marked current) and the tab title names it", (await pCount("h1")) === 1 && (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 R19 Paper Alpha" && (await ev(`document.querySelector('.breadcrumbs [aria-current="page"]').textContent`)) === "ZZ B9 R19 Paper Alpha" && (await exists('.breadcrumbs a[href="/publications"]')) && (await ev(`document.title`)).startsWith("ZZ B9 R19 Paper Alpha"));
+    check("publications guest: authors, venue and year are shown", t.includes("ZZ B9 R19 Author One, ZZ B9 R19 Author Two") && t.includes("ZZ B9 R19 Journal") && t.includes("2036"));
+    check("publications guest: the three links open in a new tab, noopener, and say so to screen readers (custom label kept)", await ev(`(() => { const ls = [...document.querySelectorAll('main .pub-link')]; return ls.length === 3 && ls.every((a) => a.target === '_blank' && /noopener/.test(a.rel) && /opens in a new tab/.test(a.textContent)) && ls.some((a) => a.textContent.includes('Code')); })()`));
+    check("publications guest: researchers (1), projects (1), research areas (1: only the public one), groups (1) -- headings carry the VISIBLE counts", (await pSec("pub-researchers")) === "Researchers (1)" && (await pSec("pub-projects")) === "Projects (1)" && (await pSec("pub-areas")) === "Research areas (1)" && (await pSec("pub-groups")) === "Groups (1)");
+    check("publications guest: related news (1) and events (1) -- the public ones of the visible project", (await pSec("pub-news")) === "Related news (1)" && (await pSec("pub-events")) === "Related events (1)" && t.includes("ZZ B9 R19 News Public") && t.includes("ZZ B9 R19 Event Public"));
+    check("publications guest: it says areas, groups, news and events come from the projects (derived, not invented)", has(t, "come from the projects this publication belongs to"));
+    check("publications guest: NOTHING hidden appears in the text, and no hidden id or account id in the markup", P19_HID.every((w) => !t.includes(w)) && ![R19.pubHid.id, R19.prjHid.id, R19.areaHid.id, R19.newsHid.id, R19.evHid.id].some((i) => html.includes(i)) && !D.userIds.some((u) => html.includes(u)) && !/lab only/i.test(t));
+    check("publications guest: no manager controls", !(await exists(".admin-bar")));
+    // hidden / unknown / malformed
+    await pReady(`/publications/${R19.pubHid.id}`, "Publication not found");
+    t = await pMain();
+    check("publications guest: a hidden publication is the not-found state; title, breadcrumb and tab title leak nothing", t.includes("doesn't exist, or you don't have access") && !t.includes("Paper Hidden") && !/Hidden|ZZ B9/.test(await ev(`document.title + ' ' + document.querySelector('.breadcrumbs').innerText`)) && (await pCount("h1")) === 1 && (await exists('a.btn[href="/publications"]')));
+    const hiddenView = await pMain();
+    await pReady("/publications/zzzunknownid1234", "Publication not found");
+    check("publications guest: an unknown id looks exactly the same as a hidden one", (await pMain()) === hiddenView);
+    await pReady("/publications/bad!id", "Publication not found");
+    check("publications guest: a malformed id is the same not-found state (no error text, no crash)", (await pMain()) === hiddenView);
+    // real clicks through the relationships
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    await pClick(`a[href="/projects/${R19.prj.id}"]`);
+    check("publications guest: the project link opens the project page, which lists this publication under Research outputs", (await waitFor(`location.pathname === '/projects/${R19.prj.id}'`, 6000)) && (await waitText("Research outputs (2)", 6000)) && (await pMain()).includes("ZZ B9 R19 Paper Alpha") && !(await pMain()).includes("Paper Hidden"));
+    check("publications guest: the project page shows no publication twice and every one is a link to its detail", await ev(`(() => { const links = [...document.querySelectorAll('section[aria-labelledby="project-pubs"] .pub-item__title a')]; return links.length === 2 && new Set(links.map((a) => a.getAttribute('href'))).size === 2; })()`));
+    await pClick('section[aria-labelledby="project-pubs"] .pub-item__title a', "Paper Alpha");
+    check("publications guest: a publication on the project page opens its detail page", await waitFor(`location.pathname === '/publications/${R19.pub.id}'`, 6000));
+    await waitText("ZZ B9 R19 Journal", 6000);
+    await pClick(`a[href="/research/${R19.area.id}"]`);
+    check("publications guest: the research-area chip opens the area, which lists the publication (through its visible project)", (await waitFor(`location.pathname === '/research/${R19.area.id}'`, 6000)) && (await waitText("ZZ B9 R19 Paper Alpha", 6000)) && !(await pMain()).includes("Paper On Hidden Project"));
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    await pClick(`a[href="/groups/${R19.grp.id}"]`);
+    check("publications guest: the group chip opens the group, which lists the publication and not the hidden project's", (await waitFor(`location.pathname === '/groups/${R19.grp.id}'`, 6000)) && (await waitText("ZZ B9 R19 Paper Alpha", 6000)) && !(await pMain()).includes("Paper On Hidden Project"));
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    await pClick(`a[href="/team/${D.lead.tmId}"]`);
+    check("publications guest: the researcher opens their profile, which lists the publication with a link back", (await waitFor(`location.pathname === '/team/${D.lead.tmId}'`, 6000)) && (await waitText("ZZ B9 R19 Paper Alpha", 6000)) && (await exists(`a[href="/publications/${R19.pub.id}"]`)) && !(await pMain()).includes("Paper Hidden"));
+    await pReady(`/publications/${R19.pubOld.id}`, "ZZ B9 R19 Journal");
+    t = await pMain();
+    check("publications guest: a publication with no project/area/group shows honest empty states (no invented links)", (await pSec("pub-projects")) === "Projects (0)" && (await pSec("pub-areas")) === "Research areas (0)" && (await pSec("pub-groups")) === "Groups (0)" && t.includes("Not linked to a project yet.") && (await pCount('a[href^="/projects/"]:not(.nav a)')) === 0);
+    // the home page shows recent outputs, linked, without the hidden one
+    await pReady("/", "Recent research outputs");
+    check("publications guest: Home shows a small 'Recent research outputs' block with links to the detail pages and no hidden title", (await pCount('section[aria-labelledby="home-pubs"] .pub-item')) <= 4 && (await pCount('section[aria-labelledby="home-pubs"] .pub-item')) > 0 && await ev(`[...document.querySelectorAll('section[aria-labelledby="home-pubs"] .pub-item__title a')].every((a) => /^\\/publications\\/[\\w-]+$/.test(a.getAttribute('href')))`) && !(await pMain()).includes("Paper Hidden"));
+  });
+
+  // ---------------------------------------------------------------- member / manager
+  await step("publications member: edits (any signed-in account), cannot delete, cannot filter by visibility", async () => {
+    check("publications member: login (a true MEMBER)", await login(D.plain.email, PW));
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    const bar = await pBar();
+    check("publications member: the bar offers Edit and Manage authors, not Delete", bar.join("|") === "Edit|Manage authors");
+    await pReady(`/publications/${R19.pubHid.id}`, "ZZ B9 R19 Paper Hidden");
+    check("publications member: the LAB_ONLY publication is reachable (same rule as the list)", (await pMain()).includes("ZZ B9 R19 Paper Hidden") && (await pCount("h1")) === 1);
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    check("publications member: the lab-only area, news and event now appear (viewer-scoped, from the same projects)", (await pSec("pub-areas")) === "Research areas (2)" && (await pSec("pub-news")) === "Related news (2)" && (await pSec("pub-events")) === "Related events (2)");
+    await pClick(".admin-bar button", "Edit");
+    check("publications member: the edit dialog opens, grouped into fieldsets (Publication, Links, Japanese) with the Japanese inputs", (await waitFor(`!!document.getElementById('pub_title')`, 5000)) && (await pCount(".modal fieldset legend")) >= 3 && (await exists("#pub_title_ja")) && (await exists("#pub_venue_ja")) && !(await exists("#pub_visibility")));
+    check("publications member: the Japanese override is prefilled and the English inputs hold English", await waitFor(`document.getElementById('pub_title_ja').value === 'ZZ B9 R19 アルファ論文' && document.getElementById('pub_title').value === 'ZZ B9 R19 Paper Alpha'`, 6000));
+    await press("esc");
+    check("publications member: Escape closes the dialog and focus returns to the Edit button", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 3000)) && (await ev(`document.activeElement?.textContent?.trim()`)) === "Edit");
+    // server: a member cannot delete or change visibility even if the UI is bypassed
+    check("publications member: the server refuses delete (403) and visibility (403) regardless of the UI", (await admApi("DELETE", `/publications/${R19.pub.id}`)).status === 403 && (await admApi("PUT", `/publications/${R19.pub.id}`, { visibility: "LAB_ONLY" })).status === 403);
+    // list: add a publication through the form (create with Japanese override, link to own profile)
+    await pReady("/publications", "Publications");
+    check("publications member: the list offers 'Add publication' and per-row Edit (no Delete), and no visibility filter", !(await exists("#pub_f_visibility")) && (await pBar()).join("|") === "+ Add publication" && (await pCount(".pub-item .icon-btn--danger")) === 0 && (await pCount(".pub-item .icon-btn")) > 0);
+    await pClick(".admin-bar button", "Add publication");
+    await waitFor(`!!document.getElementById('pub_title')`, 5000);
+    await setVal("pub_year", "2037");
+    await setVal("pub_venue", "ZZ B9 R19 Created Venue");
+    await setVal("pub_title", "ZZ B9 R19 Created By Form");
+    await setVal("pub_authors", "ZZ B9 R19 Form Author");
+    await setVal("pub_title_ja", "ZZ B9 R19 フォームで作成");
+    await submitModal();
+    check("publications member: saving closes the dialog and the new publication is stored with its Japanese override", (await waitFor(`!document.querySelector('.modal')`, 6000)) && await (async () => { const l = (await R19.a.req("GET", "/publications")).json.find((p) => p.title === "ZZ B9 R19 Created By Form"); R19.created = l; return !!l && (await (await fetch(`${API}/api/publications/${l.id}`, { headers: { "X-Locale": "ja" } })).json()).title === "ZZ B9 R19 フォームで作成"; })());
+    await logout();
+  });
+
+  await step("publications manager: edits in Japanese without touching the English, manages authors, filters by visibility, deletes with a confirmation", async () => {
+    check("publications manager: login", await login(D.mgr.email, PW));
+    await pReady("/publications?q=ZZ+B9+R19+Paper", "ZZ B9 R19 Paper Alpha");
+    check("publications manager: the visibility filter is offered", await exists("#pub_f_visibility"));
+    await setVal("pub_f_visibility", "LAB_ONLY");
+    await pClick('form[aria-label="Filter publications"] button[type="submit"]');
+    check("publications manager: filtering by LAB_ONLY shows only lab-only rows, each with its badge", (await waitFor(`location.search.includes('visibility=LAB_ONLY')`, 5000)) && (await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000)) && (await pTitles()).join("|").includes("Paper Hidden") && (await pCount(".pub-item")) === (await pCount(".pub-item .vis-badge")));
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    check("publications manager: the bar offers Edit, Manage authors and Delete", (await pBar()).join("|") === "Edit|Manage authors|Delete");
+    // the Japanese-edit regression: the English inputs must hold ENGLISH
+    await setLocale("ja");
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 アルファ論文");
+    check("publications manager (ja): the page shows the Japanese title and venue", (await pMain()).includes("ZZ B9 R19 日本ジャーナル") && (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 R19 アルファ論文");
+    await pClick(".admin-bar button", "編集");
+    check("publications manager (ja): the edit dialog opens", await waitFor(`!!document.getElementById('pub_title')`, 5000));
+    check("publications manager (ja): the ENGLISH inputs hold the English text (not the Japanese the page showed)", await waitFor(`document.getElementById('pub_title').value === 'ZZ B9 R19 Paper Alpha' && document.getElementById('pub_venue').value === 'ZZ B9 R19 Journal'`, 6000), await ev(`document.getElementById('pub_title').value`));
+    check("publications manager (ja): the Japanese inputs hold the Japanese override", (await ev(`document.getElementById('pub_title_ja').value`)) === "ZZ B9 R19 アルファ論文" && (await ev(`document.getElementById('pub_venue_ja').value`)) === "ZZ B9 R19 日本ジャーナル");
+    await setVal("pub_title_ja", "ZZ B9 R19 アルファ論文 改訂");
+    await submitModal();
+    check("publications manager (ja): saving closes the dialog", await waitFor(`!document.querySelector('.modal')`, 6000));
+    const enNow = await (await fetch(`${API}/api/publications/${R19.pub.id}`, { headers: { "X-Locale": "en" } })).json();
+    const jaNow = await (await fetch(`${API}/api/publications/${R19.pub.id}`, { headers: { "X-Locale": "ja" } })).json();
+    check("publications manager (ja): the ENGLISH title and venue are unchanged, the Japanese override is the edit, the other override intact", enNow.title === "ZZ B9 R19 Paper Alpha" && enNow.venue === "ZZ B9 R19 Journal" && jaNow.title === "ZZ B9 R19 アルファ論文 改訂" && jaNow.venue === "ZZ B9 R19 日本ジャーナル");
+    await R19.a.req("PUT", `/publications/${R19.pub.id}`, { translations: { ja: { title: "ZZ B9 R19 アルファ論文" } } });
+    await setLocale(null);
+    // English edit that does not touch the Japanese
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    await pClick(".admin-bar button", "Edit");
+    await waitFor(`document.getElementById('pub_title_ja')?.value === 'ZZ B9 R19 アルファ論文'`, 6000);
+    await setVal("pub_venue", "ZZ B9 R19 Journal Edited");
+    await submitModal();
+    check("publications manager: an English edit updates the English venue and keeps the Japanese override", (await waitFor(`!document.querySelector('.modal')`, 6000)) && (await waitText("ZZ B9 R19 Journal Edited", 6000)) && (await (await fetch(`${API}/api/publications/${R19.pub.id}`, { headers: { "X-Locale": "ja" } })).json()).title === "ZZ B9 R19 アルファ論文");
+    await R19.a.req("PUT", `/publications/${R19.pub.id}`, { venue: "ZZ B9 R19 Journal" });
+    // manage authors
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 Journal");
+    await pClick(".admin-bar button", "Manage authors");
+    check("publications manager: the authors dialog lists the team with the current author checked", (await waitFor(`document.querySelectorAll('.modal .pick-item').length >= 4`, 5000)) && (await pCount(".modal input[type=checkbox]:checked")) === 1);
+    await ev(`[...document.querySelectorAll('.modal .pick-item')].find((l) => l.textContent.includes('ZZ B9 Member')).querySelector('input').click()`);
+    await submitModal();
+    check("publications manager: saving adds the researcher; the page shows two; the server audits it", (await waitFor(`!document.querySelector('.modal')`, 5000)) && (await waitFor(`document.getElementById('pub-researchers')?.textContent.trim() === 'Researchers (2)'`, 6000)) && (await R19.a.req("GET", "/admin/audit?entityType=PUBLICATION&limit=50")).json.entries.some((r) => r.action === "PUBLICATION_AUTHORS_CHANGED" && r.entityId === R19.pub.id));
+    await R19.a.req("PUT", `/publications/${R19.pub.id}/authors`, { teamMemberIds: [D.lead.tmId] });
+    // delete with a confirmation
+    const tmp = (await R19.a.req("POST", "/publications", { year: 2030, title: "ZZ B9 R19 Throwaway", authors: "a", venue: "v" })).json;
+    await pReady(`/publications/${tmp.id}`, "ZZ B9 R19 Throwaway");
+    await pClick(".admin-bar .btn--danger");
+    check("publications manager: Delete opens a confirmation naming the publication", (await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000)) && (await ev(`document.querySelector('.modal[role="dialog"]').innerText`)).includes("ZZ B9 R19 Throwaway"));
+    await press("esc");
+    check("publications manager: Escape cancels and the publication still exists", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await admApi("GET", `/publications/${tmp.id}`)).status === 200);
+    await pClick(".admin-bar .btn--danger");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+    await ev(`[...document.querySelectorAll('.modal button')].find((b) => /delete/i.test(b.textContent) && b.classList.contains('btn--danger'))?.click()`);
+    check("publications manager: confirming deletes it and returns to the list", (await waitFor(`location.pathname === '/publications'`, 6000)) && (await admApi("GET", `/publications/${tmp.id}`)).status === 404);
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- search + admin
+  await step("publications search + admin: results and admin rows link to the detail page", async () => {
+    await pReady("/search?q=ZZ+B9+R19+Paper+Alpha&type=publication", "ZZ B9 R19 Paper Alpha");
+    check("publications search: the result links to /publications/:id", await ev(`[...document.querySelectorAll('main a')].some((a) => a.getAttribute('href') === '/publications/${R19.pub.id}')`));
+    await pClick(`main a[href="/publications/${R19.pub.id}"]`);
+    check("publications search: clicking it opens the detail page", (await waitFor(`location.pathname === '/publications/${R19.pub.id}'`, 6000)) && (await waitText("ZZ B9 R19 Journal", 6000)));
+    await pReady("/search?q=ZZ+B9+R19+Paper+Hidden", "");
+    await sleep(600);
+    check("publications search: a guest cannot find the hidden publication (the results list, not the echoed query)", !(await ev(`document.querySelector('.search-results')?.innerText || ''`)).includes("Paper Hidden") && (await ev(`document.querySelector('.search-results')?.innerText || ''`)).includes("Paper On Hidden Project"));
+    check("publications admin: an admin login", await login(ADMIN.email, ADMIN.password));
+    await pReady("/admin/content?type=publication&q=ZZ+B9+R19+Paper", "ZZ B9 R19 Paper Alpha");
+    check("publications admin: the content browser row opens the publication's own page and shows the hidden one too", await ev(`[...document.querySelectorAll('main a')].some((a) => a.getAttribute('href') === '/publications/${R19.pub.id}')`) && (await pMain()).includes("ZZ B9 R19 Paper Hidden"));
+    await pReady("/admin/translations?type=PUBLICATION&q=ZZ+B9+R19+Paper+Alpha", "ZZ B9 R19 Paper Alpha");
+    check("publications admin: the translations view offers publications with title and venue (base text, Japanese override)", (await ev(`document.getElementById('tr-${R19.pub.id}-title')?.value`)) === "ZZ B9 R19 アルファ論文" && (await ev(`document.getElementById('tr-${R19.pub.id}-venue')?.value`)) === "ZZ B9 R19 日本ジャーナル" && (await pMain()).includes("ZZ B9 R19 Paper Alpha"));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- Japanese
+  await step("publications ja: the hub and detail read in Japanese; authorization is the same", async () => {
+    await setLocale("ja");
+    await pReady("/publications?q=ZZ+B9+R19+Paper", "ZZ B9 R19 アルファ論文");
+    let t = await pMain();
+    check("publications ja: Japanese chrome, filter labels, sort options and localized title/venue", (await ev(`document.documentElement.lang`)) === "ja" && (await ev(`document.querySelector('h1').textContent`)) === "論文・出版物" && (await exists('form[aria-label="論文を絞り込む"]')) && (await ev(`document.querySelector('label[for="pub_f_year"]').textContent`)) === "年" && t.includes("ZZ B9 R19 アルファ論文") && t.includes("ZZ B9 R19 日本ジャーナル") && /\d+件の論文/.test(await ev(`document.querySelector('.filters__count').innerText`)));
+    check("publications ja: the same rows as English (locale never changes which records are visible), hidden still hidden", !t.includes("Paper Hidden") && (await pCount(".pub-item")) === (await ev(`fetch('/api/publications/browse?q=ZZ+B9+R19+Paper', { headers: { 'X-Locale': 'en' } }).then((r) => r.json()).then((j) => j.items.length)`)));
+    await pReady(`/publications/${R19.pub.id}`, "ZZ B9 R19 日本ジャーナル");
+    t = await pMain();
+    check("publications ja: the detail page is Japanese -- headings, related titles, breadcrumb, tab title", t.includes("研究者（1）") && t.includes("プロジェクト（1）") && t.includes("研究分野（1）") && t.includes("グループ（1）") && t.includes("ZZ B9 R19 プロジェクト") && t.includes("ZZ B9 R19 アルファ分野") && t.includes("ZZ B9 R19 グループ") && (await ev(`document.title`)).startsWith("ZZ B9 R19 アルファ論文") && (await ev(`document.querySelector('.breadcrumbs a[href="/publications"]').textContent`)) === "論文・出版物");
+    check("publications ja: authors and links are never translated", t.includes("ZZ B9 R19 Author One, ZZ B9 R19 Author Two") && (await pCount("main .pub-link")) === 3);
+    check("publications ja: nothing hidden", P19_HID.every((w) => !t.includes(w)));
+    await pReady(`/publications/${R19.pubHid.id}`, "論文が見つかりません");
+    check("publications ja: the hidden publication is the Japanese not-found state and leaks nothing", !(await pMain()).includes("Paper Hidden") && !(await ev(`document.title`)).includes("Hidden"));
+    await pReady(`/publications?year=abc`, "無効");
+    check("publications ja: the ignored-filter notice is Japanese", (await pMain()).includes("無効だったため"));
+    await pReady(`/projects/${R19.prj.id}`, "研究成果（2）");
+    check("publications ja: the project page's Research outputs heading and localized publication titles", (await pMain()).includes("ZZ B9 R19 アルファ論文") && !(await pMain()).includes("Paper Hidden"));
+    check("publications ja: authorization is unchanged in Japanese (guest 404 on the hidden one, 401 on writes)", (await admApi("GET", `/publications/${R19.pubHid.id}`, undefined, "ja")).status === 404 && (await admApi("PUT", `/publications/${R19.pub.id}`, { year: 2000 }, "ja")).status === 401 && (await admApi("GET", "/publications/browse?visibility=LAB_ONLY", undefined, "ja")).status === 403);
+    await setLocale(null);
+  });
+
+  // ---------------------------------------------------------------- hostile text
+  await step("publications hostile text: markup and unbroken strings are inert text on every publication surface", async () => {
+    await desktop(); await setLocale(null);
+    const hostile = "ZZ B9 R19 <img src=x onerror=window.__r19Xss=1> Hostile";
+    const h = (await R19.a.req("POST", "/publications", { year: 2036, title: hostile, authors: "<script>window.__r19Xss=2</script> ZZ", venue: "\"><svg onload=window.__r19Xss=3>", teamMemberIds: [D.lead.tmId], translations: { ja: { title: "ZZ B9 R19 <img src=x onerror=window.__r19Xss=4>日本語", venue: "<b>会場</b>" } } })).json;
+    await R19.a.req("PUT", `/projects/${R19.prj.id}/publications`, { publicationIds: [R19.pub.id, R19.pubHid.id, R19.pubLong.id, h.id] });
+    for (const p of ["/publications?q=Hostile", `/publications/${h.id}`, `/projects/${R19.prj.id}`, `/team/${D.lead.tmId}`, `/research/${R19.area.id}`, `/groups/${R19.grp.id}`, "/search?q=Hostile&type=publication", "/"]) {
+      await pReady(p);
+      await sleep(250);
+      check(`publications hostile: ${p.split("?")[0]} renders it as text (no script ran, no injected element)`, (await ev(`typeof window.__r19Xss`)) === "undefined" && (await ev(`document.querySelectorAll('main img[src="x"], main script, main svg[onload], main b').length`)) === 0);
+    }
+    await pReady(`/publications/${h.id}`, "Hostile");
+    check("publications hostile: the title is shown literally", (await ev(`document.querySelector('h1').textContent`)) === hostile);
+    await setLocale("ja");
+    await pReady(`/publications/${h.id}`, "日本語");
+    check("publications hostile (ja): the Japanese override is shown literally and inert", (await ev(`typeof window.__r19Xss`)) === "undefined" && (await ev(`document.querySelectorAll('main img[src="x"], main b').length`)) === 0 && (await ev(`document.querySelector('h1').textContent`)).includes("<img src=x onerror=window.__r19Xss=4>"));
+    await setLocale(null);
+    await R19.a.req("PUT", `/projects/${R19.prj.id}/publications`, { publicationIds: [R19.pub.id, R19.pubHid.id, R19.pubLong.id] });
+    await R19.a.req("DELETE", `/publications/${h.id}`);
+  });
+
+  // ---------------------------------------------------------------- nine-width sweep, EN + JA
+  const p19Guest = () => [["hub", "/publications?q=ZZ+B9+R19"], ["hub page 2", "/publications?q=ZZ+B9+R19&page=2"], ["hub A-Z", "/publications?q=ZZ+B9+R19&sort=title"], ["hub empty", "/publications?q=zzznomatchzzz"], ["hub ignored params", "/publications?year=abc"], ["detail", `/publications/${R19.pub.id}`], ["detail long", `/publications/${R19.pubLong.id}`], ["detail unlinked", `/publications/${R19.pubOld.id}`], ["detail hidden 404", `/publications/${R19.pubHid.id}`], ["project outputs", `/projects/${R19.prj.id}`], ["home", "/"]];
+  const p19Walk = async (T, pages) => { for (const [lbl, p] of pages) { await p15Ready(p); const tw = await p15TabWalk(70); check(`${T} keyboard ${lbl}: Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 5 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | ")); } };
+  await step("publications sweep: guest -- hub and detail pages (EN+JA, 390..1920)", async () => {
+    await p15Loop("pubs-guest", null, p19Guest(), async (loc, w) => {
+      if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`publications ${loc} ${w}px guest`, [["hub", "/publications?q=ZZ+B9+R19"], ["detail", `/publications/${R19.pub.id}`]]);
+    });
+    check("publications sweep guest: no script from hostile text ever ran", (await ev(`typeof window.__r19Xss`)) === "undefined");
+  });
+  await step("publications sweep: member -- lab-only records, the edit dialog (EN+JA, 390..1920)", async () => {
+    await p15Loop("pubs-member", () => login(D.plain.email, PW), [["hub", "/publications?q=ZZ+B9+R19"], ["detail", `/publications/${R19.pub.id}`], ["detail lab-only", `/publications/${R19.pubHid.id}`]], async (loc, w) => {
+      const T = `publications ${loc} ${w}px member`;
+      await p15Ready(`/publications/${R19.pub.id}`);
+      await p15Dialog(`${T} edit dialog`, ".admin-bar .btn--secondary", 0, loc === "ja");
+      await p15Dialog(`${T} authors dialog`, ".admin-bar .btn--secondary", 1, loc === "ja");
+      await p15Ready("/publications?q=ZZ+B9+R19+Paper");
+      await p15Dialog(`${T} add dialog`, ".admin-bar .btn--primary", 0, loc === "ja");
+    });
+  });
+  await step("publications sweep: manager -- visibility filter, delete confirmation (EN+JA, 390..1920)", async () => {
+    await p15Loop("pubs-manager", () => login(D.mgr.email, PW), [["hub", "/publications?q=ZZ+B9+R19"], ["hub lab-only", "/publications?q=ZZ+B9+R19&visibility=LAB_ONLY"], ["detail", `/publications/${R19.pub.id}`]], async (loc, w) => {
+      const T = `publications ${loc} ${w}px manager`;
+      await p15Ready(`/publications/${R19.pub.id}`);
+      await p15Dialog(`${T} edit dialog`, ".admin-bar .btn--secondary", 0, loc === "ja");
+      await p15Dialog(`${T} delete confirmation`, ".admin-bar .btn--danger", 0, loc === "ja");
+      if (P15_TAB_WIDTHS.includes(w)) await p19Walk(T, [["detail", `/publications/${R19.pub.id}`]]);
+    });
+  });
+  await step("publications screenshots: the hub and detail at desktop and phone width (for eyeballing)", async () => {
+    await setLocale(null);
+    for (const [w, tag] of [[1280, "d"], [390, "m"]]) {
+      await p15Vp(w);
+      for (const [lbl, p] of [["hub", "/publications?q=ZZ+B9+R19"], ["detail", `/publications/${R19.pub.id}`], ["detail-long", `/publications/${R19.pubLong.id}`], ["project", `/projects/${R19.prj.id}`]]) {
+        await p15Ready(p);
+        await shot(`r19-${lbl}-${tag}`);
+      }
+    }
+    await setLocale("ja");
+    await p15Vp(390);
+    await p15Ready(`/publications/${R19.pubLong.id}`);
+    await shot("r19-detail-long-ja-m");
+    check("publications screenshots: taken", fs.existsSync(path.join(SHOTS, "r19-hub-d.png")));
+    await setLocale(null);
+  });
+  await step("publications: restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -3969,12 +4331,17 @@ async function connect() {
     /^(400|404) GET .*\/api\/research\/[^/]+$/,
     /^40[13] (PUT|DELETE) .*\/api\/(research|member)\//,
     /^40[13] PUT .*\/api\/projects\/[\w-]+$/,
+    // Phase 19: a hidden / missing / malformed publication id opened directly (404/400), the manager-only visibility filter and the
+    // publication writes probed on purpose by guests and members (401/403).
+    /^(400|404) GET .*\/api\/publications\/[^/]+$/,
+    /^403 GET .*\/api\/publications\/browse\?/,
+    /^40[13] (PUT|DELETE) .*\/api\/publications\/[\w-]+$/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

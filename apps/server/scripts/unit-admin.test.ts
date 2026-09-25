@@ -51,8 +51,8 @@ t("content: q is parsed with the search parser ('%' and '_' separate words, NFKC
 t("content: q of only wildcards is 'no filter', not an error", (() => { const r = cq({ type: "news", q: "%_%" }); return r.success && r.data.q.terms.length === 0; })());
 t("content: q over 100 chars or over 8 words is rejected", !cq({ type: "news", q: "a".repeat(101) }).success && !cq({ type: "news", q: "a b c d e f g h i" }).success && cq({ type: "news", q: "a b c d e f g h" }).success);
 t("content: Japanese q is one word", (() => { const r = cq({ type: "news", q: "日本語の研究" }); return r.success && r.data.q.terms.length === 1; })());
-t("content: filters that don't apply to the type are rejected", !cq({ type: "news", kind: "SEMINAR" }).success && !cq({ type: "team-member", visibility: "PUBLIC" }).success && !cq({ type: "project", scope: "past" }).success && !cq({ type: "event", status: "ACTIVE" }).success && !cq({ type: "publication", translation: "translated" }).success && !cq({ type: "news", owner: "abc" }).success);
-t("content: ...and accepted where they do", cq({ type: "event", kind: "SEMINAR", scope: "past", visibility: "LAB_ONLY", owner: "abc123" }).success && cq({ type: "project", status: "ARCHIVED" }).success && cq({ type: "news", newsType: "Grant", translation: "translated" }).success && cq({ type: "team-member", translation: "untranslated" }).success);
+t("content: filters that don't apply to the type are rejected", !cq({ type: "news", kind: "SEMINAR" }).success && !cq({ type: "team-member", visibility: "PUBLIC" }).success && !cq({ type: "project", scope: "past" }).success && !cq({ type: "event", status: "ACTIVE" }).success && !cq({ type: "news", owner: "abc" }).success);
+t("content: ...and accepted where they do", cq({ type: "event", kind: "SEMINAR", scope: "past", visibility: "LAB_ONLY", owner: "abc123" }).success && cq({ type: "project", status: "ARCHIVED" }).success && cq({ type: "news", newsType: "Grant", translation: "translated" }).success && cq({ type: "team-member", translation: "untranslated" }).success && cq({ type: "publication", translation: "translated" }).success /* Phase 19: publications became translatable (title, venue) */);
 t("content: an empty-string filter means 'not set'", (() => { const r = cq({ type: "team-member", visibility: "" }); return r.success && r.data.visibility === undefined; })());
 t("content: bad enum values are rejected", !cq({ type: "news", visibility: "PRIVATE" }).success && !cq({ type: "event", kind: "PARTY" }).success && !cq({ type: "news", sort: "password" }).success && !cq({ type: "news", visibility: "public" }).success);
 t("content: owner must look like an id", !cq({ type: "event", owner: "../x" }).success && !cq({ type: "event", owner: "a b" }).success && cq({ type: "event", owner: "cmu6xrfoh0001di7rqo1e7sll" }).success);
@@ -94,7 +94,8 @@ t("bulk targets: each writes the entity's own UPDATED audit action and entity ty
 
 // ---- text-search WHERE builder (no database for a type without translations) ----------------------------------------------------
 {
-  const pub = contentDef("publication");
+  // Publications have Japanese overrides since Phase 19, so this exercises the builder with the override lookup switched off.
+  const pub = { ...contentDef("publication"), entity: undefined };
   t("textWhere: no words -> no clause", (await textWhere(pub, [])) === null);
   const w = (await textWhere(pub, ["deep", "learning"])) as { AND: { OR: Record<string, { contains: string }>[] }[] };
   t("textWhere: one OR-group per word, AND-ed, plain `contains` on every text column", w.AND.length === 2 && w.AND.every((g, i) => g.OR.length === pub.textFields.length && g.OR.every((c) => Object.values(c)[0].contains === ["deep", "learning"][i])));

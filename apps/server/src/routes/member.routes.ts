@@ -15,9 +15,9 @@ import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { optionalAuth, requireOwnerOrManager } from "../middleware/auth.js";
 import { assertValidId, diffLinks } from "../lib/authorLinks.js";
 import { visibleTo } from "../lib/visibility.js";
-import { asGroupRole, asProjectRole, asProjectStatus, isOwnProfile, toPublication } from "../lib/serializers.js";
+import { asGroupRole, asProjectRole, asProjectStatus, isOwnProfile } from "../lib/serializers.js";
 import { idList, recordAudit } from "../lib/audit.js";
-import { localizedNews, loadRefTranslations, pick, ROLLUP_LIMIT } from "../lib/researchGraph.js";
+import { localizedNews, localizedPublications, loadRefTranslations, pick, ROLLUP_LIMIT } from "../lib/researchGraph.js";
 import { eventInclude, serializeEvents } from "../lib/eventSerializers.js";
 import { resolveLocale } from "../lib/translations.js";
 
@@ -107,7 +107,7 @@ router.get(
 
     const publications = member.publicationLinks
       .map((link) => link.publication)
-      .sort((a, b) => b.year - a.year || b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.year - a.year || b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id));
 
     const news = member.newsLinks
       .map((link) => link.newsItem)
@@ -132,7 +132,7 @@ router.get(
       bio: member.bio,
       photoUrl: member.photoUrl,
       history: member.historyEntries.map(toHistoryEntry),
-      publications: publications.map((p) => toPublication(p, viewer)),
+      publications: await localizedPublications(publications, viewer, locale),
       news: await localizedNews(news, viewer, locale),
       projects: projects.map((l) => ({
         id: l.project.id,

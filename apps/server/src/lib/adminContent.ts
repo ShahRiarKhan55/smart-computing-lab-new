@@ -95,11 +95,12 @@ const DEFS: Record<AdminContentType, Def> = {
       ]),
   },
   publication: {
+    entity: "PUBLICATION",
     titleField: "title",
     textFields: ["title", "authors", "venue"],
     count: (where) => prisma.publication.count({ where }),
     find: (where, orderBy, skip, take) => prisma.publication.findMany({ where, orderBy: orderBy as Prisma.PublicationOrderByWithRelationInput[], skip, take }),
-    base: (r) => ({ title: r.title, subtitle: `${r.year} · ${r.venue}`, visibility: vis(r), status: null, date: null, owner: null, href: "/publications" }),
+    base: (r) => ({ title: r.title, subtitle: `${r.year} · ${r.venue}`, visibility: vis(r), status: null, date: null, owner: null, href: `/publications/${r.id}` }),
     relations: (id) =>
       rel([
         ["authors", prisma.publicationAuthor.count({ where: { publicationId: id } })],

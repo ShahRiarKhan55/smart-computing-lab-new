@@ -196,6 +196,7 @@ const PAGE_LABEL_FIELD: Record<TranslatableEntityType, string> = {
   RESEARCH_GROUP: "name",
   NEWS_ITEM: "title",
   EVENT: "title",
+  PUBLICATION: "title",
   TEAM_MEMBER: "name",
 };
 

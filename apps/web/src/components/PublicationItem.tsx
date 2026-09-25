@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { Publication } from "@scl/shared";
 import { Icon } from "./Icon";
 import { VisibilityBadge } from "./VisibilityField";
@@ -30,7 +31,10 @@ export function PublicationItem({ publication: p, canEdit, canDelete, onEdit, on
     <article className="pub-item">
       <div>
         <h3 className="pub-item__title">
-          {p.title} <VisibilityBadge visibility={p.visibility} />
+          <Link to={`/publications/${p.id}`} className="pub-item__link">
+            {p.title}
+          </Link>{" "}
+          <VisibilityBadge visibility={p.visibility} />
         </h3>
         <p className="pub-item__authors">{p.authors}</p>
         <p className="pub-item__venue">

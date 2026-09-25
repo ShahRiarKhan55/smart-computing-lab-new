@@ -273,7 +273,7 @@ async function main() {
   const guestAll = (await everything(guest, { q: "ZZ Search" })).results;
   const hiddenCodes = await Promise.all([["/research/", aHid], ["/groups/", gHid], ["/projects/", pSecret], ["/publications/", pubHid], ["/news/", newsHid]].map(async ([p, h]) => (await guest.get(p + h.id)).status));
   check("(control) the ids search withheld from a guest really are 404 on the normal endpoints", hiddenCodes.every((s) => s === 404) && guestAll.every((x) => !HIDDEN_IDS.includes(x.id)));
-  check("result href is the existing page for each type", guestAll.every((x) => ({ project: `/projects/${x.id}`, group: `/groups/${x.id}`, researcher: `/team/${x.id}`, publication: "/publications", news: "/news", "research-area": `/research/${x.id}` })[x.type] === x.href));
+  check("result href is the existing page for each type", guestAll.every((x) => ({ project: `/projects/${x.id}`, group: `/groups/${x.id}`, researcher: `/team/${x.id}`, publication: `/publications/${x.id}`, news: "/news", "research-area": `/research/${x.id}` })[x.type] === x.href));
 
   // ------------------------------------------------------------------ nested visibility
   section("nested visibility (security regression)");

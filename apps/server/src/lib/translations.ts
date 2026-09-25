@@ -121,6 +121,7 @@ const BASE_DELEGATE = {
   RESEARCH_GROUP: "researchGroup",
   NEWS_ITEM: "newsItem",
   EVENT: "event",
+  PUBLICATION: "publication",
   TEAM_MEMBER: "teamMember",
 } as const satisfies Record<TranslatableEntityType, string>;
 

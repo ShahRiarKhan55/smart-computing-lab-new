@@ -4,6 +4,7 @@ import { visibilitySchema, type Visibility } from "./enums.js";
 import { EVENT_KINDS, EVENT_SCOPES, EVENT_TRANSLATION_MAX } from "./event.js";
 import { GROUP_TRANSLATION_MAX } from "./group.js";
 import { NEWS_TRANSLATION_MAX, NEWS_TYPES } from "./news.js";
+import { PUBLICATION_TRANSLATION_MAX } from "./publication.js";
 import { PROJECT_STATUSES, PROJECT_TRANSLATION_MAX } from "./project.js";
 import { RESEARCH_AREA_TRANSLATION_MAX } from "./research.js";
 import { parseSearchText, SEARCH_MAX_TERMS, SEARCH_QUERY_MAX_LENGTH } from "./search.js";
@@ -30,6 +31,7 @@ export const ADMIN_TRANSLATION_ENTITY: Partial<Record<AdminContentType, Translat
   group: "RESEARCH_GROUP",
   news: "NEWS_ITEM",
   event: "EVENT",
+  publication: "PUBLICATION",
   "team-member": "TEAM_MEMBER",
 };
 
@@ -234,6 +236,7 @@ export const ADMIN_TRANSLATION_MAX: Record<TranslatableEntityType, Record<string
   RESEARCH_GROUP: GROUP_TRANSLATION_MAX,
   NEWS_ITEM: NEWS_TRANSLATION_MAX,
   EVENT: EVENT_TRANSLATION_MAX,
+  PUBLICATION: PUBLICATION_TRANSLATION_MAX,
   TEAM_MEMBER: TEAM_MEMBER_TRANSLATION_MAX,
 };
 

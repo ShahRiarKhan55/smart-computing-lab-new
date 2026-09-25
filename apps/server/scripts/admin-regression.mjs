@@ -254,7 +254,6 @@ async function main() {
     ["owner on news", `type=news&owner=${memA.tm.id}`],
     ["status on news", "type=news&status=ACTIVE"],
     ["newsType on project", "type=project&newsType=Grant"],
-    ["translation on publication", "type=publication&translation=translated"],
     ["bad enum kind", "type=event&kind=PARTY"],
     ["bad scope", "type=event&scope=someday"],
     ["page 0", "type=news&page=0"],

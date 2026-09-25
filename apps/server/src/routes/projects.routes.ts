@@ -29,12 +29,11 @@ import {
   sortMembersLeadFirst,
   toAreaRef,
   toIsoDate,
-  toPublication,
 } from "../lib/serializers.js";
 import { slugify, uniqueSlug } from "../lib/slug.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
-import { localizedNews, loadRefTranslations, pick, type RefTranslations } from "../lib/researchGraph.js";
+import { localizedNews, localizedPublications, loadRefTranslations, pick, type RefTranslations } from "../lib/researchGraph.js";
 import { eventInclude, eventOrderBy, serializeEvents } from "../lib/eventSerializers.js";
 import type { Locale } from "@scl/shared";
 
@@ -124,10 +123,11 @@ async function loadDetail(id: string, viewer: Viewer, locale: Locale = "en"): Pr
   return {
     ...toSummary(localized, viewer, refs),
     description: localized.description,
-    publications: row.publications
-      .map((l) => l.publication)
-      .sort((a, b) => b.year - a.year || b.createdAt.getTime() - a.createdAt.getTime())
-      .map((p) => toPublication(p, viewer)),
+    publications: await localizedPublications(
+      row.publications.map((l) => l.publication).sort((a, b) => b.year - a.year || b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id)),
+      viewer,
+      locale,
+    ),
     news,
     events: await serializeEvents(events, viewer, locale),
     canEdit: canEditProject(viewer, isLead),

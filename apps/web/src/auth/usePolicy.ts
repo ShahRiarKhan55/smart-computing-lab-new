@@ -11,6 +11,7 @@ import {
   canCreateProject,
   canCreateTeamMember,
   canDeleteContent,
+  canEditContent,
   canDeleteTeamMember,
   canEditProfileView,
   canLinkAccounts,
@@ -70,6 +71,8 @@ export function usePolicy() {
       canLinkAccounts: canLinkAccounts(user),
       canChangeVisibility: canChangeVisibility(user),
       canDeleteContent: canDeleteContent(user),
+      /** Any signed-in account may add or edit a publication (server: canEditContent); deleting stays managers-only. */
+      canEditContent: canEditContent(user),
       canCreateProject: canCreateProject(user),
       canCreateGroup: canCreateGroup(user),
       canCreateTeamMember: canCreateTeamMember(user),

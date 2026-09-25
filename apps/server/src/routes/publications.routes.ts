@@ -1,8 +1,10 @@
 import { Router } from "express";
 import type { Prisma } from "@prisma/client";
 import {
+  canChangeVisibility,
   canDeleteContent,
   createPublicationSchema,
+  publicationListQuerySchema,
   updatePublicationSchema,
   setPublicationAuthorsSchema,
   type PublicationAuthorsResponse,
@@ -20,33 +22,74 @@ import {
 } from "../lib/authorLinks.js";
 import { assertMayChangeVisibility, visibleTo } from "../lib/visibility.js";
 import { toPublication } from "../lib/serializers.js";
+import { browsePublications, loadPublicationDetail } from "../lib/publicationHub.js";
+import { localizedPublications } from "../lib/researchGraph.js";
+import { applyTranslationOverrides, getEntityTranslations, resolveLocale } from "../lib/translations.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 
 const router = Router();
 
 const AUDITED_FIELDS = ["year", "title", "authors", "venue", "pdfUrl", "doiUrl", "extraUrl", "extraLabel", "visibility"] as const;
 
-// GET /api/publications -> list (public; LAB_ONLY items are hidden from guests)
+/** Field NAMES whose Japanese override differs between two snapshots (never the text: audit convention). */
+async function auditTranslationChange(
+  tx: Prisma.TransactionClient,
+  actor: { id: string; email: string },
+  publicationId: string,
+  before: Record<string, string | null>,
+) {
+  const after = await getEntityTranslations(tx, "PUBLICATION", publicationId);
+  const fields = Object.keys(after).filter((f) => after[f] !== before[f]);
+  if (fields.length === 0) return;
+  await recordAudit(tx, {
+    actor,
+    action: "TRANSLATIONS_CHANGED",
+    entityType: "PUBLICATION",
+    entityId: publicationId,
+    details: { locale: "ja", fields: fields.join(",") },
+  });
+}
+
+// GET /api/publications -> the whole list, newest first (public; LAB_ONLY items are hidden from guests).
+// The web's hub page uses /browse below; this stays for callers that want every row (pickers, the home page).
 router.get(
   "/",
   optionalAuth,
   asyncHandler(async (req, res) => {
+    const viewer = req.user ?? null;
     const rows = await prisma.publication.findMany({
-      where: visibleTo(req.user ?? null),
-      orderBy: [{ year: "desc" }, { createdAt: "desc" }],
+      where: visibleTo(viewer),
+      orderBy: [{ year: "desc" }, { createdAt: "desc" }, { id: "asc" }],
     });
-    res.json(rows.map((r) => toPublication(r, req.user ?? null)));
+    res.json(await localizedPublications(rows, viewer, resolveLocale(req)));
   }),
 );
 
-// GET /api/publications/:id -> single (public; a LAB_ONLY item is a 404 for guests)
+// GET /api/publications/browse?q&year&researcher&project&area&group&visibility&sort&page&limit
+// -> one filtered, sorted, paged slice. Malformed values are a 400; a filter on a hidden or unknown id
+// matches nothing (the same answer for both). `visibility` is a manager-only filter.
+router.get(
+  "/browse",
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const viewer = req.user ?? null;
+    const query = parseOrThrow(publicationListQuerySchema, req.query);
+    if (query.visibility && !canChangeVisibility(viewer)) {
+      throw new HttpError(403, "Only lab managers and admins can filter by visibility.");
+    }
+    res.json(await browsePublications(query, viewer, resolveLocale(req)));
+  }),
+);
+
+// GET /api/publications/:id -> one publication with its real links (public; a LAB_ONLY or missing item is the same 404)
 router.get(
   "/:id",
   optionalAuth,
   asyncHandler(async (req, res) => {
-    const row = await prisma.publication.findFirst({ where: { id: req.params.id, ...visibleTo(req.user ?? null) } });
-    if (!row) throw new HttpError(404, "Not found");
-    res.json(toPublication(row, req.user ?? null));
+    assertValidId(req.params.id);
+    const detail = await loadPublicationDetail(req.params.id, req.user ?? null, resolveLocale(req));
+    if (!detail) throw new HttpError(404, "Not found");
+    res.json(detail);
   }),
 );
 
@@ -144,11 +187,12 @@ router.post(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { teamMemberIds, ...fields } = parseOrThrow(createPublicationSchema, req.body);
+    const { teamMemberIds, translations, ...fields } = parseOrThrow(createPublicationSchema, req.body);
     assertMayChangeVisibility(req.user!, fields.visibility);
 
     const created = await prisma.$transaction(async (tx) => {
       const row = await tx.publication.create({ data: fields });
+      await applyTranslationOverrides(tx, "PUBLICATION", row.id, translations?.ja);
       let linkedAuthors = 0;
       if (teamMemberIds !== undefined) {
         const diff = await replaceAuthors(tx, req.user!, row.id, teamMemberIds);
@@ -161,6 +205,7 @@ router.post(
         entityId: row.id,
         details: { title: row.title, year: row.year, visibility: row.visibility, linkedAuthors },
       });
+      await auditTranslationChange(tx, req.user!, row.id, { title: null, venue: null });
       return row;
     });
 
@@ -176,14 +221,17 @@ router.put(
   requireAuth,
   asyncHandler(async (req, res) => {
     assertValidId(req.params.id);
-    const { teamMemberIds, ...fields } = parseOrThrow(updatePublicationSchema, req.body);
+    const { teamMemberIds, translations, ...fields } = parseOrThrow(updatePublicationSchema, req.body);
     assertMayChangeVisibility(req.user!, fields.visibility);
 
     const updated = await prisma.$transaction(async (tx) => {
       const existing = await tx.publication.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new HttpError(404, "Not found");
 
+      const before = translations?.ja ? await getEntityTranslations(tx, "PUBLICATION", existing.id) : null;
       const row = await tx.publication.update({ where: { id: existing.id }, data: fields });
+      await applyTranslationOverrides(tx, "PUBLICATION", row.id, translations?.ja);
+      if (before) await auditTranslationChange(tx, req.user!, row.id, before);
       if (teamMemberIds !== undefined) {
         const diff = await replaceAuthors(tx, req.user!, existing.id, teamMemberIds);
         await auditAuthorChange(tx, req.user!, existing.id, diff);
@@ -218,6 +266,7 @@ router.delete(
       if (!existing) throw new HttpError(404, "Not found");
 
       await tx.publication.delete({ where: { id: existing.id } });
+      await tx.translation.deleteMany({ where: { entityType: "PUBLICATION", entityId: existing.id } });
       await recordAudit(tx, {
         actor: req.user!,
         action: "PUBLICATION_DELETED",

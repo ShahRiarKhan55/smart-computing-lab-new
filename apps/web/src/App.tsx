@@ -10,6 +10,7 @@ import { ResearchAreaDetailPage } from "./pages/ResearchAreaDetailPage";
 import { TeamPage } from "./pages/TeamPage";
 import { MemberPage } from "./pages/MemberPage";
 import { PublicationsPage } from "./pages/PublicationsPage";
+import { PublicationDetailPage } from "./pages/PublicationDetailPage";
 import { NewsPage } from "./pages/NewsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
         <Route path="/publications" element={<PublicationsPage />} />
+        <Route path="/publications/:id" element={<PublicationDetailPage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/contact" element={<ContactPage />} />

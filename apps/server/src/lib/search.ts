@@ -303,6 +303,7 @@ const sources = [
     type: "publication",
     title: "title",
     fields: ["authors", "venue", "doiUrl"],
+    translatable: "PUBLICATION",
     // A researcher's name finds their linked publications; a 4-digit word also matches the year.
     extra: (term) => [
       { authorLinks: { some: { teamMember: { name: { contains: term } } } } },
@@ -324,7 +325,7 @@ const sources = [
       title: r.title,
       description: describe([r.authors], terms),
       meta: joinMeta(String(r.year), r.venue),
-      href: "/publications",
+      href: `/publications/${r.id}`,
       ...visibilityField(viewer, r.visibility),
     }),
   }),

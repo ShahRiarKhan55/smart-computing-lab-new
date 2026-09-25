@@ -51,10 +51,27 @@ export async function loadProjectOutputs(projectIds: string[], viewer: Viewer, l
   ]);
   const newsTr = await loadTranslations(prisma, "NEWS_ITEM", news.map((n) => n.id), locale);
   return {
-    publications: pubs.map((p) => toPublication(p, viewer)),
+    publications: await localizedPublications(pubs, viewer, locale),
     news: news.map((n) => toNewsItem(localize(n, "NEWS_ITEM", newsTr), viewer)),
     events: await serializeEvents(events, viewer, locale),
   };
+}
+
+/** Publication rows -> API shape with the locale's title/venue overrides (one batched lookup, none for English). */
+export async function localizedPublications<T extends Parameters<typeof toPublication>[0] & { id: string }>(rows: T[], viewer: Viewer, locale: Locale): Promise<Publication[]> {
+  const tr = await loadTranslations(prisma, "PUBLICATION", rows.map((r) => r.id), locale);
+  return rows.map((r) => toPublication(localize(r, "PUBLICATION", tr), viewer));
+}
+
+/** News and events of any of `projectIds` (already filtered to visible projects by the caller), newest first, at most `take` each. */
+export async function loadProjectNewsAndEvents(projectIds: string[], viewer: Viewer, locale: Locale, take: number): Promise<{ news: NewsItem[]; events: LabEvent[] }> {
+  if (projectIds.length === 0) return { news: [], events: [] };
+  const visible = visibleTo(viewer);
+  const [news, events] = await Promise.all([
+    prisma.newsItem.findMany({ where: { ...visible, projectId: { in: projectIds } }, orderBy: [{ sortDate: "desc" }, { id: "asc" }], take }),
+    prisma.event.findMany({ where: { ...visible, projectId: { in: projectIds } }, include: eventInclude, orderBy: [{ startsAt: "desc" }, { id: "asc" }], take }),
+  ]);
+  return { news: await localizedNews(news, viewer, locale), events: await serializeEvents(events, viewer, locale) };
 }
 
 /** News rows -> API shape with the locale's overrides (news titles/descriptions are translatable). */

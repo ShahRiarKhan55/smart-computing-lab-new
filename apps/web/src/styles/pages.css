@@ -345,6 +345,19 @@
   overflow-wrap: anywhere;
 }
 
+/* inline-block so a title that wraps onto several lines is ONE rectangle: its centre is on the link (hit-testable), not in the gap between lines */
+.pub-item__link {
+  display: inline-block;
+  max-width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.pub-item__link:hover {
+  color: var(--green-800);
+  text-decoration: underline;
+}
+
 .pub-item__authors {
   margin-top: 4px;
   font-size: var(--text-sm);
@@ -365,6 +378,29 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+
+.pub-detail__authors {
+  margin-top: var(--space-3);
+  font-size: var(--text-lg);
+  overflow-wrap: anywhere;
+}
+
+.pub-detail__venue {
+  margin-top: var(--space-1);
+  font-style: italic;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.pub-detail__projects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
 }
 
 .pub-item__actions {
