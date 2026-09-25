@@ -527,7 +527,12 @@ async function main() {
   check("member: no visibility/slug/userId/email keys, no account ids (ordinary members never see visibility)", !/"(visibility|slug|userId|email|isOwn|passwordHash)"/.test(mb) && !accountIds.some((a) => mb.includes(a)));
   const mgrBlob = JSON.stringify((await search(mgr.client, { q: "Quokka" })).json) + JSON.stringify((await search(admin, { q: "Quokka" })).json);
   check("manager/admin: `visibility` only, still no slug/userId/email/account id", !/"(slug|userId|email|isOwn|passwordHash)"/.test(mgrBlob) && !accountIds.some((a) => mgrBlob.includes(a)));
-  check("no result exposes relationship data: no group/project/member/author fields, no per-result counts", !/"(members|authors|group|project|projectCount|memberCount|areas|publications)":/.test([...guestBlob, ...memberBlob].map((x) => JSON.stringify(JSON.parse(x).results)).join("\n")));
+  // Phase 20 legitimately adds ONE relationship channel, `related` (visible area/project/group links; see discovery-regression.mjs). Everything else stays forbidden, and each related entry may carry only type/id/title/href.
+  check(
+    "no result exposes relationship data except `related`: no group/project/member/author fields, no per-result counts, related entries have exactly type/id/title/href",
+    !/"(members|authors|group|project|projectCount|memberCount|areas|publications)":/.test([...guestBlob, ...memberBlob].map((x) => JSON.stringify(JSON.parse(x).results)).join("\n")) &&
+      [...guestBlob, ...memberBlob].every((x) => JSON.parse(x).results.every((r) => (r.related ?? []).every((e) => Object.keys(e).sort().join() === "href,id,title,type"))),
+  );
 
   // ------------------------------------------------------------------ static
   section("static: one source of truth, no raw SQL, no second visibility system");

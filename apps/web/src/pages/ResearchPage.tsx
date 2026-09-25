@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { ProjectSummary, ResearchArea } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch } from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
+import { Icon } from "../components/Icon";
 import { AdminBar } from "../components/AdminBar";
 import { ResearchCard } from "../components/ResearchCard";
 import { LoadingState } from "../components/LoadingState";
@@ -43,6 +45,29 @@ export function ResearchPage() {
             onAction={() => setFormModal({ open: true, area: null })}
           />
         )}
+
+        <nav aria-label={t("research.explore.aria")}>
+          <ul className="research-explore">
+            {(
+              [
+                ["/projects", "research.explore.projectsTitle", "research.explore.projectsDesc"],
+                ["/publications", "research.explore.pubsTitle", "research.explore.pubsDesc"],
+                ["/team", "research.explore.peopleTitle", "research.explore.peopleDesc"],
+              ] as const
+            ).map(([to, title, desc]) => (
+              <li key={to}>
+                <article className="card card--interactive">
+                  <h2 className="card__title">
+                    <Link to={to} className="research-explore__link">
+                      {t(title)} <Icon name="arrow-right" size={14} />
+                    </Link>
+                  </h2>
+                  <p className="research-explore__desc">{t(desc)}</p>
+                </article>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
         {loading && !areas && <LoadingState label={t("research.loading")} />}
         {error && <ErrorState message={error} onRetry={reload} />}

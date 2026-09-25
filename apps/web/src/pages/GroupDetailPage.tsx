@@ -14,6 +14,7 @@ import { PersonLink } from "../components/PersonLink";
 import { ProjectCard } from "../components/ProjectCard";
 import { SectionHeader } from "../components/SectionHeader";
 import { RelatedOutputs } from "../components/RelatedOutputs";
+import { RelatedResearch } from "../components/RelatedResearch";
 import { GroupFormModal } from "../components/GroupFormModal";
 import { MembersModal } from "../components/MembersModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
@@ -106,6 +107,16 @@ export function GroupDetailPage() {
             <VisibilityBadge visibility={group.visibility} />
           </div>
         )}
+
+        <div className="detail-section">
+          <RelatedResearch
+            idPrefix="group"
+            links={[
+              ...(group.projects.length > 0 ? [{ to: `/projects?group=${group.id}`, label: t("explore.groupProjects") }] : []),
+              ...(group.publications.length > 0 ? [{ to: `/publications?group=${group.id}`, label: t("explore.groupPubs") }] : []),
+            ]}
+          />
+        </div>
 
         <section className="detail-section" aria-labelledby="group-members">
           <SectionHeader compact id="group-members" title={t("groups.membersHeading", { count: group.members.length })} />

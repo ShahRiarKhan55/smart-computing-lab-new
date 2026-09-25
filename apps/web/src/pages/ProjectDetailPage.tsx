@@ -25,6 +25,7 @@ import { PersonLink } from "../components/PersonLink";
 import { StatusBadge } from "../components/Badge";
 import { SectionHeader } from "../components/SectionHeader";
 import { PublicationItem } from "../components/PublicationItem";
+import { RelatedResearch } from "../components/RelatedResearch";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
 import { ProjectFormModal } from "../components/ProjectFormModal";
@@ -233,6 +234,14 @@ export function ProjectDetailPage() {
                 </div>
               )}
             </section>
+            <RelatedResearch
+              idPrefix="project"
+              links={[
+                ...(project.publications.length > 0 ? [{ to: `/publications?project=${project.id}`, label: t("explore.projectPubs") }] : []),
+                ...project.areas.slice(0, 3).map((a) => ({ to: `/projects?area=${a.id}`, label: t("explore.projectsInArea", { name: a.title }) })),
+                ...(project.group ? [{ to: `/projects?group=${project.group.id}`, label: t("explore.projectsInGroup", { name: project.group.name }) }] : []),
+              ]}
+            />
           </aside>
 
           <div className="detail-layout__b">

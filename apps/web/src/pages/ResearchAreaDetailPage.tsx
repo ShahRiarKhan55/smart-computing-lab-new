@@ -14,6 +14,7 @@ import { PersonLink } from "../components/PersonLink";
 import { ProjectCard } from "../components/ProjectCard";
 import { SectionHeader } from "../components/SectionHeader";
 import { RelatedOutputs } from "../components/RelatedOutputs";
+import { RelatedResearch } from "../components/RelatedResearch";
 import { ResearchFormModal } from "../components/ResearchFormModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
@@ -145,6 +146,13 @@ export function ResearchAreaDetailPage() {
                 </div>
               )}
             </section>
+            <RelatedResearch
+              idPrefix="area"
+              links={[
+                ...(area.projects.length > 0 ? [{ to: `/projects?area=${area.id}`, label: t("explore.areaProjects") }] : []),
+                ...(area.publications.length > 0 ? [{ to: `/publications?area=${area.id}`, label: t("explore.areaPubs") }] : []),
+              ]}
+            />
           </aside>
         </div>
       </div>

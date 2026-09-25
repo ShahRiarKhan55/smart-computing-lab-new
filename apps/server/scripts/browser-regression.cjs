@@ -7,6 +7,7 @@
 //   ONLY_STEPS=<regex> runs just the steps whose name matches (independent of the ONLY_* flags above).
 //   ONLY_EVENTS=1 runs just the Phase 16 events section (steps named "events ..."; P15_W narrows its widths too).
 //   ONLY_ADMIN=1 runs just the Phase 17 admin/CMS section (steps named "admin ..."; P15_W / P15_USERS=admin-manager,admin-admin narrow the sweeps).
+//   ONLY_DISCOVERY=1 runs just the Phase 20 discovery section (steps named "discovery ..."; P15_W / P15_USERS=disc-guest,disc-member narrow the sweeps).
 //   ONLY_PUBS=1 runs just the Phase 19 publications section (steps named "publications ..."; P15_W / P15_USERS=pubs-guest,pubs-member,pubs-manager narrow the sweeps).
 //   ONLY_RESEARCH=1 runs just the Phase 18 research-structure section (steps named "research ..."; P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
@@ -48,6 +49,7 @@ const ONLY_EVENTS = !!process.env.ONLY_EVENTS;
 const ONLY_ADMIN = !!process.env.ONLY_ADMIN;
 const ONLY_RESEARCH = !!process.env.ONLY_RESEARCH;
 const ONLY_PUBS = !!process.env.ONLY_PUBS;
+const ONLY_DISCOVERY = !!process.env.ONLY_DISCOVERY;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -219,7 +221,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications "))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -837,7 +839,9 @@ async function connect() {
     await go("/search?q=ZZ+B9+Project+Public");
     await statusIs("ZZ B9 Project Public");
     check("cards: entity label, title link, and a 'View project' call to action", (await ev(`(() => { const c = document.querySelector('.search-result--project'); return c.querySelector('.search-result__type').innerText.toLowerCase().includes('project') && c.querySelector('h3 a').getAttribute('href') === '/projects/${D.p1.id}' && c.innerText.includes('View project'); })()`)));
-    check("cards: the link is the only interactive element (whole card is the target via ::after)", await ev(`(() => { const c = document.querySelector('.search-result--project'); return c.querySelectorAll('a,button').length === 1 && getComputedStyle(c.querySelector('a'), '::after').position === 'absolute'; })()`));
+    // Phase 20: a result may also carry `related` links (their own labelled list). The TITLE link must still be the only
+    // stretched target, and every related link must sit above that overlay (relative + z-index) so it stays clickable.
+    check("cards: the title link is the only stretched interactive element (whole card is the target via ::after); any related links sit above it", await ev(`(() => { const c = document.querySelector('.search-result--project'); const own = [...c.querySelectorAll('a,button')].filter((x) => !x.closest('.search-result__related')); const rel = [...c.querySelectorAll('.search-result__related a')]; return own.length === 1 && getComputedStyle(own[0], '::after').position === 'absolute' && rel.every((a) => getComputedStyle(a).position === 'relative' && Number(getComputedStyle(a).zIndex) >= 1); })()`));
     await clickText("ZZ B9 Project Public", ".search-result__link");
     check("clicking a project result opens the project page", (await waitFor(`location.pathname === '/projects/${D.p1.id}'`)) && (await waitText("Long description of the public project.")));
     await go("/search?q=ZZ+B9");
@@ -4230,6 +4234,287 @@ async function connect() {
   });
   await step("publications: restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
 
+  // ================================================================ PHASE 20: research discovery & knowledge navigation
+  // Related links on search results, "Explore this research" panels, /projects?area|group|researcher= filters, the Research
+  // landing strip, EN/JA, hostile text, and the nine-width sweep. (Steps are named "discovery ..."; ONLY_DISCOVERY=1 runs just
+  // them; P15_W / P15_USERS=disc-guest,disc-member narrow the sweeps.)
+  section("phase 20: research discovery & knowledge navigation");
+  const R20 = {};
+  const D20_HID = ["ZZ B9 R20 Area Hidden", "ZZ B9 R20 Group Hidden", "ZZ B9 R20 Project Hidden"];
+  const dLong = "ZZ B9 R20 Long " + "Q".repeat(110);
+  const eqJ = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const dCards = () => ev(`(() => [...document.querySelectorAll('.search-result')].map((c) => ({ title: c.querySelector('.search-result__link')?.textContent.trim(), type: c.querySelector('.search-result__type')?.textContent.trim().toLowerCase(), listLabel: c.querySelector('.search-result__related-list')?.getAttribute('aria-label') || null, related: [...c.querySelectorAll('.search-result__related-list a')].map((x) => ({ t: x.textContent.trim(), h: x.getAttribute('href') })) })))()`);
+  const dCard = async (title) => (await dCards()).find((c) => c.title === title) || null;
+  const dExplore = () => ev(`(() => { const s = document.querySelector('.explore'); return s ? { heading: s.querySelector('h2')?.textContent.trim(), links: [...s.querySelectorAll('a')].map((a) => ({ t: a.textContent.trim(), h: a.getAttribute('href') })) } : null; })()`);
+  const dSearch = async (q, extra = "") => { await pReady(`/search?q=${encodeURIComponent(q)}${extra}`); await waitFor(`!!document.querySelector('.search-result, .search-empty')`, 9000); await sleep(150); };
+
+  await step("discovery seed: areas, groups, projects, publication, news, event and a researcher with visible and hidden neighbours", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const a = new Client();
+    await a.req("POST", "/auth/login", ADMIN);
+    R20.a = a;
+    const J = (r) => r.json;
+    R20.area = J(await a.req("POST", "/research", { title: "ZZ B9 R20 Area Alpha", description: "R20 area", tag: "ZZR20", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R20 アルファ分野" } } }));
+    R20.areaHid = J(await a.req("POST", "/research", { title: "ZZ B9 R20 Area Hidden", description: "R20 hidden area", tag: "ZZR20", visibility: "LAB_ONLY" }));
+    R20.areaEmpty = J(await a.req("POST", "/research", { title: "ZZ B9 R20 Area Empty", description: "no projects, no publications", tag: "ZZR20", visibility: "PUBLIC" }));
+    R20.areaX = J(await a.req("POST", "/research", { title: "ZZ B9 R20 Area <img src=x onerror=window.__r20Xss=1>", description: "hostile", tag: "ZZR20", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R20 <img src=x onerror=window.__r20Xss=2> 分野" } } }));
+    R20.grp = J(await a.req("POST", "/groups", { name: "ZZ B9 R20 Group", description: "g", visibility: "PUBLIC", translations: { ja: { name: "ZZ B9 R20 グループ" } } }));
+    R20.grpHid = J(await a.req("POST", "/groups", { name: "ZZ B9 R20 Group Hidden", description: "hg", visibility: "LAB_ONLY" }));
+    const mkPrj = async (title, summary, visibility, groupId, ja) => J(await a.req("POST", "/projects", { title, summary, description: "d", status: "ACTIVE", visibility, ...(groupId ? { groupId } : {}), ...(ja ? { translations: { ja: { title: ja } } } : {}) }));
+    R20.prj = await mkPrj("ZZ B9 R20 Project", "R20 project summary", "PUBLIC", R20.grp.id, "ZZ B9 R20 プロジェクト");
+    R20.prjHid = await mkPrj("ZZ B9 R20 Project Hidden", "hidden project", "LAB_ONLY", R20.grp.id);
+    R20.prjGH = await mkPrj("ZZ B9 R20 Project In Hidden Group", "in a hidden group", "PUBLIC", R20.grpHid.id);
+    R20.prjLong = await mkPrj(dLong, "long", "PUBLIC", null);
+    R20.prj3 = await mkPrj("ZZ B9 R20 Project Three", "three", "PUBLIC", null);
+    R20.prj4 = await mkPrj("ZZ B9 R20 Project Four", "four", "PUBLIC", null);
+    R20.prjX = await mkPrj("ZZ B9 R20 Project Hostile", "hostile area link", "PUBLIC", null);
+    await a.req("PUT", `/projects/${R20.prjX.id}/areas`, { areaIds: [R20.areaX.id] });
+    await a.req("PUT", `/projects/${R20.prj.id}/areas`, { areaIds: [R20.area.id, R20.areaHid.id] });
+    for (const p of [R20.prjHid, R20.prjGH, R20.prjLong, R20.prj3, R20.prj4]) await a.req("PUT", `/projects/${p.id}/areas`, { areaIds: [R20.area.id] });
+    R20.pub = J(await a.req("POST", "/publications", { year: 2037, title: "ZZ B9 R20 Paper Alpha", authors: "ZZ B9 R20 Researcher", venue: "ZZ B9 R20 Journal" }));
+    R20.pubHid = J(await a.req("POST", "/publications", { year: 2037, title: "ZZ B9 R20 Paper On Hidden Project", authors: "x", venue: "v" }));
+    await a.req("PUT", `/projects/${R20.prj.id}/publications`, { publicationIds: [R20.pub.id] });
+    await a.req("PUT", `/projects/${R20.prjHid.id}/publications`, { publicationIds: [R20.pub.id, R20.pubHid.id] });
+    R20.news = J(await a.req("POST", "/news", { date: "Jan 2037", sortDate: "2037-01-01", type: "Update", title: "ZZ B9 R20 News Visible", description: "d", visibility: "PUBLIC" }));
+    R20.newsHid = J(await a.req("POST", "/news", { date: "Jan 2037", sortDate: "2037-01-02", type: "Update", title: "ZZ B9 R20 News On Hidden Project", description: "d", visibility: "PUBLIC" }));
+    await a.req("PUT", `/projects/${R20.prj.id}/news`, { newsIds: [R20.news.id] });
+    await a.req("PUT", `/projects/${R20.prjHid.id}/news`, { newsIds: [R20.newsHid.id] });
+    const at = new Date(Date.now() + 7 * 864e5).toISOString();
+    R20.ev = J(await a.req("POST", "/events", { title: "ZZ B9 R20 Event Visible", kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", projectId: R20.prj.id }));
+    R20.evHid = J(await a.req("POST", "/events", { title: "ZZ B9 R20 Event On Hidden Project", kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", projectId: R20.prjHid.id }));
+    R20.tm = J(await a.req("POST", "/team", { name: "ZZ B9 R20 Researcher", role: "Fellow", category: "RESEARCH", initials: "ZR", department: "", bio: "" }));
+    await a.req("PUT", `/member/${R20.tm.id}/areas`, { areaIds: [R20.area.id, R20.areaHid.id] });
+    await a.req("PUT", `/member/${R20.tm.id}/publications`, { publicationIds: [R20.pub.id] });
+    await a.req("PUT", `/projects/${R20.prj.id}/members`, { members: [{ teamMemberId: R20.tm.id, role: "MEMBER" }] });
+    check("discovery setup: the fixtures exist", [R20.area, R20.areaHid, R20.areaEmpty, R20.areaX, R20.grp, R20.grpHid, R20.prj, R20.prjHid, R20.prjGH, R20.prjLong, R20.prj3, R20.prj4, R20.prjX, R20.pub, R20.pubHid, R20.news, R20.newsHid, R20.ev, R20.evHid, R20.tm].every((x) => x?.id));
+  });
+
+  await step("discovery guest: search results carry related links that name only visible records", async () => {
+    await desktop(); await setLocale(null);
+    await dSearch("ZZ B9 R20");
+    const cards = await dCards();
+    const proj = cards.find((c) => c.title === "ZZ B9 R20 Project");
+    check("discovery guest: a project result lists its group first, then its visible areas (hidden area absent)", !!proj && proj.related[0]?.t === "ZZ B9 R20 Group" && proj.related.some((r) => r.t === "ZZ B9 R20 Area Alpha") && !proj.related.some((r) => /Hidden/.test(r.t)), JSON.stringify(proj));
+    check("discovery guest: the related list is a labelled list of real links to /groups|/research|/projects + id", !!proj && proj.listLabel === "Related records" && proj.related.every((r) => /^\/(groups|research|projects)\/[\w-]+$/.test(r.h)));
+    check("discovery guest: a project in a HIDDEN group shows no group (only its area), and the hidden project is not a result", eqJ((await dCard("ZZ B9 R20 Project In Hidden Group"))?.related.map((r) => r.t), ["ZZ B9 R20 Area Alpha"]) && !cards.some((c) => c.title === "ZZ B9 R20 Project Hidden"));
+    const area = cards.find((c) => c.title === "ZZ B9 R20 Area Alpha");
+    check("discovery guest: an area result is capped at three related projects even though more are visible", !!area && area.related.length === 3 && area.related.every((r) => r.h.startsWith("/projects/")) && !area.related.some((r) => /Hidden/.test(r.t)), JSON.stringify(area));
+    const paper = cards.find((c) => c.title === "ZZ B9 R20 Paper Alpha");
+    check("discovery guest: a publication lists its visible project only (the hidden project it is also linked to is absent)", eqJ(paper?.related.map((r) => r.t), ["ZZ B9 R20 Project"]), JSON.stringify(paper));
+    const onlyHid = cards.find((c) => c.title === "ZZ B9 R20 Paper On Hidden Project");
+    check("discovery guest: a public paper whose only project is hidden is still found, with no related line at all", !!onlyHid && onlyHid.related.length === 0 && !(await ev(`[...document.querySelectorAll('.search-result')].find((c) => c.textContent.includes('Paper On Hidden Project')).querySelector('.search-result__related')`)));
+    check("discovery guest: news and events of a hidden project show no related project; those of a visible project name it", (await dCard("ZZ B9 R20 News On Hidden Project"))?.related.length === 0 && (await dCard("ZZ B9 R20 Event On Hidden Project"))?.related.length === 0 && eqJ((await dCard("ZZ B9 R20 News Visible"))?.related.map((r) => r.t), ["ZZ B9 R20 Project"]) && eqJ((await dCard("ZZ B9 R20 Event Visible"))?.related.map((r) => r.t), ["ZZ B9 R20 Project"]));
+    check("discovery guest: a researcher lists visible areas only", eqJ((await dCard("ZZ B9 R20 Researcher"))?.related.map((r) => r.t), ["ZZ B9 R20 Area Alpha"]));
+    const html = await ev(`document.querySelector('.search-results').outerHTML`);
+    check("discovery guest: no hidden name or id anywhere in the results markup", D20_HID.every((w) => !html.includes(w)) && ![R20.areaHid.id, R20.grpHid.id, R20.prjHid.id].some((id) => html.includes(id)));
+    check("discovery guest: the chip counts equal the API's visibility-aware counts", await ev(`fetch('/api/search?q=ZZ+B9+R20').then((r) => r.json()).then((j) => [...document.querySelectorAll('.search-filters .chip')].every((c) => { const n = +c.querySelector('.chip__count').textContent; const k = c.getAttribute('href').match(/type=([\\w-]+)/)?.[1] || 'all'; return j.counts[k] === n; }))`));
+    // a related link is a real link: clicking it goes to that record
+    await pClick(".search-result .search-result__related-list a", "ZZ B9 R20 Group");
+    check("discovery guest: clicking a related link opens that record (not the result's own page)", await waitFor(`location.pathname === '/groups/${R20.grp.id}'`, 6000));
+    await ev(`history.back()`);
+    await waitFor(`location.pathname === '/search'`, 5000);
+    check("discovery guest: Back returns to the same search (state in the URL)", await waitFor(`location.search.includes('q=ZZ+B9+R20') || location.search.includes('q=ZZ%20B9%20R20')`, 4000));
+    // the card itself still opens the result
+    await dSearch("ZZ B9 R20 Paper Alpha");
+    await pClick(".search-result .search-result__link");
+    check("discovery guest: the result title still opens the publication", await waitFor(`location.pathname === '/publications/${R20.pub.id}'`, 6000));
+  });
+
+  await step("discovery guest: an empty type filter offers the other categories that DO match, with visible-only counts", async () => {
+    await dSearch("ZZ B9 R20 Paper", "&type=project");
+    check("discovery guest: zero projects match, and the empty state names the categories that do (Publications)", (await exists(".search-empty")) && (await ev(`[...document.querySelectorAll('.search-other a.chip')].map((a) => a.textContent.trim())`)).some((t) => /^Publications \(\d+\)$/.test(t)), String(await ev(`document.querySelector('.search-empty')?.innerText`)));
+    const chips = await ev(`[...document.querySelectorAll('.search-other a.chip')].map((a) => a.textContent.trim())`);
+    const api = await ev(`fetch('/api/search?q=ZZ+B9+R20+Paper').then((r) => r.json()).then((j) => j.counts)`);
+    check("discovery guest: those counts are exactly the API's (a hidden paper is not counted)", chips.every((t) => { const m = t.match(/^(.+) \((\d+)\)$/); const key = { Publications: "publication", News: "news", Events: "event", Groups: "group", Researchers: "researcher", "Research Areas": "research-area", "Forum Topics": "forum-topic" }[m[1]]; return api[key] === +m[2]; }) && chips.length === Object.entries(api).filter(([k, v]) => k !== "all" && k !== "project" && v > 0).length, chips.join("|"));
+    await pClick(".search-other a.chip", "Publications");
+    check("discovery guest: clicking a suggestion moves to that type (type= in the URL) and shows results", (await waitFor(`location.search.includes('type=publication')`, 5000)) && (await waitFor(`!!document.querySelector('.search-result')`, 6000)));
+    await dSearch("zzznomatchr20zzz", "&type=project");
+    check("discovery guest: with nothing anywhere the suggestion list is absent and the plain empty state remains", (await exists(".search-empty")) && !(await exists(".search-other")));
+    await dSearch("ZZ B9 R20 Paper", "&type=bogus");
+    check("discovery guest: an invalid type in the URL falls back to All (never an error state)", (await exists(".search-result")) && !(await exists('[role="alert"]')) && (await ev(`document.querySelector('.search-filters .chip.active').textContent.trim().toLowerCase().startsWith('all')`)));
+    await dSearch("ZZ B9 R20", "&page=abc");
+    check("discovery guest: an invalid page falls back to page 1", (await exists(".search-result")) && !(await exists('[role="alert"]')));
+  });
+
+  await step("discovery guest: Explore panels link to filtered lists that really exist", async () => {
+    await pReady(`/research/${R20.area.id}`, "ZZ B9 R20 Area Alpha");
+    let ex = await dExplore();
+    check("discovery guest: the area page has an 'Explore this research' h2 panel with its projects and publications filters", ex?.heading === "Explore this research" && eqJ(ex.links.map((l) => l.h), [`/projects?area=${R20.area.id}`, `/publications?area=${R20.area.id}`]) && (await pCount("h1")) === 1, JSON.stringify(ex));
+    await pClick(`.explore a[href="/projects?area=${R20.area.id}"]`);
+    check("discovery guest: the projects link opens /projects filtered to the area", await waitFor(`location.search === '?area=${R20.area.id}'`, 6000));
+    await waitFor(`!document.querySelector('[aria-busy="true"]') && document.querySelectorAll('.card').length > 2`, 8000);
+    let t = await pMain();
+    check("discovery guest: only the area's VISIBLE projects are listed, the hidden one and its neighbours are not", t.includes("ZZ B9 R20 Project") && t.includes("ZZ B9 R20 Project Three") && !D20_HID.some((w) => t.includes(w)) && !t.includes("Paper On Hidden"));
+    check("discovery guest: a filter tag names the area and a 'Clear filter' link returns to the full list", (await ev(`document.querySelector('.filter-note')?.innerText`)).includes("Research area: ZZ B9 R20 Area Alpha") && (await exists('.filter-note a[href="/projects"]')));
+    check("discovery guest: the status count reflects the filtered list, not the whole lab", (await ev(`/^Showing \\d+ of \\d+ project/.test(document.querySelector('.filters__count').innerText.trim())`)) && (await ev(`+document.querySelector('.filters__count').innerText.match(/of (\\d+)/)[1]`)) < (await ev(`fetch('/api/projects').then((r) => r.json()).then((j) => j.length)`)));
+    await pClick('.filter-note a[href="/projects"]');
+    check("discovery guest: Clear filter shows every visible project again", (await waitFor(`location.search === '' && !document.querySelector('.filter-note')`, 5000)));
+    await pReady(`/projects?area=${R20.areaHid.id}`, "No projects match");
+    t = await pMain();
+    check("discovery guest: filtering by a HIDDEN area is the plain 'no match' state -- no title leaks, identical to an unknown id", t.includes("No projects match this filter.") && t.includes("not available") && !D20_HID.some((w) => t.includes(w)));
+    const hiddenText = t;
+    await pReady(`/projects?area=zzzunknownid`, "No projects match");
+    check("discovery guest: an unknown id renders exactly the same page text as the hidden id", (await pMain()) === hiddenText);
+    await pReady(`/projects?group=${R20.grpHid.id}`, "No projects match");
+    t = await pMain();
+    check("discovery guest: a hidden GROUP filter matches nothing and names nothing", t.includes("No projects match this filter.") && !t.includes("ZZ B9 R20 Group Hidden") && !t.includes("ZZ B9 R20 Project In Hidden Group"));
+    await pReady(`/projects?area=%3Cscript%3Ealert(1)%3C%2Fscript%3E`, "No projects match");
+    t = await pMain();
+    check("discovery guest: a hostile filter value is dropped, never echoed, and the page still renders", t.includes("not available") && !t.includes("<script") && !t.includes("alert(1)") && (await pCount("h1")) === 1 && (await ev(`typeof window.__r20Xss`)) === "undefined");
+    await pReady(`/projects?researcher=${R20.tm.id}`, "ZZ B9 R20 Project");
+    check("discovery guest: the researcher filter lists the projects that person is on", (await ev(`document.querySelector('.filter-note').innerText`)).includes("Researcher: ZZ B9 R20 Researcher") && (await pMain()).includes("ZZ B9 R20 Project") && !(await pMain()).includes("Project Three"));
+    await pReady(`/projects?group=${R20.grp.id}`, "ZZ B9 R20 Project");
+    t = await pMain();
+    check("discovery guest: the group filter lists only that group's visible projects", t.includes("ZZ B9 R20 Project") && !t.includes("Project Three") && !t.includes("Project Hidden") && !t.includes("In Hidden Group") && (await ev(`document.querySelector('.filter-note').innerText`)).includes("Group: ZZ B9 R20 Group"));
+    // the other detail pages
+    await pReady(`/projects/${R20.prj.id}`, "ZZ B9 R20 Project");
+    ex = await dExplore();
+    check("discovery guest: the project page offers its publications, and other projects in its areas and group (visible ones only)", !!ex && ex.links.some((l) => l.h === `/publications?project=${R20.prj.id}`) && ex.links.some((l) => l.h === `/projects?area=${R20.area.id}`) && ex.links.some((l) => l.h === `/projects?group=${R20.grp.id}`) && !ex.links.some((l) => l.h.includes(R20.areaHid.id) || l.h.includes(R20.grpHid.id)), JSON.stringify(ex));
+    await pReady(`/groups/${R20.grp.id}`, "ZZ B9 R20 Group");
+    ex = await dExplore();
+    check("discovery guest: the group page offers its projects filter", !!ex && ex.links.some((l) => l.h === `/projects?group=${R20.grp.id}`), JSON.stringify(ex));
+    await pReady(`/team/${R20.tm.id}`, "ZZ B9 R20 Researcher");
+    ex = await dExplore();
+    check("discovery guest: a researcher page offers publications and projects by that researcher", !!ex && eqJ(ex.links.map((l) => l.h), [`/publications?researcher=${R20.tm.id}`, `/projects?researcher=${R20.tm.id}`]), JSON.stringify(ex));
+    await pReady(`/publications/${R20.pub.id}`, "ZZ B9 R20 Paper Alpha");
+    ex = await dExplore();
+    check("discovery guest: a publication page offers 'more like this' filters for its researcher, project and area only (no hidden project/area)", !!ex && ex.links.some((l) => l.h === `/publications?researcher=${R20.tm.id}`) && ex.links.some((l) => l.h === `/publications?project=${R20.prj.id}`) && ex.links.some((l) => l.h === `/publications?area=${R20.area.id}`) && !ex.links.some((l) => l.h.includes(R20.prjHid.id) || l.h.includes(R20.areaHid.id)), JSON.stringify(ex));
+    await pClick(`.explore a[href="/publications?project=${R20.prj.id}"]`);
+    check("discovery guest: a publication 'more from this project' link lands on the publication hub already filtered", (await waitFor(`location.search === '?project=${R20.prj.id}'`, 6000)) && (await waitFor(`!!document.querySelector('.pub-item')`, 6000)));
+    await pReady(`/research/${R20.areaEmpty.id}`, "ZZ B9 R20 Area Empty");
+    check("discovery guest: an area with no visible projects or publications has NO Explore panel (an empty panel is never rendered)", !(await exists(".explore")) && (await pCount("h1")) === 1);
+    // the Research landing strip
+    await pReady("/research", "Research Areas");
+    const strip = await ev(`(() => { const n = document.querySelector('nav[aria-label="Explore more of the lab\\'s research"]'); return n ? [...n.querySelectorAll('a')].map((a) => a.getAttribute('href')) : null; })()`);
+    check("discovery guest: the Research landing page has a labelled strip to Projects, Publications and Researchers, and still one h1", eqJ(strip, ["/projects", "/publications", "/team"]) && (await pCount("h1")) === 1);
+    check("discovery guest: the areas grid is still there and a hidden area is not", (await pMain()).includes("ZZ B9 R20 Area Alpha") && !(await pMain()).includes("ZZ B9 R20 Area Hidden"));
+  });
+
+  await step("discovery guest: keyboard -- Enter submits the search, related links are reachable and ringed", async () => {
+    await pReady("/search");
+    await focusSel("#search-page-input");
+    await setVal("search-page-input", "ZZ B9 R20 Project");
+    await press("enter");
+    check("discovery guest keyboard: Enter in the search box submits it (URL gets q=)", await waitFor(`location.search.includes('q=')`, 5000));
+    await waitFor(`!!document.querySelector('.search-result')`, 8000);
+    await ev(`document.querySelector('.search-result__related-list a').setAttribute('data-r20-focus', '1')`);
+    await focusSel("[data-r20-focus]");
+    check("discovery guest keyboard: a related link takes focus and shows a visible focus ring", await ev(`(() => { const s = getComputedStyle(document.activeElement); return document.activeElement.matches('.search-result__related-list a') && s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 2; })()`));
+    await press("enter");
+    check("discovery guest keyboard: Enter on a related link follows it", await waitFor(`/^\\/(groups|research|projects)\\//.test(location.pathname)`, 6000));
+  });
+
+  await step("discovery member: LAB_ONLY neighbours are visible to a signed-in member, in the same order", async () => {
+    check("discovery member: login", await login(D.plain.email, PW));
+    await dSearch("ZZ B9 R20 Project");
+    const proj = await dCard("ZZ B9 R20 Project");
+    check("discovery member: the project lists its group, then BOTH areas (the lab-only one included), alphabetically", eqJ(proj?.related.map((r) => r.t), ["ZZ B9 R20 Group", "ZZ B9 R20 Area Alpha", "ZZ B9 R20 Area Hidden"]), JSON.stringify(proj));
+    await dSearch("ZZ B9 R20 Researcher");
+    check("discovery member: the researcher lists both areas, the lab-only one too", eqJ((await dCard("ZZ B9 R20 Researcher"))?.related.map((r) => r.t), ["ZZ B9 R20 Area Alpha", "ZZ B9 R20 Area Hidden"]));
+    await dSearch("ZZ B9 R20 Project");
+    check("discovery member: a member sees the lab-only project as a result too", !!(await dCard("ZZ B9 R20 Project Hidden")));
+    check("discovery member: still no visibility badge for an ordinary member", !/lab.only/i.test(await ev(`document.querySelector('.search-results').innerText`)));
+    await pReady(`/projects?area=${R20.areaHid.id}`, "ZZ B9 R20 Project");
+    check("discovery member: the lab-only area filter now resolves, names the area and lists its projects", (await ev(`document.querySelector('.filter-note').innerText`)).includes("Research area: ZZ B9 R20 Area Hidden") && (await pMain()).includes("ZZ B9 R20 Project"));
+    await pReady(`/publications/${R20.pub.id}`, "ZZ B9 R20 Paper Alpha");
+    const ex = await dExplore();
+    check("discovery member: the publication page's Explore panel includes the lab-only project and area", !!ex && ex.links.some((l) => l.h === `/publications?project=${R20.prjHid.id}`) && ex.links.some((l) => l.h === `/publications?area=${R20.areaHid.id}`), JSON.stringify(ex));
+    await logout();
+  });
+
+  await step("discovery ja: related links, panels and filters read in Japanese; authorization is unchanged", async () => {
+    await desktop(); await setLocale("ja");
+    await dSearch("ZZ B9 R20 Project");
+    const proj = await dCard("ZZ B9 R20 プロジェクト");
+    check("discovery ja: the project result and its related links use the Japanese overrides", !!proj && proj.related.some((r) => r.t === "ZZ B9 R20 グループ") && proj.related.some((r) => r.t === "ZZ B9 R20 アルファ分野") && proj.listLabel === "関連する項目", JSON.stringify(proj));
+    const html20 = await ev(`document.querySelector('.search-results').innerText`);
+    check("discovery ja: 'Related:' label is Japanese and no hidden record appears", (await ev(`document.querySelector('.search-result__related span')?.textContent`)) === "関連：" && !D20_HID.some((w) => html20.includes(w)));
+    await dSearch("ZZ B9 R20 Paper", "&type=project");
+    check("discovery ja: the empty-state suggestions are Japanese ('他のカテゴリの一致：') with the same visible-only counts", (await ev(`document.querySelector('.search-empty')?.parentElement.innerText`)).includes("他のカテゴリの一致：") && /（\d+）/.test(await ev(`document.querySelector('.search-other')?.innerText || ''`)));
+    await pReady(`/research/${R20.area.id}`);
+    const ex = await dExplore();
+    check("discovery ja: the Explore panel heading and links are Japanese and target the same URLs as English", ex?.heading === "この研究をさらに探る" && eqJ(ex.links.map((l) => l.h), [`/projects?area=${R20.area.id}`, `/publications?area=${R20.area.id}`]) && ex.links.every((l) => /[぀-ヿ一-鿿]/.test(l.t)), JSON.stringify(ex));
+    await pReady(`/projects?area=${R20.area.id}`, "研究分野：");
+    check("discovery ja: the filter tag and clear button are Japanese", (await ev(`document.querySelector('.filter-note').innerText`)).includes("研究分野：ZZ B9 R20 アルファ分野") && (await ev(`document.querySelector('.filter-note a').textContent`)).includes("絞り込みを解除"));
+    await pReady(`/projects?area=${R20.areaHid.id}`, "利用できない");
+    check("discovery ja: a hidden area id is still 'not available' -- locale never widens visibility", (await pMain()).includes("この条件に一致するプロジェクトはありません。") && !(await pMain()).includes("ZZ B9 R20 Area Hidden"));
+    await pReady("/research");
+    check("discovery ja: the Research landing strip is Japanese", (await ev(`document.querySelector('nav[aria-label="研究室の研究をさらに探る"]')?.innerText`))?.includes("プロジェクト") && (await ev(`document.documentElement.lang`)) === "ja");
+    await pReady(`/publications/${R20.pub.id}`);
+    check("discovery ja: the publication page's 'more from' links are Japanese", (await ev(`document.querySelector('.explore')?.innerText`) || "").includes("の他の論文"));
+    await setLocale(null);
+  });
+
+  await step("discovery hostile text: markup in an area title (English and Japanese) is inert on every discovery surface", async () => {
+    const dialogsBefore = P15.jsDialogs.length; // earlier phases' own confirm() dialogs are already in the list
+    for (const loc of [null, "ja"]) {
+      await setLocale(loc);
+      await dSearch("ZZ B9 R20 Project Hostile");
+      const proj = await ev(`(() => { const c = [...document.querySelectorAll('.search-result')].find((x) => x.querySelector('.search-result__link').textContent.trim() === 'ZZ B9 R20 Project Hostile'); return c ? { text: c.innerText, imgs: c.querySelectorAll('img, script').length } : null; })()`);
+      check(`discovery hostile ${loc || "en"}: the hostile area title is visible text in the related list and creates no element`, !!proj && proj.imgs === 0 && /<img src=x/.test(proj.text), JSON.stringify(proj));
+      await pReady(`/projects?area=${R20.areaX.id}`, loc ? "研究分野：" : "Research area:");
+      check(`discovery hostile ${loc || "en"}: the filter tag shows it as text, not markup`, (await ev(`document.querySelectorAll('.filter-note img, .filter-note script, main img').length`)) === 0 && (await ev(`typeof window.__r20Xss`)) === "undefined");
+      await pReady(`/projects/${R20.prjX.id}`);
+      check(`discovery hostile ${loc || "en"}: the Explore links on the project page render it inertly`, (await ev(`document.querySelectorAll('.explore img, .explore script').length`)) === 0 && (await ev(`typeof window.__r20Xss`)) === "undefined");
+    }
+    await setLocale(null);
+    check("discovery hostile: no script from hostile text ever ran", (await ev(`typeof window.__r20Xss`)) === "undefined" && P15.jsDialogs.length === dialogsBefore, P15.jsDialogs.slice(dialogsBefore).join("|"));
+  });
+
+  await step("discovery long text: an unbroken 110-character title stays inside the card, breadcrumb and Explore panel", async () => {
+    await desktopAt(390, 844);
+    await dSearch("ZZ B9 R20 Long");
+    check("discovery long: the result card wraps the long title without horizontal overflow at 390px", (await overflowPx()) <= 1);
+    await pReady(`/projects/${R20.prjLong.id}`);
+    check("discovery long: the project page (breadcrumb, title, Explore) has no horizontal overflow at 390px", (await overflowPx()) <= 1);
+    await pReady(`/projects?area=${R20.area.id}`);
+    check("discovery long: the filtered projects list has no horizontal overflow at 390px", (await overflowPx()) <= 1);
+    await desktop();
+  });
+
+  await step("discovery sweep: guest -- search related, empty state, research landing, detail pages, filtered list (EN+JA, 390..1920)", async () => {
+    const pages = [
+      ["search related", "/search?q=ZZ+B9+R20"],
+      ["search empty-type", "/search?q=ZZ+B9+R20+Paper&type=project"],
+      ["search long", `/search?q=${encodeURIComponent("ZZ B9 R20 Long")}`],
+      ["research landing", "/research"],
+      ["area", `/research/${R20.area.id}`],
+      ["project", `/projects/${R20.prj.id}`],
+      ["group", `/groups/${R20.grp.id}`],
+      ["researcher", `/team/${R20.tm.id}`],
+      ["publication", `/publications/${R20.pub.id}`],
+      ["projects filtered", `/projects?area=${R20.area.id}`],
+      ["projects hidden filter", `/projects?area=${R20.areaHid.id}`],
+    ];
+    await p15Loop("disc-guest", null, pages, async (loc, w) => {
+      if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`discovery ${loc} ${w}px guest`, [["search", "/search?q=ZZ+B9+R20"], ["project", `/projects/${R20.prj.id}`], ["publication", `/publications/${R20.pub.id}`]]);
+    });
+    check("discovery sweep guest: no script from hostile text ever ran", (await ev(`typeof window.__r20Xss`)) === "undefined");
+  });
+
+  await step("discovery sweep: member -- lab-only neighbours (EN+JA, 390..1920)", async () => {
+    await p15Loop("disc-member", () => login(D.plain.email, PW), [["search related", "/search?q=ZZ+B9+R20"], ["projects filtered", `/projects?area=${R20.areaHid.id}`], ["publication", `/publications/${R20.pub.id}`]], async () => {});
+  });
+
+  await step("discovery screenshots: search with related links, Explore panel and filtered projects (for eyeballing)", async () => {
+    await setLocale(null);
+    for (const [w, tag] of [[1280, "d"], [390, "m"]]) {
+      await p15Vp(w);
+      for (const [lbl, p] of [["search", "/search?q=ZZ+B9+R20"], ["area", `/research/${R20.area.id}`], ["filtered", `/projects?area=${R20.area.id}`], ["landing", "/research"]]) {
+        await p15Ready(p);
+        await shot(`r20-${lbl}-${tag}`);
+      }
+    }
+    await setLocale("ja");
+    await p15Vp(390);
+    await p15Ready("/search?q=ZZ+B9+R20+Project");
+    await shot("r20-search-ja-m");
+    check("discovery screenshots: taken", fs.existsSync(path.join(SHOTS, "r20-search-d.png")));
+    await setLocale(null);
+  });
+  await step("discovery: restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
+
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -4341,7 +4626,7 @@ async function connect() {
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || ONLY_DISCOVERY || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

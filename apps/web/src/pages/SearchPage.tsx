@@ -129,6 +129,18 @@ export function SearchPage() {
                           <li>{t("search.searchAllCategoriesHint")}</li>
                         )}
                       </ul>
+                      {type !== "all" && data.counts.all > 0 && (
+                        <>
+                          <p className="text-sm text-muted">{t("search.otherMatches")}</p>
+                          <div className="chips search-other">
+                            {SEARCH_FILTERS.filter((f) => f !== "all" && f !== type && (data.counts[f] ?? 0) > 0).map((f) => (
+                              <Link key={f} to={searchUrl(q, f)} className="chip">
+                                {t("search.otherMatchItem", { type: t(SEARCH_FILTER_LABEL_KEY[f]), count: data.counts[f] ?? 0 })}
+                              </Link>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </EmptyState>
                   )}
 

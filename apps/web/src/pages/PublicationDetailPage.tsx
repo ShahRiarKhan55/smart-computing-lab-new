@@ -14,6 +14,7 @@ import { LoadingState } from "../components/LoadingState";
 import { NewsCard } from "../components/NewsCard";
 import { PersonLink } from "../components/PersonLink";
 import { SectionHeader } from "../components/SectionHeader";
+import { RelatedResearch } from "../components/RelatedResearch";
 import { PublicationFormModal } from "../components/PublicationFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
@@ -187,6 +188,15 @@ export function PublicationDetailPage() {
                 </div>
               )}
             </section>
+            <RelatedResearch
+              idPrefix="pub"
+              links={[
+                ...pub.researchers.slice(0, 3).map((r) => ({ to: `/publications?researcher=${r.id}`, label: t("explore.moreByResearcher", { name: r.name }) })),
+                ...pub.projects.slice(0, 3).map((p) => ({ to: `/publications?project=${p.id}`, label: t("explore.moreFromProject", { name: p.title }) })),
+                ...pub.areas.slice(0, 3).map((a) => ({ to: `/publications?area=${a.id}`, label: t("explore.moreInArea", { name: a.title }) })),
+                ...pub.groups.slice(0, 2).map((g) => ({ to: `/publications?group=${g.id}`, label: t("explore.moreFromGroup", { name: g.name }) })),
+              ]}
+            />
           </aside>
 
           <div className="detail-layout__b">

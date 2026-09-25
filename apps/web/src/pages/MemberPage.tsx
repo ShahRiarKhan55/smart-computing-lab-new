@@ -12,6 +12,7 @@ import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import { SectionHeader } from "../components/SectionHeader";
+import { RelatedResearch } from "../components/RelatedResearch";
 import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
@@ -330,6 +331,13 @@ export function MemberPage() {
                 </div>
               </section>
             )}
+            <RelatedResearch
+              idPrefix="member"
+              links={[
+                ...(profile.publications.length > 0 ? [{ to: `/publications?researcher=${profile.id}`, label: t("explore.researcherPubs") }] : []),
+                ...(profile.projects.length > 0 ? [{ to: `/projects?researcher=${profile.id}`, label: t("explore.researcherProjects") }] : []),
+              ]}
+            />
           </aside>
         </div>
       </div>

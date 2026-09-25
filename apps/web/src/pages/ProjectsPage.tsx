@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { PROJECT_STATUSES, type GroupSummary, type ProjectDetail, type ProjectStatus, type ProjectSummary } from "@scl/shared";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ID_PATTERN, PROJECT_STATUSES, type GroupSummary, type ProjectDetail, type ProjectStatus, type ProjectSummary } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch } from "../lib/api";
@@ -25,10 +25,52 @@ export function ProjectsPage() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [createOpen, setCreateOpen] = useState(false);
 
-  const present = useMemo(() => new Set((projects ?? []).map((p) => p.status)), [projects]);
+  // Phase 20: ?area= / ?group= / ?researcher= narrow the list to a real relationship. They are applied to
+  // the list the API already filtered for this viewer, so an id the viewer cannot see (or that does not
+  // exist) simply matches nothing, and its name is never looked up anywhere else.
+  const [params] = useSearchParams();
+  const relation = useMemo(() => {
+    const read = (key: string) => {
+      const v = params.get(key)?.trim() ?? "";
+      return ID_PATTERN.test(v) ? v : "";
+    };
+    return { area: read("area"), group: read("group"), researcher: read("researcher") };
+  }, [params]);
+  const scoped = useMemo(
+    () =>
+      (projects ?? []).filter(
+        (p) =>
+          (!relation.area || p.areas.some((a) => a.id === relation.area)) &&
+          (!relation.group || p.group?.id === relation.group) &&
+          (!relation.researcher || p.members.some((m) => m.teamMemberId === relation.researcher)),
+      ),
+    [projects, relation],
+  );
+  const relationNote = useMemo(() => {
+    const all = projects ?? [];
+    const notes: string[] = [];
+    if (params.has("area") || params.has("group") || params.has("researcher")) {
+      if (relation.area) {
+        const a = all.flatMap((p) => p.areas).find((x) => x.id === relation.area);
+        notes.push(a ? t("projects.filter.area", { name: a.title }) : t("projects.filter.unavailable"));
+      }
+      if (relation.group) {
+        const g = all.find((p) => p.group?.id === relation.group)?.group;
+        notes.push(g ? t("projects.filter.group", { name: g.name }) : t("projects.filter.unavailable"));
+      }
+      if (relation.researcher) {
+        const m = all.flatMap((p) => p.members).find((x) => x.teamMemberId === relation.researcher);
+        notes.push(m ? t("projects.filter.researcher", { name: m.name }) : t("projects.filter.unavailable"));
+      }
+      if (notes.length === 0) notes.push(t("projects.filter.unavailable")); // a malformed value: dropped, not echoed
+    }
+    return notes;
+  }, [projects, params, relation, t]);
+
+  const present = useMemo(() => new Set(scoped.map((p) => p.status)), [scoped]);
   // If the chosen status has no projects any more, show everything instead of an empty page.
   const active: StatusFilter = filter !== "all" && !present.has(filter) ? "all" : filter;
-  const shown = useMemo(() => (projects ?? []).filter((p) => active === "all" || p.status === active), [projects, active]);
+  const shown = useMemo(() => scoped.filter((p) => active === "all" || p.status === active), [scoped, active]);
 
   return (
     <>
@@ -48,7 +90,20 @@ export function ProjectsPage() {
 
         {projects && (
           <>
-            {projects.length > 0 && (
+            {relationNote.length > 0 && (
+              <div className="filter-note" role="group" aria-label={t("projects.filter.aria")}>
+                {relationNote.map((n) => (
+                  <span key={n} className="tag">
+                    {n}
+                  </span>
+                ))}
+                <Link to="/projects" className="btn btn--secondary btn--sm">
+                  {t("projects.filter.clear")}
+                </Link>
+              </div>
+            )}
+
+            {scoped.length > 0 && (
               <div className="filters">
                 <div className="chips" role="group" aria-label={t("projects.filterByStatusAria")}>
                   <button className={`chip${active === "all" ? " active" : ""}`} aria-pressed={active === "all"} onClick={() => setFilter("all")} type="button">
@@ -61,22 +116,25 @@ export function ProjectsPage() {
                   ))}
                 </div>
                 <p className="filters__count" role="status">
-                  {t(shown.length === 1 ? "projects.showingCountOne" : "projects.showingCountOther", { shown: shown.length, total: projects.length })}
+                  {t(shown.length === 1 ? "projects.showingCountOne" : "projects.showingCountOther", { shown: shown.length, total: scoped.length })}
                 </p>
               </div>
             )}
 
-            {projects.length > 0 && <h2 className="sr-only">{t("projects.headingSr")}</h2>}
+            {scoped.length > 0 && <h2 className="sr-only">{t("projects.headingSr")}</h2>}
+            {projects.length > 0 && scoped.length === 0 && <EmptyState title={t("projects.filter.noMatch")} compact />}
             {projects.length === 0 ? (
               <EmptyState title={policy.user ? t("projects.empty") : t("projects.emptyGuest")}>
                 {policy.user ? t("projects.emptyHintUser") : t("projects.emptyHintGuest")}
               </EmptyState>
             ) : (
+              scoped.length > 0 && (
               <div className="grid">
                 {shown.map((p) => (
                   <ProjectCard key={p.id} project={p} />
                 ))}
               </div>
+              )
             )}
           </>
         )}

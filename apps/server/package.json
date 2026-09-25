@@ -25,7 +25,8 @@
     "test:publication": "node scripts/publication-regression.mjs",
     "test:i18n": "node scripts/i18n-regression.mjs",
     "test:locale-independence": "node scripts/locale-independence-regression.mjs",
-    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts"
+    "test:discovery": "node scripts/discovery-regression.mjs",
+    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts && tsx scripts/unit-discovery.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

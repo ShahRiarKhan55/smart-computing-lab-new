@@ -17,6 +17,7 @@ import { asProjectStatus, toIsoDate } from "./serializers.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
 import { visibleForumStatus } from "./forumSerializers.js";
 import { loadTranslations, localize } from "./translations.js";
+import { attachRelated } from "./searchRelated.js";
 
 /**
  * Global search (Phase 10). Plain SQLite `LIKE` through Prisma's `contains` / `startsWith`:
@@ -31,7 +32,9 @@ import { loadTranslations, localize } from "./translations.js";
  * every viewer: a publication's linked authors, a researcher's history entries). A group is never
  * matched because of its projects, nor a project because of its group, and no result carries any
  * relationship (group, project, member, count), so a match on a hidden record can never surface
- * a visible record that merely points at it.
+ * a visible record that merely points at it. (Phase 20 adds the display-only `related` links of
+ * searchRelated.ts to the RETURNED rows; they are read through the same visibleTo() and never take
+ * part in matching, counting or ordering, so they cannot change which records a query finds.)
  *
  * ORDER (documented in docs/architecture/phase10-global-search.md): results are sorted by
  *   1. tier      0 = title/name STARTS WITH the whole query, 1 = title/name contains every word,
@@ -473,7 +476,7 @@ export async function runSearch(viewer: Viewer, query: SearchQuery, locale: Loca
     const skip = Math.max(0, offset - start);
     fetches.push(b.plan.rows(b.tier, skip, Math.min(b.size, end - start) - skip));
   }
-  const results = (await Promise.all(fetches)).flat();
+  const results = await attachRelated((await Promise.all(fetches)).flat(), viewer, locale);
 
   const total = selected.reduce((sum, p) => sum + p.total, 0);
   const counts = { all: totals.reduce((a, b) => a + b, 0) } as SearchResponse["counts"];

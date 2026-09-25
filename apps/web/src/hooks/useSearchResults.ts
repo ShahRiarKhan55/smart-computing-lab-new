@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { SearchFilter, SearchResponse } from "@scl/shared";
 import { apiFetch, ApiError } from "../lib/api";
+import { useT } from "../i18n/LocaleContext";
 
 /** One answer, tagged with the exact request it answers (`sig`) and the query text (`q`). */
 interface Answer {
@@ -11,9 +12,9 @@ interface Answer {
 }
 
 /** Validation errors (400) are written for people; anything else gets a generic message. */
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown, unavailable: string): string {
   if (err instanceof ApiError && err.status >= 400 && err.status < 500) return err.message;
-  return "Search is unavailable right now. Please try again in a moment.";
+  return unavailable;
 }
 
 /**
@@ -25,6 +26,7 @@ function friendlyError(err: unknown): string {
  * type, its previous results stay (with `loading` set) so the page does not collapse and jump.
  */
 export function useSearchResults(q: string, type: SearchFilter, page: number) {
+  const unavailable = useT()("search.unavailable");
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
@@ -39,10 +41,10 @@ export function useSearchResults(q: string, type: SearchFilter, page: number) {
     apiFetch<SearchResponse>(`/search?${params.toString()}`, { signal: controller.signal })
       .then((data) => setAnswer({ sig, q, data, error: null }))
       .catch((err) => {
-        if (!controller.signal.aborted) setAnswer({ sig, q, data: null, error: friendlyError(err) });
+        if (!controller.signal.aborted) setAnswer({ sig, q, data: null, error: friendlyError(err, unavailable) });
       });
     return () => controller.abort();
-  }, [q, type, page, version, sig]);
+  }, [q, type, page, version, sig, unavailable]);
 
   const current = answer !== null && answer.sig === sig;
   return {

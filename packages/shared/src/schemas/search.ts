@@ -118,6 +118,22 @@ export const searchQuerySchema = z
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 
 // ---- response shapes --------------------------------------------------------------
+/** How many related links one result carries (Phase 20). */
+export const SEARCH_RELATED_MAX = 3;
+
+/**
+ * One link from a result to a record it is really related to (Phase 20). Only ever a record the
+ * viewer may see: it is selected through the same `visibleTo()` fragment as the result itself, so
+ * a hidden area/project/group can neither appear here nor be inferred from what is missing.
+ */
+export const searchRelatedSchema = z.object({
+  type: z.enum(["research-area", "project", "group"]),
+  id: z.string(),
+  title: z.string(),
+  href: z.string(),
+});
+export type SearchRelated = z.infer<typeof searchRelatedSchema>;
+
 export const searchResultSchema = z.object({
   type: z.enum(SEARCH_TYPES),
   id: z.string(),
@@ -130,6 +146,8 @@ export const searchResultSchema = z.object({
   href: z.string(),
   /** Only present for lab managers and admins, exactly like the normal endpoints. */
   visibility: visibilitySchema.optional(),
+  /** Up to SEARCH_RELATED_MAX visible related records (area/project/group); omitted when there are none. */
+  related: z.array(searchRelatedSchema).optional(),
 });
 export type SearchResult = z.infer<typeof searchResultSchema>;
 

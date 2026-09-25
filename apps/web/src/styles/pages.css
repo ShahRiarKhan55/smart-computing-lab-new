@@ -1688,3 +1688,109 @@ a.tag:hover {
   background: var(--green-100);
   border-color: var(--green-400);
 }
+
+/* ---- Phase 20: research discovery -------------------------------------------------------- */
+.search-result__related {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-2);
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  list-style: none;
+}
+
+.search-result__related li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.search-result__related a {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--green-600);
+  text-decoration: underline;
+  text-decoration-color: rgba(59, 109, 17, 0.35);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.search-other {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.explore__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+}
+
+.explore__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+  color: var(--green-600);
+  overflow-wrap: anywhere;
+}
+
+.explore__link svg {
+  flex: none;
+}
+
+.explore__link:hover {
+  color: var(--green-800);
+}
+
+.research-explore {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+  list-style: none;
+}
+
+.research-explore > li {
+  display: flex;
+}
+
+.research-explore > li > .card {
+  width: 100%;
+}
+
+.research-explore__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.research-explore__desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.filter-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.search-result__related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-2);
+  min-width: 0;
+  list-style: none;
+}

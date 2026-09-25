@@ -46,6 +46,18 @@ export function SearchResultCard({ result, terms }: { result: SearchResult; term
           <Highlight text={result.description} terms={terms} />
         </p>
       )}
+      {result.related && result.related.length > 0 && (
+        <div className="search-result__related">
+          <span>{t("search.relatedLabel")}</span>
+          <ul className="search-result__related-list" aria-label={t("search.relatedAria")}>
+            {result.related.map((r) => (
+              <li key={`${r.type}-${r.id}`}>
+                <Link to={r.href}>{r.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <span className="search-result__cta" aria-hidden="true">
         {t(SEARCH_CTA_LABEL_KEY[result.type])} →
       </span>
