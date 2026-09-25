@@ -27,7 +27,9 @@ export function ResearchCard({ area, canEdit, canDelete, onEdit, onDelete, proje
           {area.icon}
         </span>
       </div>
-      <h3 className="card__title">{area.title}</h3>
+      <h3 className="card__title">
+        <Link to={`/research/${area.id}`}>{area.title}</Link>
+      </h3>
       <p className="card__text">{area.description}</p>
       <div className="cluster">
         <span className="tag">{area.tag}</span>

@@ -211,7 +211,7 @@ const sources = [
       title: r.title,
       description: describe([r.description], terms),
       meta: r.tag,
-      href: "/research",
+      href: `/research/${r.id}`,
       ...visibilityField(viewer, r.visibility),
     }),
   }),

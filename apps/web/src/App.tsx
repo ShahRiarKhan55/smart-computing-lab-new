@@ -6,6 +6,7 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { NotificationsProvider } from "./notifications/NotificationsContext";
 import { HomePage } from "./pages/HomePage";
 import { ResearchPage } from "./pages/ResearchPage";
+import { ResearchAreaDetailPage } from "./pages/ResearchAreaDetailPage";
 import { TeamPage } from "./pages/TeamPage";
 import { MemberPage } from "./pages/MemberPage";
 import { PublicationsPage } from "./pages/PublicationsPage";
@@ -52,6 +53,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/research" element={<ResearchPage />} />
+        <Route path="/research/:id" element={<ResearchAreaDetailPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/groups" element={<GroupsPage />} />

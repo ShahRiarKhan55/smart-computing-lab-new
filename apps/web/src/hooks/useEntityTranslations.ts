@@ -11,10 +11,12 @@ import { apiFetch } from "../lib/api";
  */
 export function useEntityTranslations(entityType: TranslatableEntityType, entityId: string | undefined, open: boolean) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const [base, setBase] = useState<Record<string, string | null> | null>(null);
 
   useEffect(() => {
     if (!open || !entityId) {
       setValues({});
+      setBase(null);
       return;
     }
     let cancelled = false;
@@ -24,6 +26,7 @@ export function useEntityTranslations(entityType: TranslatableEntityType, entity
         const filled: Record<string, string> = {};
         for (const [key, value] of Object.entries(res.ja)) filled[key] = value ?? "";
         setValues(filled);
+        setBase(res.base ?? null);
       })
       .catch(() => {
         // No override yet, or the fetch failed: an empty section is the safe default (nothing to
@@ -39,5 +42,6 @@ export function useEntityTranslations(entityType: TranslatableEntityType, entity
     setValues((v) => ({ ...v, [key]: value }));
   }
 
-  return { values, setField };
+  /** `base`: the English text per field once loaded (null until then / on failure). */
+  return { values, setField, base };
 }

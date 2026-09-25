@@ -13,6 +13,7 @@ import { Icon } from "../components/Icon";
 import { PersonLink } from "../components/PersonLink";
 import { ProjectCard } from "../components/ProjectCard";
 import { SectionHeader } from "../components/SectionHeader";
+import { RelatedOutputs } from "../components/RelatedOutputs";
 import { GroupFormModal } from "../components/GroupFormModal";
 import { MembersModal } from "../components/MembersModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
@@ -131,6 +132,23 @@ export function GroupDetailPage() {
             </div>
           )}
         </section>
+
+        <section className="detail-section" aria-labelledby="group-areas">
+          <SectionHeader compact id="group-areas" title={t("rs.group.areasHeading", { count: group.areas.length })} />
+          {group.areas.length === 0 ? (
+            <EmptyState title={t("rs.group.noAreas")} compact />
+          ) : (
+            <div className="chips">
+              {group.areas.map((a) => (
+                <Link key={a.id} to={`/research/${a.id}`} className="tag">
+                  <span aria-hidden="true">{a.icon}</span> {a.title}
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <RelatedOutputs idPrefix="group" publications={group.publications} news={group.news} events={group.events} note={t("rs.group.outputsNote")} />
       </div>
 
       <GroupFormModal

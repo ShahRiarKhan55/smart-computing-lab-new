@@ -89,6 +89,14 @@ export const canEditGroup = (a: MaybeActor, isLead: boolean): boolean => isManag
 export const canManageGroupSettings = isManager;
 export const canDeleteGroup = canDeleteContent;
 
+// ---- research structure (Phase 18) ------------------------------------------
+// Research Area -> Project -> Group -> Researcher is built from tables that already existed. The only
+// relationship with no write path before Phase 18 was Researcher <-> Area (ResearcherArea). Its two sides:
+//  * a researcher's own areas ride on their profile, so they follow `canEditProfile` (owner or manager);
+//  * the area's side (replace the set of researchers on an area) is a management action: managers only.
+// Project/group membership and leads keep their Phase 9 rules (`canEditProject` / `canEditGroup`).
+export const canLinkResearchersToArea = isManager;
+
 // ---- forum (Phase 11) ------------------------------------------------------
 // Visibility lives on the CATEGORY only (posts/comments inherit it); moderation
 // (pin/lock/hide/move) is `canModerate` above, the same function the matrix already

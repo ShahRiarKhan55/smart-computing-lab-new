@@ -29,12 +29,13 @@ import {
   sortMembersLeadFirst,
   toAreaRef,
   toIsoDate,
-  toNewsItem,
   toPublication,
 } from "../lib/serializers.js";
 import { slugify, uniqueSlug } from "../lib/slug.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
+import { localizedNews, loadRefTranslations, pick, type RefTranslations } from "../lib/researchGraph.js";
+import { eventInclude, eventOrderBy, serializeEvents } from "../lib/eventSerializers.js";
 import type { Locale } from "@scl/shared";
 
 const router = Router();
@@ -73,7 +74,7 @@ interface SummaryRow {
   members: { role: string; teamMember: { id: string; name: string; initials: string; userId: string | null } }[];
 }
 
-function toSummary(row: SummaryRow, viewer: Viewer): ProjectSummary {
+function toSummary(row: SummaryRow, viewer: Viewer, refs?: RefTranslations): ProjectSummary {
   return {
     id: row.id,
     slug: row.slug,
@@ -84,11 +85,14 @@ function toSummary(row: SummaryRow, viewer: Viewer): ProjectSummary {
     endDate: toIsoDate(row.endDate),
     sortOrder: row.sortOrder,
     ...visibilityField(viewer, row.visibility),
-    group: row.group && canView(viewer, row.group.visibility) ? { id: row.group.id, slug: row.group.slug, name: row.group.name } : null,
+    group:
+      row.group && canView(viewer, row.group.visibility)
+        ? { id: row.group.id, slug: row.group.slug, name: refs ? pick(refs.group, row.group.id, "name", row.group.name) : row.group.name }
+        : null,
     areas: row.areaLinks
       .map((l) => l.researchArea)
       .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))
-      .map(toAreaRef),
+      .map((a) => toAreaRef(refs ? { ...a, title: pick(refs.area, a.id, "title", a.title) } : a)),
     members: sortMembersLeadFirst(
       row.members.map((m) => ({ teamMemberId: m.teamMember.id, name: m.teamMember.name, initials: m.teamMember.initials, role: asProjectRole(m.role) })),
     ),
@@ -102,23 +106,30 @@ async function loadDetail(id: string, viewer: Viewer, locale: Locale = "en"): Pr
     include: {
       ...summaryInclude(viewer),
       publications: { where: { publication: visible }, include: { publication: true } },
-      news: { where: visible, orderBy: { sortDate: "desc" } },
+      news: { where: visible, orderBy: [{ sortDate: "desc" }, { id: "asc" }] },
     },
   });
   if (!row) return null;
 
-  const translations = await loadTranslations(prisma, "RESEARCH_PROJECT", [row.id], locale);
+  const [translations, refs, events, news] = await Promise.all([
+    loadTranslations(prisma, "RESEARCH_PROJECT", [row.id], locale),
+    loadRefTranslations(locale, { areas: row.areaLinks.map((l) => l.researchArea.id), groups: row.group ? [row.group.id] : [] }),
+    // Linked events are read here, in the same visibility fragment as everything else on this page.
+    prisma.event.findMany({ where: { projectId: row.id, ...visible }, include: eventInclude, orderBy: eventOrderBy("all") }),
+    localizedNews(row.news, viewer, locale),
+  ]);
   const localized = localize(row, "RESEARCH_PROJECT", translations);
 
   const isLead = viewer !== null && row.members.some((m) => m.role === "LEAD" && m.teamMember.userId === viewer.id);
   return {
-    ...toSummary(localized, viewer),
+    ...toSummary(localized, viewer, refs),
     description: localized.description,
     publications: row.publications
       .map((l) => l.publication)
       .sort((a, b) => b.year - a.year || b.createdAt.getTime() - a.createdAt.getTime())
       .map((p) => toPublication(p, viewer)),
-    news: row.news.map((n) => toNewsItem(n, viewer)),
+    news,
+    events: await serializeEvents(events, viewer, locale),
     canEdit: canEditProject(viewer, isLead),
   };
 }
@@ -135,8 +146,11 @@ router.get(
       orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
       include: summaryInclude(viewer),
     });
-    const translations = await loadTranslations(prisma, "RESEARCH_PROJECT", rows.map((r) => r.id), locale);
-    res.json(rows.map((r) => toSummary(localize(r, "RESEARCH_PROJECT", translations), viewer)));
+    const [translations, refs] = await Promise.all([
+      loadTranslations(prisma, "RESEARCH_PROJECT", rows.map((r) => r.id), locale),
+      loadRefTranslations(locale, { areas: rows.flatMap((r) => r.areaLinks.map((l) => l.researchArea.id)), groups: rows.flatMap((r) => (r.group ? [r.group.id] : [])) }),
+    ]);
+    res.json(rows.map((r) => toSummary(localize(r, "RESEARCH_PROJECT", translations), viewer, refs)));
   }),
 );
 
@@ -323,6 +337,9 @@ router.put(
       const currentRole = new Map(current.map((c) => [c.teamMemberId, c.role]));
       const { toAdd, toRemove } = diffLinks([...currentRole.keys()], ids);
       const roleChanged = members.filter((m) => currentRole.has(m.teamMemberId) && currentRole.get(m.teamMemberId) !== m.role);
+      // Who holds / held the LEAD role before and after: recorded as ids only, so a lead change is one query away.
+      const leadsBefore = current.filter((c) => c.role === "LEAD").map((c) => c.teamMemberId).sort();
+      const leadsAfter = members.filter((m) => m.role === "LEAD").map((m) => m.teamMemberId).sort();
 
       if (toRemove.length > 0) await tx.projectMember.deleteMany({ where: { projectId: project.id, teamMemberId: { in: toRemove } } });
       for (const m of members.filter((x) => toAdd.includes(x.teamMemberId))) {
@@ -341,7 +358,14 @@ router.put(
           action: "PROJECT_MEMBERS_CHANGED",
           entityType: "RESEARCH_PROJECT",
           entityId: project.id,
-          details: { title: project.title, added: idList(toAdd), removed: idList(toRemove), roleChanged: roleChanged.length },
+          details: {
+            title: project.title,
+            added: idList(toAdd),
+            removed: idList(toRemove),
+            roleChanged: roleChanged.length,
+            leadChanged: leadsBefore.join(",") !== leadsAfter.join(","),
+            leads: idList(leadsAfter),
+          },
         });
       }
     });

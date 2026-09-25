@@ -21,5 +21,10 @@ export function translationsField(fieldMax: Record<string, number>) {
 
 /** Response shape of `GET /api/translations/:entityType/:entityId`: the current Japanese value
  * for each allow-listed field, `null` where no override exists. */
-export const translationsResponseSchema = z.object({ ja: z.record(z.string(), z.string().nullable()) });
+export const translationsResponseSchema = z.object({
+  ja: z.record(z.string(), z.string().nullable()),
+  /** The entity's own English text per field (Phase 18): what an edit form must show in its English inputs
+   *  even when the page was fetched in Japanese (whose `title` is already the override). */
+  base: z.record(z.string(), z.string().nullable()).optional(),
+});
 export type TranslationsResponse = z.infer<typeof translationsResponseSchema>;

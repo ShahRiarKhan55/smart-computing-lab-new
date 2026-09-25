@@ -26,6 +26,7 @@ import { StatusBadge } from "../components/Badge";
 import { SectionHeader } from "../components/SectionHeader";
 import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
+import { EventCard } from "../components/EventCard";
 import { ProjectFormModal } from "../components/ProjectFormModal";
 import { MembersModal } from "../components/MembersModal";
 import { LinkItemsModal, type LinkableItem } from "../components/LinkItemsModal";
@@ -184,15 +185,33 @@ export function ProjectDetailPage() {
           </div>
 
           <aside className="detail-layout__aside" aria-label={t("projects.teamHeading")}>
+            <section className="panel" aria-labelledby="project-lead">
+              <h2 className="panel__title" id="project-lead">
+                {t("rs.project.leadHeading")}
+              </h2>
+              {project.members.filter((m) => m.role === "LEAD").length === 0 ? (
+                <p className="text-sm text-muted">{t("rs.project.noLead")}</p>
+              ) : (
+                <div className="panel__list">
+                  {project.members
+                    .filter((m) => m.role === "LEAD")
+                    .map((m) => (
+                      <PersonLink key={m.teamMemberId} id={m.teamMemberId} name={m.name} initials={m.initials} detail={t("projects.role.LEAD")} />
+                    ))}
+                </div>
+              )}
+            </section>
             <section className="panel" aria-labelledby="project-team">
               <h2 className="panel__title" id="project-team">
                 {t("projects.teamHeading")}
               </h2>
               {project.members.length === 0 ? (
                 <p className="text-sm text-muted">{t("projects.noMembersYet")}</p>
+              ) : project.members.every((m) => m.role === "LEAD") ? (
+                <p className="text-sm text-muted">{t("rs.project.noOtherMembers")}</p>
               ) : (
                 <div className="panel__list">
-                  {project.members.map((m) => (
+                  {project.members.filter((m) => m.role !== "LEAD").map((m) => (
                     <PersonLink key={m.teamMemberId} id={m.teamMemberId} name={m.name} initials={m.initials} detail={t(ROLE_LABEL_KEY[m.role] ?? "projects.role.MEMBER")} />
                   ))}
                 </div>
@@ -207,9 +226,9 @@ export function ProjectDetailPage() {
               ) : (
                 <div className="chips">
                   {project.areas.map((a) => (
-                    <span key={a.id} className="tag">
+                    <Link key={a.id} to={`/research/${a.id}`} className="tag">
                       <span aria-hidden="true">{a.icon}</span> {a.title}
-                    </span>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -238,6 +257,19 @@ export function ProjectDetailPage() {
                 <div className="grid">
                   {project.news.map((n) => (
                     <NewsCard key={n.id} item={n} />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="detail-section" aria-labelledby="project-events">
+              <SectionHeader compact id="project-events" title={t("rs.project.eventsHeading", { count: project.events.length })} />
+              {project.events.length === 0 ? (
+                <EmptyState title={t("rs.project.noEvents")} compact />
+              ) : (
+                <div className="grid">
+                  {project.events.map((e) => (
+                    <EventCard key={e.id} event={e} />
                   ))}
                 </div>
               )}

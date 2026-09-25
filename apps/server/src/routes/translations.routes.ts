@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { HttpError } from "../lib/validate.js";
-import { getEntityTranslations } from "../lib/translations.js";
+import { getEntityBase, getEntityTranslations } from "../lib/translations.js";
 
 const router = Router();
 
@@ -27,7 +27,7 @@ router.get(
     const { entityType, entityId } = req.params;
     if (!isTranslatableEntityType(entityType)) throw new HttpError(404, "Not found");
     if (!ID_PATTERN.test(entityId)) throw new HttpError(400, "Invalid id.");
-    res.json({ ja: await getEntityTranslations(prisma, entityType, entityId) });
+    res.json({ ja: await getEntityTranslations(prisma, entityType, entityId), base: await getEntityBase(prisma, entityType, entityId) });
   }),
 );
 

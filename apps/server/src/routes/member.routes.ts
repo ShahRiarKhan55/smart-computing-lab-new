@@ -5,6 +5,7 @@ import {
   updateHistoryEntrySchema,
   setPublicationLinksSchema,
   setNewsLinksSchema,
+  setMemberAreasSchema,
   type HistoryEntry,
   type MemberProfile,
 } from "@scl/shared";
@@ -14,8 +15,11 @@ import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { optionalAuth, requireOwnerOrManager } from "../middleware/auth.js";
 import { assertValidId, diffLinks } from "../lib/authorLinks.js";
 import { visibleTo } from "../lib/visibility.js";
-import { asGroupRole, asProjectRole, asProjectStatus, isOwnProfile, toNewsItem, toPublication } from "../lib/serializers.js";
+import { asGroupRole, asProjectRole, asProjectStatus, isOwnProfile, toPublication } from "../lib/serializers.js";
 import { idList, recordAudit } from "../lib/audit.js";
+import { localizedNews, loadRefTranslations, pick, ROLLUP_LIMIT } from "../lib/researchGraph.js";
+import { eventInclude, serializeEvents } from "../lib/eventSerializers.js";
+import { resolveLocale } from "../lib/translations.js";
 
 const router = Router();
 
@@ -52,6 +56,7 @@ router.get(
   optionalAuth,
   asyncHandler(async (req, res) => {
     const viewer = req.user ?? null;
+    const locale = resolveLocale(req);
     const visible = visibleTo(viewer);
     const member = await prisma.teamMember.findUnique({
       where: { id: req.params.id },
@@ -73,10 +78,32 @@ router.get(
           where: { group: visible },
           include: { group: { select: { id: true, slug: true, name: true, sortOrder: true } } },
         },
+        areaLinks: {
+          where: { researchArea: visible },
+          include: { researchArea: { select: { id: true, icon: true, title: true, tag: true, sortOrder: true } } },
+        },
       },
     });
 
     if (!member) throw new HttpError(404, "Team member not found");
+
+    // Events this researcher organised (the creator's public profile is the organizer) plus events of the
+    // projects they belong to. Event visibility is applied to every row, and a project only counts when
+    // the viewer may see it, so a hidden project cannot surface its events through a profile.
+    const eventRows = await prisma.event.findMany({
+      where: {
+        ...visible,
+        OR: [{ createdBy: { teamMember: { id: member.id } } }, { project: { ...visible, members: { some: { teamMemberId: member.id } } } }],
+      },
+      include: eventInclude,
+      orderBy: [{ startsAt: "desc" }, { id: "asc" }],
+      take: ROLLUP_LIMIT,
+    });
+    const refs = await loadRefTranslations(locale, {
+      areas: member.areaLinks.map((l) => l.researchArea.id),
+      projects: member.projectLinks.map((l) => l.project.id),
+      groups: member.groupLinks.map((l) => l.group.id),
+    });
 
     const publications = member.publicationLinks
       .map((link) => link.publication)
@@ -106,20 +133,24 @@ router.get(
       photoUrl: member.photoUrl,
       history: member.historyEntries.map(toHistoryEntry),
       publications: publications.map((p) => toPublication(p, viewer)),
-      news: news.map((n) => toNewsItem(n, viewer)),
+      news: await localizedNews(news, viewer, locale),
       projects: projects.map((l) => ({
         id: l.project.id,
         slug: l.project.slug,
-        title: l.project.title,
+        title: pick(refs.project, l.project.id, "title", l.project.title),
         status: asProjectStatus(l.project.status),
         role: asProjectRole(l.role),
       })),
       groups: groups.map((l) => ({
         id: l.group.id,
         slug: l.group.slug,
-        name: l.group.name,
+        name: pick(refs.group, l.group.id, "name", l.group.name),
         role: asGroupRole(l.role),
       })),
+      areas: [...member.areaLinks]
+        .sort((a, b) => a.researchArea.sortOrder - b.researchArea.sortOrder || a.researchArea.title.localeCompare(b.researchArea.title))
+        .map((l) => ({ id: l.researchArea.id, icon: l.researchArea.icon, title: pick(refs.area, l.researchArea.id, "title", l.researchArea.title), tag: l.researchArea.tag })),
+      events: await serializeEvents(eventRows, viewer, locale),
     };
 
     res.json(profile);
@@ -196,7 +227,7 @@ router.delete(
 // NewsItem rows themselves, only the join tables. The caller is always a
 // logged-in account, so nothing hidden from guests is lost by replacing the set.
 // -----------------------------------------------------------------
-type LinkKind = "publication" | "news";
+type LinkKind = "publication" | "news" | "area";
 
 async function replaceMemberLinks(
   tx: Prisma.TransactionClient,
@@ -208,10 +239,15 @@ async function replaceMemberLinks(
   const current =
     kind === "publication"
       ? (await tx.publicationAuthor.findMany({ where: { teamMemberId: memberId }, select: { publicationId: true } })).map((l) => l.publicationId)
-      : (await tx.newsAuthor.findMany({ where: { teamMemberId: memberId }, select: { newsItemId: true } })).map((l) => l.newsItemId);
+      : kind === "news"
+        ? (await tx.newsAuthor.findMany({ where: { teamMemberId: memberId }, select: { newsItemId: true } })).map((l) => l.newsItemId)
+        : (await tx.researcherArea.findMany({ where: { teamMemberId: memberId }, select: { researchAreaId: true } })).map((l) => l.researchAreaId);
   const { toAdd, toRemove } = diffLinks(current, requestedIds);
 
-  if (kind === "publication") {
+  if (kind === "area") {
+    if (toRemove.length > 0) await tx.researcherArea.deleteMany({ where: { teamMemberId: memberId, researchAreaId: { in: toRemove } } });
+    if (toAdd.length > 0) await tx.researcherArea.createMany({ data: toAdd.map((researchAreaId) => ({ teamMemberId: memberId, researchAreaId })) });
+  } else if (kind === "publication") {
     if (toRemove.length > 0) await tx.publicationAuthor.deleteMany({ where: { teamMemberId: memberId, publicationId: { in: toRemove } } });
     if (toAdd.length > 0) await tx.publicationAuthor.createMany({ data: toAdd.map((publicationId) => ({ publicationId, teamMemberId: memberId })) });
   } else {
@@ -264,6 +300,27 @@ router.put(
         if (found !== uniqueIds.length) throw new HttpError(400, "One or more news ids do not exist.");
       }
       await replaceMemberLinks(tx, req.user!, req.params.id, "news", uniqueIds);
+    });
+
+    res.json({ success: true });
+  }),
+);
+
+// PUT /api/member/:id/areas { areaIds } -> the research areas this researcher works in (owner or manager).
+// Only ResearcherArea rows change; the caller is always signed in, so replacing the set cannot drop an
+// area the caller could not see.
+router.put(
+  "/:id/areas",
+  requireOwnerOrManager("id"),
+  asyncHandler(async (req, res) => {
+    await loadMemberOr404(req.params.id);
+    const { areaIds } = parseOrThrow(setMemberAreasSchema, req.body);
+
+    await prisma.$transaction(async (tx) => {
+      if (areaIds.length > 0 && (await tx.researchArea.count({ where: { id: { in: areaIds } } })) !== areaIds.length) {
+        throw new HttpError(400, "One or more research areas do not exist.");
+      }
+      await replaceMemberLinks(tx, req.user!, req.params.id, "area", areaIds);
     });
 
     res.json({ success: true });

@@ -4,7 +4,8 @@ import { idSchema } from "./common.js";
 import { historyEntrySchema } from "./team.js";
 import { publicationSchema } from "./publication.js";
 import { newsItemSchema } from "./news.js";
-import { groupMemberRoleSchema, groupRefSchema, projectMemberRoleSchema, projectRefSchema } from "./project.js";
+import { areaRefSchema, groupMemberRoleSchema, groupRefSchema, projectMemberRoleSchema, projectRefSchema } from "./project.js";
+import { labEventListSchema } from "./event.js";
 
 export const memberProfileSchema = z.object({
   id: z.string(),
@@ -28,6 +29,10 @@ export const memberProfileSchema = z.object({
   projects: z.array(projectRefSchema.extend({ role: projectMemberRoleSchema })),
   /** Groups this researcher belongs to that the viewer may see. */
   groups: z.array(groupRefSchema.extend({ role: groupMemberRoleSchema })),
+  /** Phase 18: research areas this researcher works in (ResearcherArea) that the viewer may see. */
+  areas: z.array(areaRefSchema),
+  /** Phase 18: events this researcher organised, plus events of their visible projects; visible ones only. */
+  events: labEventListSchema,
 });
 export type MemberProfile = z.infer<typeof memberProfileSchema>;
 

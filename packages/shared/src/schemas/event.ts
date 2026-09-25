@@ -69,6 +69,9 @@ export interface LabEvent {
   visibility?: z.infer<typeof visibilitySchema>;
 }
 
+/** `z.array(eventSchema)` typed as the explicit `LabEvent[]` interface, for embedding in other response schemas without the non-strict web build making every field optional. */
+export const labEventListSchema = z.array(eventSchema) as unknown as z.ZodType<LabEvent[]>;
+
 // ---- date/time helpers (pure; shared by API, UI and tests) -----------------------------------
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_TIME = Date.UTC(1970, 0, 1);

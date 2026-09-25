@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ConversationDetail, HistoryEntry, MemberProfile, NewsItem, Publication, TeamMember } from "@scl/shared";
+import type { ConversationDetail, HistoryEntry, MemberProfile, NewsItem, Publication, ResearchArea, TeamMember } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
@@ -14,6 +14,7 @@ import { Icon } from "../components/Icon";
 import { SectionHeader } from "../components/SectionHeader";
 import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
+import { EventCard } from "../components/EventCard";
 import { TeamMemberFormModal } from "../components/TeamMemberFormModal";
 import { HistoryFormModal } from "../components/HistoryFormModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
@@ -37,6 +38,8 @@ export function MemberPage() {
   const [historyDelete, setHistoryDelete] = useState<HistoryEntry | null>(null);
   const [linkPubsOpen, setLinkPubsOpen] = useState(false);
   const [linkNewsOpen, setLinkNewsOpen] = useState(false);
+  const [linkAreasOpen, setLinkAreasOpen] = useState(false);
+  const [allAreas, setAllAreas] = useState<ResearchArea[] | null>(null);
   const [allPubs, setAllPubs] = useState<Publication[] | null>(null);
   const [allNews, setAllNews] = useState<NewsItem[] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -126,6 +129,20 @@ export function MemberPage() {
     setLinkNewsOpen(true);
   }
 
+  async function openLinkAreas() {
+    setActionError(null);
+    if (!allAreas) {
+      try {
+        setAllAreas(await apiFetch<ResearchArea[]>("/research"));
+      } catch (err) {
+        setActionError(err instanceof ApiError ? err.message : t("common.couldNotLoadList"));
+        return;
+      }
+    }
+    setLinkAreasOpen(true);
+  }
+
+  const areaItems: LinkableItem[] = (allAreas ?? []).map((a) => ({ id: a.id, label: `${a.icon} ${a.title}` }));
   const pubItems: LinkableItem[] = (allPubs ?? []).map((p) => ({ id: p.id, label: `${p.title} (${p.year})` }));
   const newsItems: LinkableItem[] = (allNews ?? []).map((n) => ({ id: n.id, label: `${n.title} (${n.date})` }));
 
@@ -153,6 +170,9 @@ export function MemberPage() {
                 </button>
                 <button className="btn btn--secondary btn--sm" type="button" onClick={openLinkNews}>
                   {t("member.linkNews")}
+                </button>
+                <button className="btn btn--secondary btn--sm" type="button" onClick={openLinkAreas}>
+                  {t("rs.member.linkAreas")}
                 </button>
                 <button className="btn btn--primary btn--sm" type="button" onClick={() => setHistoryModal({ open: true, entry: null })}>
                   + {t("member.addHistoryEntry")}
@@ -235,6 +255,19 @@ export function MemberPage() {
                 </div>
               )}
             </section>
+
+            <section className="detail-section" aria-labelledby="member-events">
+              <SectionHeader compact id="member-events" title={t("rs.member.eventsHeading", { count: profile.events.length })} />
+              {profile.events.length === 0 ? (
+                <EmptyState title={t("rs.member.noEvents")} compact />
+              ) : (
+                <div className="grid">
+                  {profile.events.map((e) => (
+                    <EventCard key={e.id} event={e} />
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
 
           <aside className="detail-layout__aside" aria-label={t("member.researcherSummaryAria")}>
@@ -248,6 +281,23 @@ export function MemberPage() {
                 <button type="button" className="btn btn--secondary btn--sm profile-summary__message" onClick={startConversation} disabled={messaging}>
                   <Icon name="message" size={14} /> {messaging ? t("member.opening") : t("member.message")}
                 </button>
+              )}
+            </section>
+
+            <section className="panel" aria-labelledby="member-areas">
+              <h2 className="panel__title" id="member-areas">
+                {t("rs.member.areasHeading")}
+              </h2>
+              {profile.areas.length === 0 ? (
+                <p className="text-sm text-muted">{t("rs.member.noAreas")}</p>
+              ) : (
+                <div className="chips">
+                  {profile.areas.map((a) => (
+                    <Link key={a.id} to={`/research/${a.id}`} className="tag">
+                      <span aria-hidden="true">{a.icon}</span> {a.title}
+                    </Link>
+                  ))}
+                </div>
               )}
             </section>
 
@@ -337,6 +387,19 @@ export function MemberPage() {
             method: "PUT",
             body: JSON.stringify({ publicationIds: ids }),
           });
+          reload();
+        }}
+      />
+
+      <LinkItemsModal
+        open={linkAreasOpen}
+        title={t("rs.member.selectAreasTitle")}
+        description={t("rs.member.selectAreasDesc")}
+        items={areaItems}
+        selectedIds={profile.areas.map((a) => a.id)}
+        onClose={() => setLinkAreasOpen(false)}
+        onSubmit={async (ids) => {
+          await apiFetch(`/member/${profile.id}/areas`, { method: "PUT", body: JSON.stringify({ areaIds: ids }) });
           reload();
         }}
       />

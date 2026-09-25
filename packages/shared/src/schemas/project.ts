@@ -4,6 +4,7 @@ import { idSchema, optionalText, requiredText, sortOrderField } from "./common.j
 import { publicationSchema } from "./publication.js";
 import { newsItemSchema } from "./news.js";
 import { translationsField } from "./translations.js";
+import { labEventListSchema } from "./event.js";
 
 /** Mirrors the English field lengths below — see i18n/translatableFields.ts (RESEARCH_PROJECT). */
 export const PROJECT_TRANSLATION_MAX = { title: 200, summary: 500, description: 10000 };
@@ -104,6 +105,8 @@ export const projectDetailSchema = projectSummarySchema.extend({
   description: z.string(),
   publications: z.array(publicationSchema),
   news: z.array(newsItemSchema),
+  /** Events linked to this project (Event.projectId) that the viewer may see. */
+  events: labEventListSchema,
   /** UX hint only (whether to show edit controls); the API re-checks on every write. */
   canEdit: z.boolean(),
 });

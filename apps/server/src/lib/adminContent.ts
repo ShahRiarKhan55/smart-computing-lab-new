@@ -55,7 +55,7 @@ const DEFS: Record<AdminContentType, Def> = {
     textFields: ["title", "description", "tag"],
     count: (where) => prisma.researchArea.count({ where }),
     find: (where, orderBy, skip, take) => prisma.researchArea.findMany({ where, orderBy: orderBy as Prisma.ResearchAreaOrderByWithRelationInput[], skip, take }),
-    base: (r) => ({ title: r.title, subtitle: r.tag, visibility: vis(r), status: null, date: null, owner: null, href: "/research" }),
+    base: (r) => ({ title: r.title, subtitle: r.tag, visibility: vis(r), status: null, date: null, owner: null, href: `/research/${r.id}` }),
     relations: (id) =>
       rel([
         ["projects", prisma.projectArea.count({ where: { researchAreaId: id } })],

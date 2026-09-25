@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { visibilitySchema } from "./enums.js";
 import { idSchema, optionalText, requiredText, sortOrderField } from "./common.js";
-import { groupMemberRoleSchema, projectRefSchema, slugSchema } from "./project.js";
+import { areaRefSchema, groupMemberRoleSchema, projectRefSchema, slugSchema } from "./project.js";
 import { translationsField } from "./translations.js";
+import { publicationSchema } from "./publication.js";
+import { newsItemSchema } from "./news.js";
+import { labEventListSchema } from "./event.js";
 
 /** Mirrors the English field lengths below — see i18n/translatableFields.ts (RESEARCH_GROUP). */
 export const GROUP_TRANSLATION_MAX = { name: 120, description: 5000 };
@@ -31,6 +34,11 @@ export type GroupSummary = z.infer<typeof groupSummarySchema>;
 
 export const groupDetailSchema = groupSummarySchema.extend({
   projects: z.array(projectRefSchema.extend({ summary: z.string() })),
+  /** Phase 18: derived from the group's VISIBLE projects (a group has no direct link to these). */
+  areas: z.array(areaRefSchema),
+  publications: z.array(publicationSchema),
+  news: z.array(newsItemSchema),
+  events: labEventListSchema,
   /** UX hint only (whether to show edit controls); the API re-checks on every write. */
   canEdit: z.boolean(),
 });

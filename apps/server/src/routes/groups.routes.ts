@@ -22,6 +22,7 @@ import { asGroupRole, asProjectStatus, sortMembersLeadFirst } from "../lib/seria
 import { slugify, uniqueSlug } from "../lib/slug.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
+import { loadProjectOutputs, loadRefTranslations, pick } from "../lib/researchGraph.js";
 import type { Locale } from "@scl/shared";
 
 const router = Router();
@@ -72,12 +73,35 @@ function toSummary(row: GroupRow, viewer: Viewer): GroupSummary {
 async function loadDetail(id: string, viewer: Viewer, locale: Locale = "en"): Promise<GroupDetail | null> {
   const row = await prisma.researchGroup.findFirst({ where: { id, ...visibleTo(viewer) }, include: groupInclude(viewer) });
   if (!row) return null;
-  const translations = await loadTranslations(prisma, "RESEARCH_GROUP", [row.id], locale);
+  const projectIds = row.projects.map((p) => p.id);
+  const visible = visibleTo(viewer);
+  const [translations, refs, outputs, areaRows] = await Promise.all([
+    loadTranslations(prisma, "RESEARCH_GROUP", [row.id], locale),
+    loadRefTranslations(locale, { projects: projectIds }),
+    loadProjectOutputs(projectIds, viewer, locale),
+    // Areas of the group's VISIBLE projects, and only areas the viewer may see themselves.
+    projectIds.length === 0
+      ? Promise.resolve([])
+      : prisma.researchArea.findMany({
+          where: { ...visible, projectLinks: { some: { projectId: { in: projectIds } } } },
+          orderBy: [{ sortOrder: "asc" }, { title: "asc" }, { id: "asc" }],
+          select: { id: true, icon: true, title: true, tag: true },
+        }),
+  ]);
+  const areaTr = await loadRefTranslations(locale, { areas: areaRows.map((a) => a.id) });
   const localized = localize(row, "RESEARCH_GROUP", translations);
   const isLead = viewer !== null && row.members.some((m) => m.role === "LEAD" && m.teamMember.userId === viewer.id);
   return {
     ...toSummary(localized, viewer),
-    projects: row.projects.map((p) => ({ id: p.id, slug: p.slug, title: p.title, summary: p.summary, status: asProjectStatus(p.status) })),
+    projects: row.projects.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      title: pick(refs.project, p.id, "title", p.title),
+      summary: pick(refs.project, p.id, "summary", p.summary),
+      status: asProjectStatus(p.status),
+    })),
+    areas: areaRows.map((a) => ({ id: a.id, icon: a.icon, title: pick(areaTr.area, a.id, "title", a.title), tag: a.tag })),
+    ...outputs,
     canEdit: canEditGroup(viewer, isLead),
   };
 }
@@ -247,6 +271,8 @@ router.put(
       const currentRole = new Map(current.map((c) => [c.teamMemberId, c.role]));
       const { toAdd, toRemove } = diffLinks([...currentRole.keys()], ids);
       const roleChanged = members.filter((m) => currentRole.has(m.teamMemberId) && currentRole.get(m.teamMemberId) !== m.role);
+      const leadsBefore = current.filter((c) => c.role === "LEAD").map((c) => c.teamMemberId).sort();
+      const leadsAfter = members.filter((m) => m.role === "LEAD").map((m) => m.teamMemberId).sort();
 
       if (toRemove.length > 0) await tx.groupMember.deleteMany({ where: { groupId: group.id, teamMemberId: { in: toRemove } } });
       for (const m of members.filter((x) => toAdd.includes(x.teamMemberId))) {
@@ -265,7 +291,14 @@ router.put(
           action: "GROUP_MEMBERS_CHANGED",
           entityType: "RESEARCH_GROUP",
           entityId: group.id,
-          details: { name: group.name, added: idList(toAdd), removed: idList(toRemove), roleChanged: roleChanged.length },
+          details: {
+            name: group.name,
+            added: idList(toAdd),
+            removed: idList(toRemove),
+            roleChanged: roleChanged.length,
+            leadChanged: leadsBefore.join(",") !== leadsAfter.join(","),
+            leads: idList(leadsAfter),
+          },
         });
       }
     });

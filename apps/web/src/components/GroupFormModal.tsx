@@ -43,7 +43,7 @@ export function GroupFormModal({ open, title, initial, canManageSettings, onClos
   const [values, setValues] = useState<FormState>(() => toFormState(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const { values: ja, setField: setJa } = useEntityTranslations("RESEARCH_GROUP", initial?.id, open);
+  const { values: ja, setField: setJa, base } = useEntityTranslations("RESEARCH_GROUP", initial?.id, open);
 
   useEffect(() => {
     if (open) {
@@ -52,6 +52,13 @@ export function GroupFormModal({ open, title, initial, canManageSettings, onClos
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
+
+  // A page fetched in Japanese already carries the Japanese override in these fields; saving that back would
+  // overwrite the English text. Once the entity's own English text arrives, it replaces the prefill.
+  useEffect(() => {
+    if (!open || !base) return;
+    setValues((v) => ({ ...v, ...(base.name != null ? { name: base.name } : {}), ...(base.description != null ? { description: base.description } : {}) }));
+  }, [open, base]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setValues((v) => ({ ...v, [key]: value }));

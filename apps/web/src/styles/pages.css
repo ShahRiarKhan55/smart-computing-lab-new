@@ -1626,3 +1626,29 @@ a.conversation-header__name:focus-visible {
   opacity: 0.6;
   transition: opacity var(--dur-base);
 }
+
+/* ------------------------------------------------------------
+   Research structure (Phase 18). Area / project / group / researcher detail pages reuse
+   .detail-layout / .detail-section / .panel / .person / .tag; this only makes the pieces that now
+   carry user text (titles, names, tags) safe for long Japanese titles and unbroken strings, and
+   lets a research-area chip be a link.
+   ------------------------------------------------------------ */
+.tag,
+.person {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.person > span {
+  min-width: 0;
+}
+
+a.tag {
+  transition: background var(--dur-base), border-color var(--dur-base);
+}
+
+a.tag:hover {
+  background: var(--green-100);
+  border-color: var(--green-400);
+}

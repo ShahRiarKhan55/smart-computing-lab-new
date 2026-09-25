@@ -7,6 +7,7 @@
 //   ONLY_STEPS=<regex> runs just the steps whose name matches (independent of the ONLY_* flags above).
 //   ONLY_EVENTS=1 runs just the Phase 16 events section (steps named "events ..."; P15_W narrows its widths too).
 //   ONLY_ADMIN=1 runs just the Phase 17 admin/CMS section (steps named "admin ..."; P15_W / P15_USERS=admin-manager,admin-admin narrow the sweeps).
+//   ONLY_RESEARCH=1 runs just the Phase 18 research-structure section (steps named "research ..."; P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
 //          Vite on :5180 (`vite --port 5180 --strictPort`), then
 //          node scripts/browser-regression.cjs http://localhost:5180 http://localhost:4001 ./shots
@@ -44,6 +45,7 @@ const ONLY_FORUM = !!process.env.ONLY_FORUM;
 const ONLY_I18N = !!process.env.ONLY_I18N;
 const ONLY_EVENTS = !!process.env.ONLY_EVENTS;
 const ONLY_ADMIN = !!process.env.ONLY_ADMIN;
+const ONLY_RESEARCH = !!process.env.ONLY_RESEARCH;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -215,7 +217,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin "))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -839,7 +841,7 @@ async function connect() {
     await go("/search?q=ZZ+B9");
     await statusIs("ZZ B9");
     const hrefs = await ev(`[...document.querySelectorAll('.search-result')].map(c => [c.className.match(/search-result--([a-z-]+)/)[1], c.querySelector('a').getAttribute('href')])`);
-    const hrefOk = { project: /^\/projects\/[A-Za-z0-9_-]+$/, group: /^\/groups\/[A-Za-z0-9_-]+$/, researcher: /^\/team\/[A-Za-z0-9_-]+$/, publication: /^\/publications$/, news: /^\/news$/, "research-area": /^\/research$/ };
+    const hrefOk = { project: /^\/projects\/[A-Za-z0-9_-]+$/, group: /^\/groups\/[A-Za-z0-9_-]+$/, researcher: /^\/team\/[A-Za-z0-9_-]+$/, publication: /^\/publications$/, news: /^\/news$/, "research-area": /^\/research\/[A-Za-z0-9_-]+$/ /* Phase 18: the area has its own detail page */ };
     check("every result links to an existing page for its type", hrefs.length > 5 && hrefs.every(([t, h]) => hrefOk[t].test(h)), JSON.stringify(hrefs.slice(0, 3)));
     await go("/search?q=" + encodeURIComponent("<img src=x onerror=window.__xss=1>"));
     await waitText("No results found for");
@@ -1652,7 +1654,9 @@ async function connect() {
     await readyPage(`/projects/${D.p1.id}`, "Long description of the public project.");
     const pd = await ev(`(() => ({ crumbs: [...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim()), last: document.querySelector('.breadcrumbs [aria-current=page]')?.textContent.trim(), team: [...document.querySelectorAll('#project-team ~ .panel__list .person, section[aria-labelledby=project-team] .person')].map((p) => p.innerText.replace(/\\s+/g, ' ').trim()), areas: [...document.querySelectorAll('section[aria-labelledby=project-areas] .tag')].map((t) => t.textContent.trim()), status: document.querySelector('.detail-meta .badge')?.textContent.trim(), group: document.querySelector('.detail-meta a')?.textContent.trim(), order: [...document.querySelectorAll('#main h2')].map((h) => h.textContent.trim().replace(/\\s*\\(\\d+\\)/, '')) }))()`);
     check("P. breadcrumb: Home / Projects / <title>, the last one marked as the current page", eqJson(pd.crumbs.slice(0, 2).map((s) => s.toLowerCase()), ["home", "projects"]) && pd.last === "ZZ B9 Project Public", JSON.stringify(pd.crumbs));
-    check("P. a project page answers 'who works on it': the team panel lists the lead and members with their roles", pd.team.some((t) => t.includes("ZZ B9 Lead") && t.includes("Lead")) && pd.team.some((t) => t.includes("ZZ B9 Member")), JSON.stringify(pd.team));
+    // Phase 18: the lead moved to its own "Project lead" panel and the Team panel lists the OTHER members (the lead is no longer repeated).
+    const leadPanel = await ev(`[...document.querySelectorAll('section[aria-labelledby=project-lead] .person')].map((p) => p.innerText.replace(/\\s+/g, ' ').trim())`);
+    check("P. a project page answers 'who works on it': the Project lead panel names the lead, and the team panel lists the other members with their roles", leadPanel.some((t) => t.includes("ZZ B9 Lead") && t.includes("Lead")) && pd.team.some((t) => t.includes("ZZ B9 Member") && t.toLowerCase().includes("member")) && !pd.team.some((t) => t.includes("ZZ B9 Lead")), JSON.stringify({ leadPanel, team: pd.team }));
     check("P. ...'which area': only the PUBLIC area is listed; the hidden one is not", pd.areas.some((a) => a.includes("ZZ B9 Area Public")) && !pd.areas.some((a) => a.includes("Hidden")), JSON.stringify(pd.areas));
     check("P. ...'what is it': status badge (a word, not just a colour), dates and group are shown", /active/i.test(pd.status) && pd.group === "ZZ B9 Group Public", JSON.stringify(pd));
     check("P. ...'what came out of it': publications and news follow the team and areas, each with a count", eqJson(pd.order.filter((h) => /Publications|News/.test(h)), ["Publications", "News"]));
@@ -2097,7 +2101,7 @@ async function connect() {
       for (const attr of ["aria-labelledby"]) { const v = el.getAttribute(attr); if (v && v.split(/\s+/).some((i) => !document.getElementById(i))) a11y.push(attr + " points at a missing id: " + short(el)); }
     }
     const txt = root.innerText || "";
-    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|adm|events|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
+    const keyLeak = txt.match(/(?<![@\/\w.-])(?:common|nav|adm|rs|events|forum|gallery|messages|notifications|profile|admin|search|contact|home|team|projects|groups|research|publications|news|schedule|login|lang|footer|errors?)\.[a-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/);
     if (keyLeak) a11y.push("raw translation key visible: " + keyLeak[0]);
     if (/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/.test(txt)) a11y.push("placeholder/undefined text visible: " + (txt.match(/\bundefined\b|\[object Object\]|\bNaN\b|\{\{|\{[a-zA-Z]+\}/) || [""])[0]);
     if (!rootSel) {
@@ -3397,6 +3401,473 @@ async function connect() {
   await step("admin: restore fixtures (the moved profile stays unlinked; hidden events stay hidden)", async () => { await setLocale(null); await desktop(); });
 
 
+  // ================================================================= PHASE 18: research & project management
+  // Area -> Project -> Group -> Researcher: the public detail pages, the cross-links between them, what a guest / member /
+  // lead / manager / admin may see and change, visibility propagation, Japanese, search, admin, and the nine-width sweep.
+  // (Steps are named "research ..."; ONLY_RESEARCH=1 runs just them, P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps.)
+  section("phase 18: research structure (areas, projects, groups, researchers)");
+  const R18 = {};
+  const r18Main = () => ev(`document.querySelector('main').innerText`);
+  const has = (t, w) => t.toLowerCase().includes(w.toLowerCase());
+  const r18Html = () => ev(`document.querySelector('main').outerHTML`);
+  const r18Ready = async (p, mustHave) => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 9000); if (mustHave) await waitText(mustHave, 9000); await sleep(200); };
+  // A REAL mouse click on the first element matching `sel` (optionally whose text contains `textMatch`); scrolls it into view first.
+  const r18Click = async (sel, textMatch) => {
+    const marked = await ev(`(() => { const els = [...document.querySelectorAll(${JSON.stringify(sel)})]; const el = ${textMatch ? `els.find((e) => e.textContent.includes(${JSON.stringify(textMatch)}))` : "els[0]"}; if (!el) return false; el.setAttribute('data-r18-click', '1'); return true; })()`);
+    if (!marked) return false;
+    const r = await admClick("[data-r18-click]");
+    await ev(`document.querySelectorAll('[data-r18-click]').forEach((e) => e.removeAttribute('data-r18-click'))`);
+    return r;
+  };
+  const r18Count = (sel) => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+  const r18Titles = (sel) => ev(`[...document.querySelectorAll(${JSON.stringify(sel)})].map((e) => e.textContent.trim())`);
+  const r18Bar = () => ev(`[...document.querySelectorAll('.admin-bar button')].map((b) => b.textContent.trim())`);
+  const r18Modal = () => ev(`document.querySelector('.modal[role="dialog"]')?.innerText || ''`);
+  const r18Section = (id) => ev(`document.getElementById(${JSON.stringify(id)})?.textContent.trim() || ''`);
+  const HID_WORDS = ["ZZ B9 R18 Area Hidden", "ZZ B9 R18 Project Hidden", "ZZ B9 R18 Pub Hidden", "ZZ B9 R18 News Hidden", "ZZ B9 R18 Event Hidden", "ZZ B9 R18 Pub On Hidden Project", "ZZ B9 R18 Event On Hidden Project", "hidden area description ZZR18HID"];
+
+  await step("research seed: areas, projects, group, researchers, outputs and Japanese overrides", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const a = new Client();
+    await a.req("POST", "/auth/login", ADMIN);
+    R18.a = a;
+    const J = (r) => r.json;
+    const LONG_JA = "ZZ B9 R18 超長い日本語の研究分野タイトルがレイアウトを壊さないことを確認するためのテスト用の非常に長い名前です";
+    R18.area = J(await a.req("POST", "/research", { title: "ZZ B9 R18 Area Alpha", description: "Alpha area description ZZR18", tag: "ZZR18", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R18 アルファ分野", description: "アルファ分野の日本語の説明" } } }));
+    R18.areaLong = J(await a.req("POST", "/research", { title: "ZZ B9 R18 Long " + "W".repeat(90), description: "V".repeat(220), tag: "ZZR18", visibility: "PUBLIC", translations: { ja: { title: LONG_JA, description: "超長い説明。".repeat(30) } } }));
+    R18.areaHid = J(await a.req("POST", "/research", { title: "ZZ B9 R18 Area Hidden", description: "hidden area description ZZR18HID", tag: "ZZR18", visibility: "LAB_ONLY" }));
+    R18.grp = J(await a.req("POST", "/groups", { name: "ZZ B9 R18 Group", description: "R18 group description", visibility: "PUBLIC", translations: { ja: { name: "ZZ B9 R18 グループ" } } }));
+    R18.prj = J(await a.req("POST", "/projects", { title: "ZZ B9 R18 Project", summary: "R18 project summary", description: "R18 project long description", status: "ACTIVE", visibility: "PUBLIC", groupId: R18.grp.id, translations: { ja: { title: "ZZ B9 R18 プロジェクト", summary: "R18プロジェクトの要約" } } }));
+    R18.prjHid = J(await a.req("POST", "/projects", { title: "ZZ B9 R18 Project Hidden", summary: "R18 hidden project", status: "PLANNED", visibility: "LAB_ONLY", groupId: R18.grp.id }));
+    await a.req("PUT", `/projects/${R18.prj.id}/areas`, { areaIds: [R18.area.id, R18.areaLong.id, R18.areaHid.id] });
+    await a.req("PUT", `/projects/${R18.prjHid.id}/areas`, { areaIds: [R18.area.id] });
+    await a.req("PUT", `/projects/${R18.prj.id}/members`, { members: [{ teamMemberId: D.lead.tmId, role: "LEAD" }, { teamMemberId: D.mem.tmId, role: "MEMBER" }] });
+    await a.req("PUT", `/groups/${R18.grp.id}/members`, { members: [{ teamMemberId: D.lead.tmId, role: "LEAD" }, { teamMemberId: D.mem.tmId, role: "MEMBER" }] });
+    await a.req("PUT", `/research/${R18.area.id}/researchers`, { teamMemberIds: [D.lead.tmId, D.plain.tmId] });
+    await a.req("PUT", `/research/${R18.areaHid.id}/researchers`, { teamMemberIds: [D.lead.tmId] });
+    await a.req("PUT", `/member/${D.lead.tmId}/areas`, { areaIds: [R18.area.id, R18.areaHid.id] });
+    R18.pub = J(await a.req("POST", "/publications", { year: 2036, title: "ZZ B9 R18 Pub Public", authors: "a", venue: "v" }));
+    R18.pubHid = J(await a.req("POST", "/publications", { year: 2036, title: "ZZ B9 R18 Pub Hidden", authors: "a", venue: "v", visibility: "LAB_ONLY" }));
+    R18.pubHidPrj = J(await a.req("POST", "/publications", { year: 2036, title: "ZZ B9 R18 Pub On Hidden Project", authors: "a", venue: "v" }));
+    await a.req("PUT", `/projects/${R18.prj.id}/publications`, { publicationIds: [R18.pub.id, R18.pubHid.id] });
+    await a.req("PUT", `/projects/${R18.prjHid.id}/publications`, { publicationIds: [R18.pubHidPrj.id] });
+    R18.news = J(await a.req("POST", "/news", { date: "Jan 2036", sortDate: "2036-01-01", type: "Paper", title: "ZZ B9 R18 News Public", description: "d", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R18 公開ニュース" } } }));
+    R18.newsHid = J(await a.req("POST", "/news", { date: "Jan 2036", sortDate: "2036-01-02", type: "Paper", title: "ZZ B9 R18 News Hidden", description: "d", visibility: "LAB_ONLY" }));
+    await a.req("PUT", `/projects/${R18.prj.id}/news`, { newsIds: [R18.news.id, R18.newsHid.id] });
+    const at = new Date(Date.now() + 6 * 864e5).toISOString();
+    R18.ev = J(await a.req("POST", "/events", { title: "ZZ B9 R18 Event Public", description: "r18 event", kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", projectId: R18.prj.id }));
+    R18.evHid = J(await a.req("POST", "/events", { title: "ZZ B9 R18 Event Hidden", kind: "MEETING", startsAt: at, visibility: "LAB_ONLY", projectId: R18.prj.id }));
+    R18.evHidPrj = J(await a.req("POST", "/events", { title: "ZZ B9 R18 Event On Hidden Project", kind: "OTHER", startsAt: at, visibility: "PUBLIC", projectId: R18.prjHid.id }));
+    check("research setup: three areas, two projects, a group, outputs", [R18.area, R18.areaLong, R18.areaHid, R18.grp, R18.prj, R18.prjHid, R18.pub, R18.news, R18.ev, R18.evHid, R18.evHidPrj].every((x) => x?.id));
+    const det = await a.req("GET", `/research/${R18.area.id}`);
+    check("research setup: the area detail API returns 2 researchers, 1 project and no hidden project", det.json.researchers.length === 2 && det.json.projects.length === 2 && det.json.canManageResearchers === true);
+  });
+
+  // ---------------------------------------------------------------- guest
+  await step("research guest: a public area page shows only public structure; the hidden area is a clean 404", async () => {
+    await desktop(); await setLocale(null);
+    await r18Ready(`/research/${R18.area.id}`, "ZZ B9 R18 Area Alpha");
+    let t = await r18Main();
+    check("research guest: the area page shows title, description, tag", t.includes("ZZ B9 R18 Area Alpha") && t.includes("Alpha area description ZZR18") && t.includes("ZZR18"));
+    check("research guest: exactly one h1 (the title) and a breadcrumb ending at the area, marked current", (await r18Count("h1")) === 1 && (await ev(`document.querySelector('h1').textContent`)) === "ZZ B9 R18 Area Alpha" && (await ev(`document.querySelector('.breadcrumbs [aria-current="page"]')?.textContent`)) === "ZZ B9 R18 Area Alpha" && (await exists('.breadcrumbs a[href="/research"]')));
+    check("research guest: the tab title names the area", (await ev(`document.title`)).startsWith("ZZ B9 R18 Area Alpha"));
+    check("research guest: the section headings carry the VISIBLE counts (1 project, 2 researchers, 1 publication, 1 news, 1 event)", (await r18Section("area-projects")) === "Projects (1)" && (await r18Section("area-researchers")) === "Researchers (2)" && (await r18Section("area-pubs")) === "Publications (1)" && (await r18Section("area-news")) === "News (1)" && (await r18Section("area-events")) === "Events (1)");
+    check("research guest: one project card, its status badge, and its publication, news and event", (await r18Count(".project-card")) === 1 && t.includes("ZZ B9 R18 Project") && has(t, "Active") && t.includes("ZZ B9 R18 Pub Public") && t.includes("ZZ B9 R18 News Public") && t.includes("ZZ B9 R18 Event Public"));
+    check("research guest: researchers are listed with their titles", t.includes("ZZ B9 Lead") && t.includes("ZZ B9 Plain"));
+    check("research guest: it says where the outputs come from", t.includes("belong to the projects listed above"));
+    check("research guest: NOTHING hidden appears in the page text", HID_WORDS.every((w) => !t.includes(w)), HID_WORDS.filter((w) => t.includes(w)).join("|"));
+    const html = await r18Html();
+    check("research guest: no hidden id appears in the page markup (links, attributes)", ![R18.areaHid.id, R18.prjHid.id, R18.pubHid.id, R18.newsHid.id, R18.evHid.id, R18.evHidPrj.id, R18.pubHidPrj.id].some((i) => html.includes(i)));
+    check("research guest: no manager controls, no Lab-only badge, no visibility text", !(await exists(".admin-bar")) && !/lab only/i.test(t));
+    check("research guest: no account id anywhere in the page", !D.userIds.some((u) => html.includes(u)));
+
+    // hidden area
+    await r18Ready(`/research/${R18.areaHid.id}`, "Research area not found");
+    t = await r18Main();
+    check("research guest: the hidden area is the not-found state and leaks nothing", t.includes("doesn't exist, or you don't have access") && !t.includes("ZZ B9 R18 Area Hidden") && !t.includes("ZZR18HID") && (await r18Count("h1")) === 1);
+    check("research guest: ...not in the tab title or breadcrumb either, and there is a way back", !/Hidden|ZZ B9/.test(await ev(`document.title + ' ' + document.querySelector('.breadcrumbs').innerText`)) && (await exists('a[href="/research"].btn')));
+    await r18Ready("/research/bad!id");
+    check("research guest: a malformed id renders an error state, no crash", (await waitFor(`document.body.innerText.includes('Research area not found') || document.body.innerText.includes('Invalid')`)) && (await r18Count("h1")) === 1);
+  });
+
+  await step("research guest: the cross-links (area -> project -> researcher -> area -> group) work with real clicks", async () => {
+    await r18Ready("/");
+    await waitFor(`document.querySelectorAll('.area-tile').length > 0 && document.querySelectorAll('.network__name a').length > 0`, 8000);
+    check("research guest: every research-area title on the Home page (tiles and 'research at a glance') links to that area's own page", await ev(`(() => { const links = [...document.querySelectorAll('.area-tile .card__title a, .network__name a')]; return links.length > 0 && links.every((a) => /^\\/research\\/[\\w-]+$/.test(a.getAttribute('href'))); })()`));
+    await r18Ready("/research", "ZZ B9 R18 Area Alpha");
+    check("research guest: the research list shows the area card with its title as a link", await exists(`a[href="/research/${R18.area.id}"]`));
+    check("research guest: the list does not offer the hidden area", !(await exists(`a[href="/research/${R18.areaHid.id}"]`)) && !(await text()).includes("ZZ B9 R18 Area Hidden"));
+    await r18Click(`a[href="/research/${R18.area.id}"]`);
+    check("research guest: clicking the card title opens the area page", (await waitFor(`location.pathname === '/research/${R18.area.id}'`)) && (await waitText("Alpha area description ZZR18")));
+    await r18Click(`a[href="/projects/${R18.prj.id}"]`, "ZZ B9 R18 Project");
+    check("research guest: the project card opens the project page", (await waitFor(`location.pathname === '/projects/${R18.prj.id}'`)) && (await waitText("R18 project long description")));
+    let t = await r18Main();
+    check("research guest: the project page shows its lead, its team, its status and its group", has(t, "Project lead") && t.includes("ZZ B9 Lead") && has(t, "Active") && t.includes("ZZ B9 R18 Group"));
+    check("research guest: the lead panel lists exactly the lead", (await ev(`[...document.querySelectorAll('section[aria-labelledby="project-lead"] .person')].map((p) => p.textContent).join('|')`)).includes("ZZ B9 Lead") && (await r18Count('section[aria-labelledby="project-lead"] .person')) === 1);
+    check("research guest: the Team panel lists the other members only (the lead is not repeated)", await (async () => { const names = await ev(`[...document.querySelectorAll('section[aria-labelledby="project-team"] .person')].map((p) => p.textContent).join('|')`); return names.includes("ZZ B9 Member") && !names.includes("ZZ B9 Lead"); })());
+    check("research guest: the research areas are links, and only the two PUBLIC areas are offered", (await r18Count('section[aria-labelledby="project-areas"] a.tag')) === 2 && !t.includes("ZZ B9 R18 Area Hidden"));
+    check("research guest: the project's events section shows only the public event", (await r18Section("project-events")) === "Events (1)" && t.includes("ZZ B9 R18 Event Public") && !t.includes("ZZ B9 R18 Event Hidden"));
+    check("research guest: nothing hidden on the project page", HID_WORDS.every((w) => !t.includes(w)), HID_WORDS.filter((w) => t.includes(w)).join("|"));
+    await r18Click('section[aria-labelledby="project-areas"] a.tag', "Alpha");
+    check("research guest: a research-area chip on the project opens that area", (await waitFor(`location.pathname === '/research/${R18.area.id}'`)) && (await waitText("Alpha area description ZZR18")));
+    await r18Click(`a[href="/team/${D.lead.tmId}"]`);
+    check("research guest: a researcher on the area opens the profile", (await waitFor(`location.pathname === '/team/${D.lead.tmId}'`)) && (await waitText("ZZ B9 Lead")));
+    t = await r18Main();
+    check("research guest: the profile lists research areas -- the public one only", has(t, "Research areas") && (await r18Count('section[aria-labelledby="member-areas"] a.tag')) === 1 && (await ev(`document.querySelector('section[aria-labelledby="member-areas"] a.tag').textContent`)).includes("ZZ B9 R18 Area Alpha") && !t.includes("ZZ B9 R18 Area Hidden"));
+    check("research guest: the profile shows the visible project, the group and the event of that project", t.includes("ZZ B9 R18 Project") && t.includes("ZZ B9 R18 Group") && (await r18Section("member-events")).startsWith("Events (") && t.includes("ZZ B9 R18 Event Public") && !t.includes("ZZ B9 R18 Event Hidden") && !t.includes("ZZ B9 R18 Project Hidden"));
+    await r18Click('section[aria-labelledby="member-areas"] a.tag');
+    check("research guest: the profile's area chip goes back to the area", await waitFor(`location.pathname === '/research/${R18.area.id}'`));
+    // group
+    await r18Ready(`/groups/${R18.grp.id}`, "R18 group description");
+    t = await r18Main();
+    check("research guest: the group page lists the lead first, only the public project, and the areas of that project", t.includes("ZZ B9 R18 Project") && !t.includes("ZZ B9 R18 Project Hidden") && (await r18Section("group-areas")) === "Research areas (2)" && (await r18Count('section[aria-labelledby="group-areas"] a.tag')) === 2);
+    check("research guest: the group gathers the publications, news and events of its visible projects", (await r18Section("group-pubs")) === "Publications (1)" && (await r18Section("group-news")) === "News (1)" && (await r18Section("group-events")) === "Events (1)" && t.includes("belong to this group's projects"));
+    check("research guest: nothing hidden on the group page, and the group's project count is the visible one", HID_WORDS.every((w) => !t.includes(w)) && (await r18Section("group-projects")) === "Projects (1)", HID_WORDS.filter((w) => t.includes(w)).join("|"));
+    await r18Click('section[aria-labelledby="group-areas"] a.tag', "Alpha");
+    check("research guest: a group's area chip opens the area", await waitFor(`location.pathname === '/research/${R18.area.id}'`));
+  });
+
+  await step("research guest: keyboard -- the area card link is reachable, ringed, and Enter follows it", async () => {
+    await r18Ready("/research", "ZZ B9 R18 Area Alpha");
+    await ev(`document.querySelector('a[href="/research/${R18.area.id}"]').setAttribute('data-r18-focus', '1')`);
+    await focusSel("[data-r18-focus]");
+    const ringInfo = await ev(`(() => { const a = document.activeElement; const els = [a, a.closest('.card')].filter(Boolean); return els.map((e) => { const st = getComputedStyle(e); return { tag: e.tagName + '.' + (e.className || ''), style: st.outlineStyle, width: st.outlineWidth }; }); })()`);
+    check("research guest: the focused area link (or the card that carries its ring) has a visible focus ring", ringInfo.some((r) => r.style !== "none" && parseFloat(r.width) >= 2), JSON.stringify(ringInfo));
+    await press("enter");
+    check("research guest: Enter on the focused link opens the area page", await waitFor(`location.pathname === '/research/${R18.area.id}'`));
+    check("research guest: after the client-side navigation exactly one h1 and one main landmark remain", (await r18Count("h1")) === 1 && (await r18Count("main")) === 1);
+  });
+
+  // ---------------------------------------------------------------- member
+  await step("research member: sees the LAB_ONLY structure; no manager controls; sets their OWN areas from their profile", async () => {
+    check("research member: login (a true MEMBER)", await login(D.plain.email, PW));
+    await r18Ready(`/research/${R18.area.id}`, "ZZ B9 R18 Area Alpha");
+    let t = await r18Main();
+    check("research member: sees the hidden project, publication, news and event (LAB_ONLY is for signed-in users)", t.includes("ZZ B9 R18 Project Hidden") && t.includes("ZZ B9 R18 Pub Hidden") && t.includes("ZZ B9 R18 News Hidden") && t.includes("ZZ B9 R18 Event Hidden") && t.includes("ZZ B9 R18 Pub On Hidden Project"));
+    check("research member: the counts include them (2 projects) and there is no Lab-only badge (the field is not sent)", (await r18Section("area-projects")) === "Projects (2)" && !/lab only/i.test(t));
+    const bar = await r18Bar();
+    check("research member: may edit the area (existing policy) but has NO 'Researchers' and NO Delete button", bar.includes("Edit area") && !bar.includes("Researchers") && !bar.includes("Delete"), JSON.stringify(bar));
+    check("research member: the server refuses the manager-only writes even if the UI is bypassed", (await admApi("PUT", `/research/${R18.area.id}/researchers`, { teamMemberIds: [] })).status === 403 && (await admApi("PUT", `/member/${D.lead.tmId}/areas`, { areaIds: [] })).status === 403 && (await admApi("DELETE", `/research/${R18.area.id}`)).status === 403);
+    await r18Ready(`/research/${R18.areaHid.id}`, "ZZ B9 R18 Area Hidden");
+    check("research member: the LAB_ONLY area is openable by URL", (await r18Main()).includes("hidden area description ZZR18HID"));
+
+    // own profile: set my research areas
+    await r18Ready(`/team/${D.plain.tmId}`, "ZZ B9 Plain");
+    check("research member: their own profile offers 'Research areas'", (await r18Bar()).includes("Research areas"));
+    await r18Click(".admin-bar button", "Research areas");
+    check("research member: the dialog opens with a checkbox per area, and marks the one area they already work in", (await waitFor(`!!document.querySelector('.modal[role="dialog"] input[type=checkbox]')`, 4000)) && has(await r18Modal(), "Select research areas") && (await r18Count('.modal input[type=checkbox]')) >= 3 && (await r18Count('.modal input[type=checkbox]:checked')) === 1);
+    await ev(`[...document.querySelectorAll('.modal .pick-item')].find((l) => l.textContent.includes('ZZ B9 R18 Area Hidden')).querySelector('input').click()`);
+    await submitModal();
+    check("research member: saving closes the dialog and the profile now lists both areas", (await waitFor(`!document.querySelector('.modal')`, 5000)) && (await waitFor(`document.querySelectorAll('section[aria-labelledby="member-areas"] a.tag').length === 2`, 5000)));
+    check("research member: the server agrees", (await admApi("GET", `/member/${D.plain.tmId}`)).json.areas.length === 2);
+    await r18Click(".admin-bar button", "Research areas");
+    await waitFor(`!!document.querySelector('.modal input[type=checkbox]')`, 4000);
+    check("research member: reopening shows exactly those two checked", (await r18Count('.modal input[type=checkbox]:checked')) === 2);
+    await ev(`[...document.querySelectorAll('.modal .pick-item')].forEach((l) => { const i = l.querySelector('input'); if (i.checked) i.click(); })`);
+    await submitModal();
+    check("research member: clearing all is allowed (empty state shown)", (await waitFor(`!document.querySelector('.modal')`, 5000)) && (await waitText("No research areas listed yet.")));
+    await r18Ready(`/team/${D.lead.tmId}`, "ZZ B9 Lead");
+    check("research member: someone else's profile has no owner controls and no Research-areas button", !(await exists(".admin-bar")));
+    check("research member: ...but shows that person's areas, both areas because the viewer is signed in", (await r18Count('section[aria-labelledby="member-areas"] a.tag')) === 2);
+    await R18.a.req("PUT", `/member/${D.plain.tmId}/areas`, { areaIds: [R18.area.id] }); // put the seeded state back for the steps that follow
+    await logout();
+  });
+
+  await step("research lead: leads their project/group but has no area powers", async () => {
+    check("research lead: login", await login(D.lead.email, PW));
+    await r18Ready(`/projects/${R18.prj.id}`, "R18 project long description");
+    const bar = await r18Bar();
+    check("research lead: the project manage bar offers Members / Research areas but not Delete", bar.includes("Members") && bar.includes("Research areas") && !bar.includes("Delete"), JSON.stringify(bar));
+    check("research lead: the server keeps settings manager-only and area researchers manager-only", (await admApi("PUT", `/projects/${R18.prj.id}`, { groupId: null })).status === 403 && (await admApi("PUT", `/research/${R18.area.id}/researchers`, { teamMemberIds: [] })).status === 403);
+    await r18Ready(`/team/${D.lead.tmId}`, "ZZ B9 Lead");
+    check("research lead: their own profile offers 'Research areas'", (await r18Bar()).includes("Research areas"));
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- manager
+  await step("research manager: manages an area's researchers, edits in Japanese without touching the English, deletes with a confirmation", async () => {
+    check("research manager: login", await login(D.mgr.email, PW));
+    await r18Ready(`/research/${R18.area.id}`, "ZZ B9 R18 Area Alpha");
+    check("research manager: the bar offers Edit area, Researchers and Delete; the visibility badge is shown on the hidden project", (await r18Bar()).join("|") === "Edit area|Researchers|Delete" && /lab only/i.test(await r18Main()));
+    // researchers dialog
+    await r18Click(".admin-bar button", "Researchers");
+    check("research manager: the Researchers dialog lists the team with the current researchers checked", (await waitFor(`document.querySelectorAll('.modal .pick-item').length >= 5`, 5000)) && has(await r18Modal(), "Researchers in this area") && (await r18Count(".modal input[type=checkbox]:checked")) === 2);
+    await ev(`[...document.querySelectorAll('.modal .pick-item')].find((l) => l.textContent.includes('ZZ B9 Member')).querySelector('input').click()`);
+    await submitModal();
+    check("research manager: saving adds the researcher and the page shows three", (await waitFor(`!document.querySelector('.modal')`, 5000)) && (await waitFor(`document.getElementById('area-researchers')?.textContent.trim() === 'Researchers (3)'`, 5000)) && (await r18Main()).includes("ZZ B9 Member"));
+    check("research manager: the server agrees, and audits it as a member-links change on the area", (await admApi("GET", `/research/${R18.area.id}`)).json.researchers.length === 3 && (await R18.a.req("GET", "/admin/audit?entityType=RESEARCH_AREA&limit=50")).json.entries.some((r) => r.action === "MEMBER_LINKS_CHANGED" && r.entityId === R18.area.id));
+    await r18Click(".admin-bar button", "Researchers");
+    await waitFor(`document.querySelectorAll('.modal .pick-item').length >= 5`, 5000);
+    await ev(`[...document.querySelectorAll('.modal .pick-item')].find((l) => l.textContent.includes('ZZ B9 Member')).querySelector('input').click()`);
+    await submitModal();
+    check("research manager: unchecking removes them again", (await waitFor(`document.getElementById('area-researchers')?.textContent.trim() === 'Researchers (2)'`, 5000)));
+
+    // the Japanese-edit regression: the English inputs must hold ENGLISH
+    await setLocale("ja");
+    await r18Ready(`/research/${R18.area.id}`, "ZZ B9 R18 アルファ分野");
+    check("research manager (ja): the page shows the Japanese title and description", (await r18Main()).includes("アルファ分野の日本語の説明"));
+    await r18Click(".admin-bar button", "分野を編集");
+    check("research manager (ja): the edit dialog opens", await waitFor(`!!document.getElementById('research_title')`, 5000));
+    check("research manager (ja): the ENGLISH inputs are filled with the English text (not the Japanese the page showed)", await waitFor(`document.getElementById('research_title').value === 'ZZ B9 R18 Area Alpha' && document.getElementById('research_description').value === 'Alpha area description ZZR18'`, 6000), await ev(`document.getElementById('research_title').value`));
+    check("research manager (ja): the Japanese inputs hold the Japanese override", (await ev(`document.getElementById('research_title_ja').value`)) === "ZZ B9 R18 アルファ分野");
+    await setVal("research_description", "Alpha area description ZZR18 edited");
+    await submitModal();
+    check("research manager (ja): saving closes the dialog", await waitFor(`!document.querySelector('.modal')`, 5000));
+    const enNow = await (await fetch(`${API}/api/research/${R18.area.id}`, { headers: { "X-Locale": "en" } })).json();
+    check("research manager (ja): the ENGLISH title is still English, the description is the edit, and the Japanese override is intact", enNow?.title === "ZZ B9 R18 Area Alpha" && enNow?.description === "Alpha area description ZZR18 edited" && (await (await fetch(`${API}/api/research/${R18.area.id}`, { headers: { "X-Locale": "ja" } })).json()).title === "ZZ B9 R18 アルファ分野");
+    await R18.a.req("PUT", `/research/${R18.area.id}`, { description: "Alpha area description ZZR18" });
+    await setLocale(null);
+
+    // delete with confirmation
+    const tmp = (await R18.a.req("POST", "/research", { title: "ZZ B9 R18 Throwaway", description: "d", tag: "T", visibility: "PUBLIC" })).json;
+    await r18Ready(`/research/${tmp.id}`, "ZZ B9 R18 Throwaway");
+    await r18Click(".admin-bar .btn--danger");
+    check("research manager: Delete opens a confirmation naming the area", (await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000)) && (await r18Modal()).includes("ZZ B9 R18 Throwaway"));
+    await press("esc");
+    check("research manager: Escape cancels, the area still exists, focus returns to Delete", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2000)) && (await admApi("GET", `/research/${tmp.id}`)).status === 200);
+    await r18Click(".admin-bar .btn--danger");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+    await ev(`[...document.querySelectorAll('.modal button')].find((b) => /delete/i.test(b.textContent) && b.classList.contains('btn--danger'))?.click()`);
+    check("research manager: confirming deletes it and goes back to the list", (await waitFor(`location.pathname === '/research'`, 6000)) && (await admApi("GET", `/research/${tmp.id}`)).status === 404);
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- Japanese edit forms: news, team member, event
+  // Same bug as the area/project/group forms above: a page fetched in Japanese hands the edit form the Japanese override
+  // as "title"/"description"/"bio", so saving used to overwrite the ENGLISH text. The English inputs must hold English.
+  await step("research forms: news / team-member / event edit in Japanese keeps the English source and the Japanese override apart", async () => {
+    check("research forms: manager login", await login(D.mgr.email, PW));
+    const a = R18.a;
+    const at = new Date(Date.now() + 8 * 864e5).toISOString();
+    const nw = (await a.req("POST", "/news", { date: "Jan 2037", sortDate: "2037-02-01", type: "Paper", title: "ZZ B9 R18F News EN", description: "R18F news description EN", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R18F ニュース", description: "R18Fニュースの説明" } } })).json;
+    const nwBare = (await a.req("POST", "/news", { date: "Jan 2037", sortDate: "2037-02-02", type: "Paper", title: "ZZ B9 R18F News Bare", description: "R18F bare description", visibility: "PUBLIC" })).json;
+    const evn = (await a.req("POST", "/events", { title: "ZZ B9 R18F Event EN", description: "R18F event description EN", kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 R18F イベント", description: "R18Fイベントの説明" } } })).json;
+    const evnBare = (await a.req("POST", "/events", { title: "ZZ B9 R18F Event Bare", description: "R18F bare event", kind: "MEETING", startsAt: at, visibility: "PUBLIC" })).json;
+    const tm = (await a.req("POST", "/team", { name: "ZZ B9 R18F Member", initials: "RF", role: "Researcher", category: "RESEARCH", bio: "R18F bio EN", translations: { ja: { bio: "R18Fの日本語プロフィール" } } })).json;
+    const tmBare = (await a.req("POST", "/team", { name: "ZZ B9 R18F Member Bare", initials: "RB", role: "Researcher", category: "RESEARCH", bio: "R18F bare bio" })).json;
+    R18.forms = { nw, nwBare, evn, evnBare, tm, tmBare };
+    check("research forms: fixtures created", [nw, nwBare, evn, evnBare, tm, tmBare].every((x) => x?.id));
+
+    const val = (id) => ev(`document.getElementById(${JSON.stringify(id)})?.value ?? null`);
+    const tr = async (type, id) => (await admApi("GET", `/translations/${type}/${id}`)).json;
+    const kinds = {
+      news: {
+        type: "NEWS_ITEM", ent: nw, bare: nwBare, fields: ["title", "description"], pre: "news_",
+        open: async (e, loc) => { await r18Ready("/news"); await waitFor(`!!document.querySelector('.card-edit-btn')`, 8000); const want = (loc === "ja" ? e.jaTitle : "") || e.title; const ok = await ev(`(() => { const b = [...document.querySelectorAll('.card-edit-btn .icon-btn')].find((x) => x.getAttribute('title') === ${JSON.stringify(loc === "ja" ? "編集" : "Edit")} && x.getAttribute('aria-label').includes(${JSON.stringify(want)})); if (!b) return false; b.setAttribute('data-r18-click', '1'); return true; })()`); return ok && (await admClick("[data-r18-click]")); },
+      },
+      member: {
+        type: "TEAM_MEMBER", ent: tm, bare: tmBare, fields: ["bio"], pre: "tm_",
+        // the Team list is the localized surface (its cards carry the Japanese bio); the profile page is checked in its own step below
+        open: async (e, loc) => { await r18Ready("/team"); await waitFor(`!!document.querySelector('.card-edit-btn')`, 8000); const ok = await ev(`(() => { const b = [...document.querySelectorAll('.card-edit-btn .icon-btn')].find((x) => x.getAttribute('title') === ${JSON.stringify(loc === "ja" ? "編集" : "Edit")} && x.getAttribute('aria-label').includes(${JSON.stringify(e.name)})); if (!b) return false; b.setAttribute('data-r18-click', '1'); return true; })()`); return ok && (await admClick("[data-r18-click]")); },
+      },
+      event: {
+        type: "EVENT", ent: evn, bare: evnBare, fields: ["title", "description"], pre: "event_",
+        open: async (e, loc) => { await r18Ready(`/events/${e.id}`); await waitFor(`!!document.querySelector('.admin-bar button')`, 8000); return r18Click(".admin-bar button", loc === "ja" ? "編集" : "Edit"); },
+      },
+    };
+    const enId = (k, f) => `${k.pre}${f}`;
+    const jaId = (k, f) => `${k.pre}${f}_ja`;
+    const snap = async (k, e) => { const r = await tr(k.type, e.id); return { en: r.base, ja: r.ja }; };
+    const fieldsOf = async (k) => { const o = {}; for (const f of k.fields) o[f] = await val(enId(k, f)); return o; };
+    const jaFieldsOf = async (k) => { const o = {}; for (const f of k.fields) o[f] = await val(jaId(k, f)); return o; };
+    const closeForm = async () => { await waitFor(`!document.querySelector('.modal')`, 6000); };
+    const jaOf = (o) => JSON.stringify(o);
+
+    for (const [name, k] of Object.entries(kinds)) {
+      const e = k.ent;
+      const s0 = await snap(k, e);
+      k.jaTitle = s0.ja.title;
+      e.jaTitle = s0.ja.title;
+      // A + F: opened in Japanese and in English, the English inputs hold the English source and the Japanese inputs the override
+      for (const loc of ["ja", "en"]) {
+        await setLocale(loc === "ja" ? "ja" : null);
+        check(`research forms ${name} (${loc}): the edit dialog opens`, (await k.open(e, loc)) && (await waitFor(`!!document.getElementById(${JSON.stringify(enId(k, k.fields[0]))})`, 6000)));
+        check(`research forms ${name} (${loc}): the English inputs hold the ENGLISH source, not the Japanese the page showed`, await waitFor(`${JSON.stringify(k.fields)}.every((f) => document.getElementById(${JSON.stringify(k.pre)} + f).value === ${JSON.stringify(s0.en)}[f])`, 6000), jaOf(await fieldsOf(k)));
+        check(`research forms ${name} (${loc}): the Japanese inputs hold the Japanese override`, jaOf(await jaFieldsOf(k)) === jaOf(s0.ja), jaOf(await jaFieldsOf(k)));
+        await press("esc");
+        await closeForm();
+      }
+      // B: edit only the Japanese text in JA mode
+      await setLocale("ja");
+      await k.open(e, "ja");
+      await waitFor(`document.getElementById(${JSON.stringify(jaId(k, k.fields[k.fields.length - 1]))})?.value === ${JSON.stringify(s0.ja[k.fields[k.fields.length - 1]])}`, 6000);
+      const lastF = k.fields[k.fields.length - 1];
+      await setVal(jaId(k, lastF), s0.ja[lastF] + " 改");
+      await submitModal();
+      check(`research forms ${name} (ja): saving only the Japanese closes the dialog`, await waitFor(`!document.querySelector('.modal')`, 6000));
+      const sB = await snap(k, e);
+      check(`research forms ${name} (ja): the ENGLISH source is byte-for-byte unchanged and the Japanese changed`, jaOf(sB.en) === jaOf(s0.en) && sB.ja[lastF] === s0.ja[lastF] + " 改" && k.fields.filter((f) => f !== lastF).every((f) => sB.ja[f] === s0.ja[f]), jaOf(sB));
+      // E + C: direct navigation (fresh load), then edit only the English in JA mode
+      await k.open(e, "ja");
+      check(`research forms ${name} (ja, after reload): the new Japanese value persisted and the English inputs are still English`, await waitFor(`document.getElementById(${JSON.stringify(jaId(k, lastF))}).value === ${JSON.stringify(s0.ja[lastF] + " 改")} && ${JSON.stringify(k.fields)}.every((f) => document.getElementById(${JSON.stringify(k.pre)} + f).value === ${JSON.stringify(s0.en)}[f])`, 6000));
+      await setVal(enId(k, lastF), s0.en[lastF] + " edited");
+      await submitModal();
+      check(`research forms ${name} (ja): saving only the English closes the dialog`, await waitFor(`!document.querySelector('.modal')`, 6000));
+      const sC = await snap(k, e);
+      check(`research forms ${name} (ja): the English changed and the Japanese override is untouched`, sC.en[lastF] === s0.en[lastF] + " edited" && k.fields.filter((f) => f !== lastF).every((f) => sC.en[f] === s0.en[f]) && jaOf(sC.ja) === jaOf(sB.ja), jaOf(sC));
+      // back to English: the page shows the English text, and a reload keeps both values
+      await setLocale(null);
+      await k.open(e, "en");
+      check(`research forms ${name} (en, after reload): English shows the edited English, Japanese the edited Japanese`, await waitFor(`document.getElementById(${JSON.stringify(enId(k, lastF))}).value === ${JSON.stringify(s0.en[lastF] + " edited")} && document.getElementById(${JSON.stringify(jaId(k, lastF))}).value === ${JSON.stringify(s0.ja[lastF] + " 改")}`, 6000));
+      await press("esc");
+      await closeForm();
+      const enPage = await (await fetch(`${API}/api/${name === "member" ? "team" : name === "news" ? "news" : "events"}`, { headers: { "X-Locale": "en" } })).text();
+      check(`research forms ${name}: the public English API serves the English text (never the Japanese)`, enPage.includes(s0.en[lastF] + " edited") && !enPage.includes(s0.ja[lastF] + " 改"));
+      // D: no Japanese override -> English in the English inputs, empty Japanese inputs, an untouched save changes nothing
+      const b = k.bare;
+      const sb0 = await snap(k, b);
+      await setLocale("ja");
+      check(`research forms ${name} (ja, no override): the dialog opens`, (await k.open(b, "ja")) && (await waitFor(`!!document.getElementById(${JSON.stringify(enId(k, k.fields[0]))})`, 6000)));
+      check(`research forms ${name} (ja, no override): English inputs hold the English (the page fell back to it) and the Japanese inputs are empty`, (await waitFor(`${JSON.stringify(k.fields)}.every((f) => document.getElementById(${JSON.stringify(k.pre)} + f).value === ${JSON.stringify(sb0.en)}[f])`, 6000)) && k.fields.every((f) => !sb0.ja[f]) && Object.values(await jaFieldsOf(k)).every((v) => v === ""), jaOf(await jaFieldsOf(k)));
+      await submitModal();
+      await waitFor(`!document.querySelector('.modal')`, 6000);
+      const sb1 = await snap(k, b);
+      check(`research forms ${name} (ja, no override): saving untouched leaves the English source unchanged and creates no Japanese text`, jaOf(sb1.en) === jaOf(sb0.en) && k.fields.every((f) => !sb1.ja[f]), jaOf(sb1));
+    }
+    await setLocale(null);
+    await logout();
+  });
+
+  await step("research forms profile: the profile page opens the same team-member form with English bio + Japanese override", async () => {
+    check("research forms profile: manager login", await login(D.mgr.email, PW));
+    const tm = R18.forms.tm;
+    const tr = (await admApi("GET", `/translations/TEAM_MEMBER/${tm.id}`)).json;
+    for (const loc of ["ja", null]) {
+      await setLocale(loc);
+      await r18Ready(`/team/${tm.id}`, tm.name);
+      check(`research forms profile (${loc || "en"}): the edit dialog opens`, (await r18Click(".admin-bar button", loc === "ja" ? "プロフィールを編集" : "Edit profile")) && (await waitFor(`!!document.getElementById('tm_bio')`, 6000)));
+      check(`research forms profile (${loc || "en"}): English bio in the English input, Japanese override in the Japanese input`, await waitFor(`document.getElementById('tm_bio').value === ${JSON.stringify(tr.base.bio)} && document.getElementById('tm_bio_ja').value === ${JSON.stringify(tr.ja.bio)}`, 6000));
+      await press("esc");
+      await waitFor(`!document.querySelector('.modal')`, 6000);
+    }
+    await setLocale(null);
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- search + admin
+  await step("research search + admin: results link to the new detail page; admin links and counts agree", async () => {
+    await desktop(); await setLocale(null);
+    await r18Ready("/search?q=ZZ%20B9%20R18&type=research-area", "ZZ B9 R18 Area Alpha");
+    const hrefs = await ev(`[...document.querySelectorAll('main a.search-result__link')].map((a) => a.getAttribute('href')).filter((h) => /^\\/research\\//.test(h || ''))`);
+    check("research search (guest): the public areas are found and link to their detail page; the hidden one is not offered", hrefs.includes(`/research/${R18.area.id}`) && hrefs.includes(`/research/${R18.areaLong.id}`) && !hrefs.includes(`/research/${R18.areaHid.id}`) && !(await text()).includes("ZZ B9 R18 Area Hidden"), JSON.stringify(hrefs));
+    check("research search (guest): the result's call to action names the area (not the list)", (await ev(`document.querySelector('.search-result--research-area .search-result__cta')?.textContent`)).includes("View research area"));
+    await r18Click(`a[href="/research/${R18.area.id}"]`);
+    check("research search (guest): the result opens the area page", (await waitFor(`location.pathname === '/research/${R18.area.id}'`)) && (await waitText("Alpha area description ZZR18")));
+    await setLocale("ja");
+    await r18Ready(`/search?q=${encodeURIComponent("アルファ分野")}&type=research-area`, "ZZ B9 R18 アルファ分野");
+    check("research search (guest, ja): the Japanese override is matched and the result links to the area", await exists(`a[href="/research/${R18.area.id}"]`));
+    await setLocale(null);
+
+    check("research admin: manager login", await login(D.mgr.email, PW));
+    await admReady("/admin/content?type=research-area&q=ZZ%20B9%20R18", "ZZ B9 R18 Area Alpha");
+    check("research admin: the content browser lists the three areas with their visibility", (await admTitles()).filter((x) => x.startsWith("ZZ B9 R18")).length === 3);
+    await r18Click(".admin-row .btn--secondary");
+    check("research admin: the record dialog shows the relation counts (projects, researchers) and a link to the public page", (await waitFor(`!!document.querySelector('.admin-detail__list')`, 5000)) && /Projects/.test(await r18Modal()) && /Researchers/.test(await r18Modal()) && (await exists(`.modal a[href="/research/${(await admApi("GET", "/admin/content?type=research-area&q=ZZ%20B9%20R18%20Area%20Alpha")).json.rows[0].id}"]`)));
+    await press("esc");
+    await admReady("/admin/content?type=project&q=ZZ%20B9%20R18%20Project", "ZZ B9 R18 Project");
+    await ev(`(() => { const row = [...document.querySelectorAll('.admin-row')].find((r) => r.querySelector('.admin-row__title')?.textContent.trim() === 'ZZ B9 R18 Project'); row?.querySelector('.btn--secondary')?.setAttribute('data-r18-click', '1'); })()`);
+    await admClick("[data-r18-click]");
+    await ev(`document.querySelectorAll('[data-r18-click]').forEach((e) => e.removeAttribute('data-r18-click'))`);
+    check("research admin: a project's dialog shows members, areas, publications, news, events and group counts", (await waitFor(`!!document.querySelector('.admin-detail__list')`, 5000)) && (await (async () => { const m = await r18Modal(); return ["Members", "Research areas", "Publications", "News", "Events", "Groups"].every((w) => m.includes(w)); })()));
+    await press("esc");
+    await logout();
+  });
+
+  // ---------------------------------------------------------------- Japanese
+  await step("research ja: the structure pages read in Japanese; authorization is the same", async () => {
+    await setLocale("ja");
+    await r18Ready(`/research/${R18.area.id}`, "ZZ B9 R18 アルファ分野");
+    let t = await r18Main();
+    check("research ja: the area page has Japanese chrome, title, description and related titles", t.includes("アルファ分野の日本語の説明") && t.includes("プロジェクト（1）") && t.includes("研究者（2）") && t.includes("論文（1）") && t.includes("ニュース（1）") && t.includes("イベント（1）") && t.includes("ZZ B9 R18 プロジェクト") && t.includes("ZZ B9 R18 公開ニュース"));
+    check("research ja: html lang, tab title and breadcrumb are Japanese", (await ev(`document.documentElement.lang`)) === "ja" && (await ev(`document.title`)).startsWith("ZZ B9 R18 アルファ分野") && (await ev(`document.querySelector('.breadcrumbs a[href="/research"]').textContent`)) === "研究分野");
+    check("research ja: still nothing hidden", HID_WORDS.every((w) => !t.includes(w)));
+    await r18Ready(`/projects/${R18.prj.id}`, "R18プロジェクトの要約");
+    t = await r18Main();
+    check("research ja: the project page shows Japanese title/summary, the lead panel, the group and the area chips in Japanese", t.includes("プロジェクトリーダー") && t.includes("ZZ B9 R18 グループ") && t.includes("ZZ B9 R18 アルファ分野") && t.includes("イベント（1）"));
+    await r18Ready(`/groups/${R18.grp.id}`, "ZZ B9 R18 グループ");
+    t = await r18Main();
+    check("research ja: the group page lists the Japanese project title and its research areas", t.includes("ZZ B9 R18 プロジェクト") && t.includes("研究分野（2）") && t.includes("ZZ B9 R18 アルファ分野"));
+    await r18Ready(`/team/${D.lead.tmId}`, "ZZ B9 Lead");
+    t = await r18Main();
+    check("research ja: the profile lists areas and events in Japanese", t.includes("研究分野") && t.includes("ZZ B9 R18 アルファ分野") && t.includes("イベント（"));
+    await r18Ready(`/research/${R18.areaHid.id}`, "研究分野が見つかりません");
+    check("research ja: the hidden area is the Japanese not-found state and still leaks nothing", !(await r18Main()).includes("ZZ B9 R18 Area Hidden") && !(await ev(`document.title`)).includes("Hidden"));
+    check("research ja: authorization is unchanged in Japanese (guest 404 on the hidden area, guest 401 on the writes)", (await admApi("GET", `/research/${R18.areaHid.id}`, undefined, "ja")).status === 404 && (await admApi("PUT", `/research/${R18.area.id}/researchers`, { teamMemberIds: [] }, "ja")).status === 401);
+    await setLocale(null);
+  });
+
+  await step("research hostile text: markup and unbroken strings are inert text on every new page", async () => {
+    await desktop(); await setLocale(null);
+    const hostile = "ZZ B9 R18 <img src=x onerror=window.__r18Xss=1> Hostile";
+    const h = (await R18.a.req("POST", "/research", { title: hostile, description: "<script>window.__r18Xss=2</script>", tag: "<b>x</b>", visibility: "PUBLIC" })).json;
+    await R18.a.req("PUT", `/research/${h.id}/researchers`, { teamMemberIds: [D.lead.tmId] });
+    await R18.a.req("PUT", `/projects/${R18.prj.id}/areas`, { areaIds: [R18.area.id, R18.areaLong.id, R18.areaHid.id, h.id] });
+    for (const p of ["/research", `/research/${h.id}`, `/projects/${R18.prj.id}`, `/groups/${R18.grp.id}`, `/team/${D.lead.tmId}`, "/search?q=ZZ%20B9%20R18%20%3Cimg&type=research-area"]) {
+      await r18Ready(p);
+      await sleep(250);
+      check(`research hostile: ${p.split("?")[0]} renders it as text (no script ran, no injected <img>/<script> element)`, (await ev(`typeof window.__r18Xss`)) === "undefined" && (await ev(`document.querySelectorAll('main img[src="x"], main script, main b').length`)) === 0);
+    }
+    await r18Ready(`/research/${h.id}`, "Hostile");
+    check("research hostile: the title is shown literally as text", (await ev(`document.querySelector('h1').textContent`)) === hostile);
+    await R18.a.req("PUT", `/projects/${R18.prj.id}/areas`, { areaIds: [R18.area.id, R18.areaLong.id, R18.areaHid.id] });
+    await R18.a.req("DELETE", `/research/${h.id}`);
+  });
+
+  // ---------------------------------------------------------------- nine-width sweep, EN + JA
+  const r18PagesGuest = () => [["research list", "/research"], ["area", `/research/${R18.area.id}`], ["area long", `/research/${R18.areaLong.id}`], ["area hidden 404", `/research/${R18.areaHid.id}`], ["project", `/projects/${R18.prj.id}`], ["group", `/groups/${R18.grp.id}`], ["researcher", `/team/${D.lead.tmId}`]];
+  const r18Walk = async (T, pages) => { for (const [lbl, p] of pages) { await p15Ready(p); const tw = await p15TabWalk(70); check(`${T} keyboard ${lbl}: Tab reaches ${tw.stops} stops -- all visible, named, ringed, uncovered`, tw.stops >= 5 && tw.bad.length === 0, tw.bad.slice(0, 3).join(" | ")); } };
+  await step("research sweep: guest -- every new page (EN+JA, 390..1920)", async () => {
+    await p15Loop("research-guest", null, r18PagesGuest(), async (loc, w) => {
+      if (P15_TAB_WIDTHS.includes(w)) await r18Walk(`research ${loc} ${w}px guest`, [["area", `/research/${R18.area.id}`], ["project", `/projects/${R18.prj.id}`]]);
+    });
+    check("research sweep guest: no script from hostile text ever ran", (await ev(`typeof window.__r18Xss`)) === "undefined");
+  });
+  await step("research sweep: member -- LAB_ONLY structure, own-areas dialog (EN+JA, 390..1920)", async () => {
+    await p15Loop("research-member", () => login(D.plain.email, PW), [["area", `/research/${R18.area.id}`], ["area hidden", `/research/${R18.areaHid.id}`], ["project", `/projects/${R18.prj.id}`], ["group", `/groups/${R18.grp.id}`], ["own profile", `/team/${D.plain.tmId}`], ["researcher", `/team/${D.lead.tmId}`]], async (loc, w) => {
+      const T = `research ${loc} ${w}px member`;
+      await p15Ready(`/team/${D.plain.tmId}`);
+      await p15Dialog(`${T} research-areas dialog`, ".admin-bar .btn--secondary", 3, loc === "ja");
+      await p15Ready(`/research/${R18.area.id}`);
+      await p15Dialog(`${T} edit-area dialog`, ".admin-bar .btn--secondary", 0, loc === "ja");
+      if (P15_TAB_WIDTHS.includes(w)) await r18Walk(T, [["area", `/research/${R18.area.id}`], ["own profile", `/team/${D.plain.tmId}`]]);
+    });
+  });
+  await step("research sweep: manager -- area management dialogs (EN+JA, 390..1920)", async () => {
+    await p15Loop("research-manager", () => login(D.mgr.email, PW), [["area", `/research/${R18.area.id}`], ["project", `/projects/${R18.prj.id}`], ["group", `/groups/${R18.grp.id}`], ["researcher", `/team/${D.lead.tmId}`]], async (loc, w) => {
+      const T = `research ${loc} ${w}px manager`;
+      await p15Ready(`/research/${R18.area.id}`);
+      await p15Dialog(`${T} researchers dialog`, ".admin-bar .btn--secondary", 1, loc === "ja");
+      await p15Dialog(`${T} edit-area dialog`, ".admin-bar .btn--secondary", 0, loc === "ja");
+      await p15Dialog(`${T} delete-area confirmation`, ".admin-bar .btn--danger", 0, loc === "ja");
+      if (P15_TAB_WIDTHS.includes(w)) await r18Walk(T, [["area", `/research/${R18.area.id}`]]);
+    });
+  });
+  await step("research sweep: admin -- the area page and the content browser (EN+JA, 390..1920)", async () => {
+    await p15Loop("research-admin", () => login(ADMIN.email, ADMIN.password), [["area", `/research/${R18.area.id}`], ["admin areas", "/admin/content?type=research-area&q=ZZ%20B9%20R18"], ["admin projects", "/admin/content?type=project&q=ZZ%20B9%20R18"]], async (loc, w) => {
+      const T = `research ${loc} ${w}px admin`;
+      await p15Ready("/admin/content?type=research-area&q=ZZ%20B9%20R18");
+      await waitFor(`document.querySelectorAll('.admin-row').length >= 2`, 6000);
+      await p15Dialog(`${T} area record dialog`, ".admin-row .btn--secondary", 0, loc === "ja");
+    });
+  });
+  await step("research screenshots: the new pages at desktop and phone width (for eyeballing)", async () => {
+    await setLocale(null);
+    for (const [w, tag] of [[1280, "d"], [390, "m"]]) {
+      await p15Vp(w);
+      for (const [lbl, p] of [["area", `/research/${R18.area.id}`], ["area-long", `/research/${R18.areaLong.id}`], ["project", `/projects/${R18.prj.id}`], ["group", `/groups/${R18.grp.id}`], ["member", `/team/${D.lead.tmId}`]]) {
+        await p15Ready(p);
+        await shot(`r18-${lbl}-${tag}`);
+      }
+    }
+    await setLocale("ja");
+    await p15Vp(390);
+    await p15Ready(`/research/${R18.areaLong.id}`);
+    await shot("r18-area-long-ja-m");
+    check("research screenshots: taken", fs.existsSync(path.join(SHOTS, "r18-area-d.png")));
+    await setLocale(null);
+  });
+  await step("research: restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -3493,12 +3964,17 @@ async function connect() {
     // /admin/people bounce, and the deliberate malformed-URL fallbacks (400).
     /^40[13] (GET|POST|PUT) .*\/api\/(admin|users)/,
     /^400 GET .*\/api\/admin\/content\?/,
+    // Phase 18: a hidden / missing / malformed research-area id opened directly (404/400), and the manager-only or owner-only
+    // relationship writes probed on purpose by guests, members and leads (401/403).
+    /^(400|404) GET .*\/api\/research\/[^/]+$/,
+    /^40[13] (PUT|DELETE) .*\/api\/(research|member)\//,
+    /^40[13] PUT .*\/api\/projects\/[\w-]+$/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

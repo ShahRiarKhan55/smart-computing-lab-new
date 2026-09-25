@@ -113,3 +113,27 @@ export async function getEntityTranslations(
   const byField = new Map(rows.map((r) => [r.field, r.value]));
   return Object.fromEntries(fields.map((f) => [f, byField.get(f) ?? null]));
 }
+
+/** Prisma delegate name per translatable entity (the tables `TRANSLATABLE_FIELDS` describes). */
+const BASE_DELEGATE = {
+  RESEARCH_AREA: "researchArea",
+  RESEARCH_PROJECT: "researchProject",
+  RESEARCH_GROUP: "researchGroup",
+  NEWS_ITEM: "newsItem",
+  EVENT: "event",
+  TEAM_MEMBER: "teamMember",
+} as const satisfies Record<TranslatableEntityType, string>;
+
+/**
+ * The entity's own ENGLISH (base-language) text for each allow-listed field, `null` for a missing
+ * entity. Edit forms need it: a page fetched in Japanese already carries the Japanese override in
+ * `title`/`description`, so prefilling the English inputs from that response and saving would overwrite
+ * the English column with Japanese. Same visibility as `getEntityTranslations` (signed-in only, and
+ * these are the very columns every English visitor already reads from the entity's own GET).
+ */
+export async function getEntityBase(db: Db, entityType: TranslatableEntityType, entityId: string): Promise<Record<string, string | null>> {
+  const fields = TRANSLATABLE_FIELDS[entityType] as readonly string[];
+  const delegate = (db as unknown as Record<string, { findUnique: (a: unknown) => Promise<Record<string, unknown> | null> }>)[BASE_DELEGATE[entityType]];
+  const row = await delegate.findUnique({ where: { id: entityId }, select: Object.fromEntries(fields.map((f) => [f, true])) });
+  return Object.fromEntries(fields.map((f) => [f, typeof row?.[f] === "string" ? (row[f] as string) : null]));
+}

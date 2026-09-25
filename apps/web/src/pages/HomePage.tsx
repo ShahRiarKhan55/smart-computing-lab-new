@@ -115,7 +115,7 @@ export function HomePage() {
                   {area.icon}
                 </span>
                 <h3 className="card__title">
-                  <Link to="/research">{area.title}</Link>
+                  <Link to={`/research/${area.id}`}>{area.title}</Link>
                 </h3>
                 <p className="card__text">{area.description}</p>
               </article>
@@ -162,7 +162,7 @@ export function HomePage() {
                   <span className="icon-tile icon-tile--sm" aria-hidden="true">
                     {area.icon}
                   </span>
-                  <Link to="/research">{area.title}</Link>
+                  <Link to={`/research/${area.id}`}>{area.title}</Link>
                 </div>
                 <div className="network__bar" aria-hidden="true">
                   <span style={{ width: `${(count / maxProjects) * 100}%` }} />
