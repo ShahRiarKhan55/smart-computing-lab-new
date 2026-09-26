@@ -17,6 +17,7 @@ import filesRoutes from "./files.routes.js";
 import galleryRoutes from "./gallery.routes.js";
 import translationsRoutes from "./translations.routes.js";
 import eventsRoutes from "./events.routes.js";
+import knowledgeRoutes from "./knowledge.routes.js";
 import adminRoutes from "./admin.routes.js";
 import workspaceRoutes from "./workspace.routes.js";
 
@@ -40,6 +41,7 @@ router.use("/files", filesRoutes);
 router.use("/gallery", galleryRoutes);
 router.use("/translations", translationsRoutes);
 router.use("/events", eventsRoutes);
+router.use("/knowledge", knowledgeRoutes);
 router.use("/admin", adminRoutes);
 router.use("/workspace", workspaceRoutes);
 

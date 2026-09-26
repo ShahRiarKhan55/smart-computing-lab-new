@@ -61,6 +61,7 @@ model User {
   notificationsActed Notification[]            @relation("NotificationActor")
   files              StoredFile[]
   eventsCreated      Event[]
+  knowledgeDocs      KnowledgeDoc[]
   forumPosts         ForumPost[]
   forumRevisions     ForumPostRevision[]
   forumComments      ForumComment[]
@@ -92,9 +93,10 @@ model TeamMember {
   newsLinks        NewsAuthor[]
 
   // Phase 8 back-relations
-  areaLinks    ResearcherArea[]
-  projectLinks ProjectMember[]
-  groupLinks   GroupMember[]
+  areaLinks     ResearcherArea[]
+  projectLinks  ProjectMember[]
+  groupLinks    GroupMember[]
+  knowledgeDocs KnowledgeDoc[]
 
   @@index([category, sortOrder])
 }
@@ -174,6 +176,7 @@ model ResearchArea {
 
   projectLinks    ProjectArea[]
   researcherLinks ResearcherArea[]
+  knowledgeDocs   KnowledgeDoc[]
 
   @@index([sortOrder])
 }
@@ -223,8 +226,9 @@ model ResearchGroup {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members  GroupMember[]
-  projects ResearchProject[]
+  members       GroupMember[]
+  projects      ResearchProject[]
+  knowledgeDocs KnowledgeDoc[]
 
   @@index([sortOrder])
 }
@@ -256,14 +260,15 @@ model ResearchProject {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  group        ResearchGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  areaLinks    ProjectArea[]
-  members      ProjectMember[]
-  publications ProjectPublication[]
-  news         NewsItem[]
-  events       Event[]
-  galleryItems GalleryItem[]
-  forumPosts   ForumPost[]
+  group         ResearchGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  areaLinks     ProjectArea[]
+  members       ProjectMember[]
+  publications  ProjectPublication[]
+  news          NewsItem[]
+  events        Event[]
+  galleryItems  GalleryItem[]
+  forumPosts    ForumPost[]
+  knowledgeDocs KnowledgeDoc[]
 
   @@index([groupId])
   @@index([visibility, sortOrder])
@@ -338,6 +343,42 @@ model Event {
 
   @@index([startsAt])
   @@index([projectId])
+}
+
+// =====================================================================
+// Research knowledge base (Phase 22, new)
+//
+// A knowledge document is lab documentation (methods, setup notes, dataset docs, procedures).
+// Same cardinality rule as News/Event/Gallery: each link is one nullable FK (ON DELETE SET NULL),
+// no join tables. Visibility is the document's own (PUBLIC | LAB_ONLY); English title/body live
+// here, Japanese overrides in Translation (entityType KNOWLEDGE_DOC).
+// =====================================================================
+model KnowledgeDoc {
+  id             String   @id @default(cuid())
+  title          String
+  body           String   @default("")
+  category       String   @default("RESOURCE") // PROJECT_DOCUMENTATION | RESEARCH_NOTE | METHODOLOGY | EXPERIMENT | HARDWARE | SOFTWARE | DATASET | REPRODUCIBILITY | LAB_PROCEDURE | RESOURCE
+  visibility     String   @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  authorId       String?
+  projectId      String?
+  researchAreaId String?
+  groupId        String?
+  teamMemberId   String? // the related researcher (optional)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  author       User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  project      ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  researchArea ResearchArea?    @relation(fields: [researchAreaId], references: [id], onDelete: SetNull)
+  group        ResearchGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  teamMember   TeamMember?      @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
+
+  @@index([visibility, updatedAt])
+  @@index([projectId])
+  @@index([researchAreaId])
+  @@index([groupId])
+  @@index([teamMemberId])
+  @@index([authorId])
 }
 
 // =====================================================================
@@ -638,7 +679,7 @@ model AuditLog {
 /// the code that hard-deletes an entity also deletes its Translation rows.
 model Translation {
   id         String   @id @default(cuid())
-  entityType String // RESEARCH_AREA | NEWS_ITEM | TEAM_MEMBER | RESEARCH_PROJECT | RESEARCH_GROUP | EVENT | FORUM_CATEGORY
+  entityType String // RESEARCH_AREA | NEWS_ITEM | TEAM_MEMBER | RESEARCH_PROJECT | RESEARCH_GROUP | EVENT | FORUM_CATEGORY | KNOWLEDGE_DOC
   entityId   String
   locale     String // "ja" (base locale "en" is never stored here)
   field      String // e.g. "title", "description"

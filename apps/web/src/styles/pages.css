@@ -1934,3 +1934,133 @@ a.tag:hover {
 .manage__add select {
   max-width: 100%;
 }
+
+/* ------------------------------------------------------------
+   Research knowledge base (Phase 22). Reuses .card / .tag / .badge / .grid / .detail-layout / .panel /
+   .admin-filters / .search-pager; only the document-specific pieces live here. Titles, excerpts, related
+   names and the body wrap (long Japanese and unbroken tokens included) instead of overflowing.
+   ------------------------------------------------------------ */
+.knowledge-card {
+  min-width: 0;
+}
+
+.knowledge-card__title,
+.knowledge-card__excerpt,
+.knowledge-card__byline {
+  overflow-wrap: anywhere;
+}
+
+.knowledge-card__excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.knowledge-card__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge-card__links li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The related-research tags sit above the card's stretched title link, so each stays its own click target. */
+.knowledge-card__links a {
+  position: relative;
+  z-index: 1;
+}
+
+.knowledge-related__item {
+  min-width: 0;
+  display: flex;
+}
+
+.knowledge-related__item > .knowledge-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.knowledge-filters__mine {
+  align-self: end;
+}
+
+.knowledge-filters__mine .check-row {
+  margin: 0;
+  min-height: 44px;
+}
+
+/* The filter form folds behind a summary (open by default on wider screens). */
+.knowledge-filters-wrap {
+  margin-bottom: var(--space-4);
+}
+
+.knowledge-filters-wrap > .admin-filters {
+  margin-bottom: 0;
+}
+
+.knowledge-filters-wrap__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  margin-bottom: var(--space-3);
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  color: var(--green-800);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  list-style: none;
+  max-width: 100%;
+}
+
+.knowledge-filters-wrap__summary::-webkit-details-marker {
+  display: none;
+}
+
+.knowledge-filters-wrap__summary:hover {
+  background: var(--green-50);
+}
+
+.knowledge-filters-wrap__summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.knowledge-status {
+  min-height: 1.5em;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* The document body is TEXT: line breaks and indentation are kept, nothing is ever parsed as markup. */
+.knowledge-body {
+  max-width: var(--measure);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.knowledge-detail .detail-layout__a,
+.knowledge-facts dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-form__body {
+  min-height: 12rem;
+  font-family: inherit;
+}

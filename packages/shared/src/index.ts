@@ -18,6 +18,7 @@ export * from "./schemas/notifications.js";
 export * from "./schemas/files.js";
 export * from "./schemas/translations.js";
 export * from "./schemas/event.js";
+export * from "./schemas/knowledge.js";
 export * from "./permissions.js";
 export * from "./i18n/index.js";
 

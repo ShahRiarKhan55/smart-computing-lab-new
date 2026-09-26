@@ -219,8 +219,8 @@ async function main() {
   section("visibility: guest / MEMBER / lead / LAB_MANAGER / ADMIN / unknown role");
   const guestQ = (await search(guest, { q: "Quokka" })).json;
   const memQ = (await search(memA.client, { q: "Quokka" })).json;
-  const GUEST_COUNTS = { all: 7, "research-area": 1, project: 2, group: 1, researcher: 1, publication: 1, news: 1, "forum-topic": 0, event: 0 };
-  const MEMBER_COUNTS = { all: 12, "research-area": 2, project: 3, group: 2, researcher: 1, publication: 2, news: 2, "forum-topic": 0, event: 0 };
+  const GUEST_COUNTS = { all: 7, "research-area": 1, project: 2, group: 1, researcher: 1, publication: 1, news: 1, "forum-topic": 0, event: 0, knowledge: 0 };
+  const MEMBER_COUNTS = { all: 12, "research-area": 2, project: 3, group: 2, researcher: 1, publication: 2, news: 2, "forum-topic": 0, event: 0, knowledge: 0 };
   check("guest counts = PUBLIC matches only (1+2+1+1+1+1 = 7)", eq(guestQ.counts, GUEST_COUNTS) && guestQ.pagination.total === 7, JSON.stringify(guestQ.counts));
   check("member counts = PUBLIC + LAB_ONLY (12)", eq(memQ.counts, MEMBER_COUNTS) && memQ.pagination.total === 12, JSON.stringify(memQ.counts));
   const expectPublic = [aPub, gPub, pOpen, pInHid, pubPub, newsPub].map((x) => x.id).concat(memA.tmId);
@@ -246,7 +246,7 @@ async function main() {
     for (const [word, hidden] of [["hidden-area-secret", aHid], ["hidden-group-secret", gHid], ["hidden-project-secret", pSecret], ["hiddendoi", pubHid], ["hidden-news-secret", newsHid], ["Hidden Authorname", pubHid], ["Journal of Hidden Venue", pubHid]]) {
       const g = await search(guest, { q: word });
       const m = await search(memA.client, { q: word });
-      out.push(g.json.pagination.total === 0 && g.json.results.length === 0 && eq(g.json.counts, { all: 0, "research-area": 0, project: 0, group: 0, researcher: 0, publication: 0, news: 0, "forum-topic": 0, event: 0 }) && ids(m).includes(hidden.id));
+      out.push(g.json.pagination.total === 0 && g.json.results.length === 0 && eq(g.json.counts, { all: 0, "research-area": 0, project: 0, group: 0, researcher: 0, publication: 0, news: 0, "forum-topic": 0, event: 0, knowledge: 0 }) && ids(m).includes(hidden.id));
     }
     return out.every(Boolean);
   })());

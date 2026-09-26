@@ -12,11 +12,13 @@ import { apiFetch } from "../lib/api";
 export function useEntityTranslations(entityType: TranslatableEntityType, entityId: string | undefined, open: boolean) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [base, setBase] = useState<Record<string, string | null> | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!open || !entityId) {
       setValues({});
       setBase(null);
+      setFailed(false);
       return;
     }
     let cancelled = false;
@@ -27,11 +29,15 @@ export function useEntityTranslations(entityType: TranslatableEntityType, entity
         for (const [key, value] of Object.entries(res.ja)) filled[key] = value ?? "";
         setValues(filled);
         setBase(res.base ?? null);
+        setFailed(false);
       })
       .catch(() => {
         // No override yet, or the fetch failed: an empty section is the safe default (nothing to
         // clear, nothing invented) — the entity's own PUT is still the source of truth on save.
-        if (!cancelled) setValues({});
+        if (!cancelled) {
+          setValues({});
+          setFailed(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -42,6 +48,6 @@ export function useEntityTranslations(entityType: TranslatableEntityType, entity
     setValues((v) => ({ ...v, [key]: value }));
   }
 
-  /** `base`: the English text per field once loaded (null until then / on failure). */
-  return { values, setField, base };
+  /** `base`: the English text per field once loaded (null until then / on failure). `failed`: the fetch failed (an edit form that needs `base` must not save). */
+  return { values, setField, base, failed };
 }

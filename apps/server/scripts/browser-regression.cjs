@@ -9,6 +9,7 @@
 //   ONLY_ADMIN=1 runs just the Phase 17 admin/CMS section (steps named "admin ..."; P15_W / P15_USERS=admin-manager,admin-admin narrow the sweeps).
 //   ONLY_DISCOVERY=1 runs just the Phase 20 discovery section (steps named "discovery ..."; P15_W / P15_USERS=disc-guest,disc-member narrow the sweeps).
 //   ONLY_WORKSPACE=1 runs just the Phase 21 workspace section (steps named "workspace ..."; P15_W / P15_USERS=ws-guest,ws-member,ws-lead,ws-manager,ws-admin,ws-noprofile,ws-empty narrow the sweeps).
+//   ONLY_KNOWLEDGE=1 runs just the Phase 22 knowledge-base section (steps named "knowledge ..."; P15_W / P15_USERS=k22-guest,k22-member,k22-lead,k22-manager,k22-admin narrow the sweeps).
 //   ONLY_PUBS=1 runs just the Phase 19 publications section (steps named "publications ..."; P15_W / P15_USERS=pubs-guest,pubs-member,pubs-manager narrow the sweeps).
 //   ONLY_RESEARCH=1 runs just the Phase 18 research-structure section (steps named "research ..."; P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
@@ -52,6 +53,7 @@ const ONLY_RESEARCH = !!process.env.ONLY_RESEARCH;
 const ONLY_PUBS = !!process.env.ONLY_PUBS;
 const ONLY_DISCOVERY = !!process.env.ONLY_DISCOVERY;
 const ONLY_WORKSPACE = !!process.env.ONLY_WORKSPACE;
+const ONLY_KNOWLEDGE = !!process.env.ONLY_KNOWLEDGE;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -223,7 +225,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery ")) || (ONLY_WORKSPACE && !name.startsWith("workspace "))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery ")) || (ONLY_WORKSPACE && !name.startsWith("workspace ")) || (ONLY_KNOWLEDGE && !name.startsWith("knowledge "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -710,7 +712,7 @@ async function connect() {
     check("keyboard: Tab from the box reaches the Search button", (await ev(`document.activeElement.innerText.trim()`)) === "Search");
     await key("Tab", "Tab", 9);
     check("keyboard: ...then the first filter chip (All)", (await ev(`document.activeElement.innerText.trim().startsWith('All')`)) === true);
-    for (let i = 0; i < 9; i++) await key("Tab", "Tab", 9); // the 8 other chips (Phase 16 added Events), then the first result
+    for (let i = 0; i < 10; i++) await key("Tab", "Tab", 9); // the 9 other chips (Phase 16 added Events, Phase 22 Knowledge), then the first result
     check("keyboard: ...then the first result's link, with a visible focus ring on its card", await ev(`(() => { const a = document.activeElement; return a.classList.contains('search-result__link') && getComputedStyle(a.closest('.search-result')).outlineStyle === 'solid'; })()`));
     check("labels: the /search box has a real <label>, the chips are a labelled group", await ev(`!!document.querySelector('label[for="search-page-input"]') && document.querySelector('.search-filters').getAttribute('aria-label') === 'Filter results by type' && document.querySelector('.search-filters').getAttribute('role') === 'group'`));
     check("semantic headings + list: h1, each result is an <article> with an h3 inside an ordered list", await ev(`document.querySelectorAll('h1').length === 1 && document.querySelectorAll('ol.search-results > li > article.search-result h3 a[href]').length > 0`));
@@ -719,9 +721,9 @@ async function connect() {
     await go("/search?q=FPGA");
     await statusIs("FPGA");
     const chips = await ev(`[...document.querySelectorAll('.search-filters a')].map(a => a.innerText.replace(/\\s+/g, ' ').trim())`);
-    check("chips: All + the eight types, each with a count", chips.length === 9 && chips[0].startsWith("All") && ["Research Areas", "Projects", "Groups", "Researchers", "Publications", "News", "Forum Topics", "Events"].every((l) => chips.some((c) => c.startsWith(l) && /\d+$/.test(c))), chips.join(" | "));
+    check("chips: All + the nine types, each with a count", chips.length === 10 && chips[0].startsWith("All") && ["Research Areas", "Projects", "Groups", "Researchers", "Publications", "News", "Forum Topics", "Events", "Knowledge"].every((l) => chips.some((c) => c.startsWith(l) && /\d+$/.test(c))), chips.join(" | "));
     const apiCounts = (await searchJson("q=FPGA")).counts;
-    check("chip counts equal the API counts (nothing is invented client-side)", chips.every((c) => { const m = c.match(/^(.*?)\s+(\d+)$/); const map = { All: "all", "Research Areas": "research-area", Projects: "project", Groups: "group", Researchers: "researcher", Publications: "publication", News: "news", "Forum Topics": "forum-topic", Events: "event" }; return m && apiCounts[map[m[1]]] === Number(m[2]); }));
+    check("chip counts equal the API counts (nothing is invented client-side)", chips.every((c) => { const m = c.match(/^(.*?)\s+(\d+)$/); const map = { All: "all", "Research Areas": "research-area", Projects: "project", Groups: "group", Researchers: "researcher", Publications: "publication", News: "news", "Forum Topics": "forum-topic", Events: "event", Knowledge: "knowledge" }; return m && apiCounts[map[m[1]]] === Number(m[2]); }));
     check("the active chip is marked (aria-current)", await ev(`document.querySelector('.search-filters a[aria-current]').innerText.startsWith('All')`));
     await clickText("Publications", ".search-filters a");
     check("7. Publications filter: URL gets type=publication, only publication cards", (await waitFor(`location.search === '?q=FPGA&type=publication'`)) && (await waitFor(`document.querySelectorAll('.search-result').length > 0 && [...document.querySelectorAll('.search-result')].every(c => c.classList.contains('search-result--publication'))`)) && (await statusText()).includes("in Publications"));
@@ -1006,7 +1008,7 @@ async function connect() {
   // "a MEMBER has no Admin link" therefore use D.plain, which stays a true MEMBER for the whole run.
   const TRUE_MEMBER = { email: D.plain.email, password: PW_NAV };
   const MANAGER = { email: D.mgr.email, password: PW_NAV };
-  const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/news"];
+  const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/news", "/knowledge"]; // Phase 22 added Knowledge as the last Research link
   const PEOPLE_HREFS = ["/team", "/groups"];
   const phone = (w) => send("Emulation.setDeviceMetricsOverride", { width: w, height: 844, deviceScaleFactor: 2, mobile: true });
   const desktopAt = (w, h = 800) => send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
@@ -1024,7 +1026,7 @@ async function connect() {
     check("N4. each trigger controls an existing panel labelled '<group> menu'", await ev(`[...document.querySelectorAll('.nav__trigger')].every(b => { const p = document.getElementById(b.getAttribute('aria-controls')); return p && p.getAttribute('aria-label') === b.textContent.trim() + ' menu'; })`));
     await shot("nav-guest-closed");
 
-    check("N5. clicking Research opens it: expanded, visible, four links in the documented order", (await clickEl(trig("research"))) && (await expanded("research")) === "true" && (await panelHidden("research")) === false && eqJson(await panelHrefs("research"), RESEARCH_HREFS));
+    check("N5. clicking Research opens it: expanded, visible, five links in the documented order", (await clickEl(trig("research"))) && (await expanded("research")) === "true" && (await panelHidden("research")) === false && eqJson(await panelHrefs("research"), RESEARCH_HREFS));
     check("N5b. the panel sits under its trigger, inside the viewport, not clipped", await inViewport("#nav-panel-research"));
     await shot("nav-guest-research-open");
     check("N6. opening People closes Research (one dropdown at a time) and lists Team + Groups", (await clickEl(trig("people"))) && (await expanded("people")) === "true" && (await expanded("research")) === "false" && eqJson(await panelHrefs("people"), PEOPLE_HREFS));
@@ -1075,9 +1077,9 @@ async function connect() {
     await press("down");
     check("K8. ArrowDown moves to the next link", (await focusDesc()) === "projects");
     await press("end");
-    check("K9. End goes to the last link", (await focusDesc()) === "news");
+    check("K9. End goes to the last link", (await focusDesc()) === "knowledge");
     await press("down");
-    check("K9b. ArrowDown on the last link stays there (no wrap trap)", (await focusDesc()) === "news");
+    check("K9b. ArrowDown on the last link stays there (no wrap trap)", (await focusDesc()) === "knowledge");
     await press("home");
     check("K10. Home goes to the first link", (await focusDesc()) === "research areas");
     await press("up");
@@ -1086,7 +1088,7 @@ async function connect() {
 
     // Tab through the whole panel and off the end: the dropdown closes itself.
     await press("down");
-    for (let i = 0; i < 4; i++) await tab(); // 3 more links to News, then off the group
+    for (let i = 0; i < 5; i++) await tab(); // 4 more links to Knowledge, then off the group
     check("K12. Tabbing out of the last link closes the dropdown and lands on the next header control", (await expanded("research")) === "false" && (await focusDesc()) === "people");
     await tab(true); // Shift+Tab from People back to the Research trigger
     await press("enter"); // Research reopened
@@ -2046,7 +2048,8 @@ async function connect() {
     if (!root) return { resp: ["no root " + rootSel], a11y: [] };
     const vw = document.documentElement.clientWidth;
     const short = (el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + (typeof el.className === "string" && el.className ? "." + el.className.trim().split(/\s+/)[0] : "") + '"' + (el.textContent || "").trim().slice(0, 24) + '"';
-    const shown = (el) => { const s = getComputedStyle(el); if (s.visibility === "hidden" || s.display === "none" || el.closest("[hidden]")) return false; const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    // Content of a CLOSED <details> (Phase 22's folded filters) is not rendered and not reachable, even though the engine may keep a stale box for it.
+    const shown = (el) => { const s = getComputedStyle(el); if (s.visibility === "hidden" || s.display === "none" || el.closest("[hidden]")) return false; const dt = el.closest("details:not([open])"); if (dt && !el.closest("summary")) return false; const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
     const tiny = (el) => { const b = el.getBoundingClientRect(); return b.width <= 2 || b.height <= 2; };
     const scroller = (el) => { for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) { const o = getComputedStyle(a).overflowX; if (o === "auto" || o === "scroll" || o === "hidden" || o === "clip") return true; } return false; };
     if (!rootSel && document.documentElement.scrollWidth > vw + 1) resp.push("page overflows by " + (document.documentElement.scrollWidth - vw) + "px");
@@ -3108,7 +3111,7 @@ async function connect() {
   await step("admin content: filters, search, deep links, pagination, hostile text (manager)", async () => {
     check("admin content: manager login", await login(D.mgr.email, PW));
     await admReady("/admin/content", "Research areas");
-    check("admin content: six type chips (events have their own section) and one pressed", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 6 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1);
+    check("admin content: seven type chips (events have their own section; Phase 22 added knowledge documents) and one pressed", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 7 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1);
     check("admin content: the results are a real list with a live count", (await exists("ul.admin-list")) && (await exists('[role="status"][aria-live="polite"]')));
     await admReady("/admin/content?type=news", "ZZ B9");
     check("admin content: the type in the URL is honoured (news)", (await admQ("type")) === "news" && (await ev(`document.querySelector('.admin-types .chip[aria-pressed="true"]').textContent.trim()`)) === "News");
@@ -3237,7 +3240,7 @@ async function connect() {
   await step("admin translations: view, edit, clear, long text, English base stays readable", async () => {
     check("admin tr: manager login", await login(D.mgr.email, PW));
     await admReady("/admin/translations", "English (base text)");
-    check("admin tr: seven type chips (Phase 19 added publications), one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 7 && (await exists("#at-q")) && (await exists("#at-state")));
+    check("admin tr: eight type chips (Phase 19 added publications, Phase 22 knowledge documents), one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 8 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1 && (await exists("#at-q")) && (await exists("#at-state")));
     await admReady(`/admin/translations?type=NEWS_ITEM&q=${encodeURIComponent("ZZ B9 Adm News Alpha")}`, "English (base text)");
     await waitFor(`document.querySelectorAll('.admin-tr').length === 1`);
     check("admin tr: the entry shows the English base text (read-only) beside an editable Japanese field", (await ev(`document.querySelector('.admin-tr__base').textContent`)).includes("ZZ B9 Adm News Alpha") && (await ev(`document.querySelector('.admin-tr__base').getAttribute('lang')`)) === "en" && (await ev(`document.querySelector('.admin-tr textarea').getAttribute('lang')`)) === "ja");
@@ -4640,8 +4643,8 @@ async function connect() {
     await wsReady();
     check("workspace member: one h1, one main, the page title", (await pCount("h1")) === 1 && (await pCount("main")) === 1 && (await ev(`document.querySelector('h1').textContent.trim()`)) === "My research workspace" && (await ev(`document.title`)).includes("My research workspace"));
     const heads = await ev(`[...document.querySelectorAll('main h2')].map((h) => h.textContent.trim())`);
-    check("workspace member: seven labelled sections with real counts in their headings", heads.length === 7 && heads[0] === "My projects (2)" && heads[1] === "My groups (1)" && heads[2] === "My research areas (2)" && heads[3] === "My publications (0)" && heads[4].startsWith("Upcoming events (") && heads[5].startsWith("Recent research news (") && heads[6].startsWith("Research network ("), JSON.stringify(heads));
-    check("workspace member: every section is a named region (aria-labelledby resolves)", await ev(`[...document.querySelectorAll('main section[aria-labelledby]')].every((s) => !!document.getElementById(s.getAttribute('aria-labelledby'))) && document.querySelectorAll('main section[aria-labelledby]').length === 7`));
+    check("workspace member: eight labelled sections (Phase 22 added 'Recent documentation') with real counts in their headings", heads.length === 8 && heads[0] === "My projects (2)" && heads[1] === "My groups (1)" && heads[2] === "My research areas (2)" && heads[3] === "My publications (0)" && heads[4].startsWith("Upcoming events (") && heads[5].startsWith("Recent research news (") && heads[6] === "Recent documentation" && heads[7].startsWith("Research network ("), JSON.stringify(heads));
+    check("workspace member: every section is a named region (aria-labelledby resolves)", await ev(`[...document.querySelectorAll('main section[aria-labelledby]')].every((s) => !!document.getElementById(s.getAttribute('aria-labelledby'))) && document.querySelectorAll('main section[aria-labelledby]').length === 8`));
     const p1 = await wsCard("projects", "ZZ B9 W21 Project One");
     const p2 = await wsCard("projects", "ZZ B9 W21 Project Lab");
     check("workspace member: both projects, the LAB_ONLY one included (a signed-in member may see it)", !!p1 && !!p2);
@@ -4954,6 +4957,705 @@ async function connect() {
   });
   await step("workspace restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
 
+  // ================================================================ PHASE 22: research knowledge base
+  // /knowledge (list, filters, paging), /knowledge/:id, the add/edit/delete dialogs with the Japanese fields, the "Knowledge &
+  // documentation" sections on project / area / group / researcher pages, search, the workspace section and the admin views, in EN
+  // and JA, for guest / member / project lead / lab manager / admin, with hostile and very long text and the nine-width sweep.
+  // (Steps are named "knowledge ..."; ONLY_KNOWLEDGE=1 runs just them; P15_W / P15_USERS=k22-guest,k22-member,k22-lead,k22-manager,
+  // k22-admin narrow the sweeps.)
+  section("phase 22: research knowledge base");
+  const K22 = {};
+  const k22X = (n) => `<img src=x onerror=window.__k22Xss=${n}>`;
+  const k22JaLong = "ZZ B9 K22 " + "超長い日本語のタイトルがカードと詳細ページの幅を壊さないことを確認するためのテスト".repeat(2);
+  const k22JaBody = "これは非常に長い日本語の本文です。レイアウトが崩れないことを確認します。".repeat(60);
+  const k22Cards = () => ev(`[...document.querySelectorAll('.knowledge-card')].map((c) => ({ title: c.querySelector('.card__title')?.textContent.trim(), text: c.innerText, hrefs: [...c.querySelectorAll('a')].map((a) => a.getAttribute('href')), edit: !!c.querySelector('.card-edit-btn'), del: !!c.querySelector('.icon-btn--danger'), badges: [...c.querySelectorAll('.badge')].map((b) => b.textContent.trim().toLowerCase()) }))`);
+  const k22Titles = async () => (await k22Cards()).map((c) => c.title);
+  const k22Card = async (title) => (await k22Cards()).find((c) => c.title === title) || null;
+  const k22Ready = async (p, mustHave) => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]') && (!!document.querySelector('.knowledge-card') || !!document.querySelector('.empty-state') || !!document.querySelector('[role="alert"]') || !!document.querySelector('.knowledge-body') || !!document.querySelector('.admin-row') || !!document.querySelector('.search-result') || !!document.querySelector('#ws-projects'))`, 9000); if (mustHave) await waitText(mustHave, 9000); await sleep(300); };
+  const k22Override = async (id) => Object.values(((await K22.a.req("GET", `/translations/KNOWLEDGE_DOC/${id}`)).json || {}).ja || {}).filter(Boolean).length; // stored Japanese overrides of one document
+  const k22Api = (locale, p) => ev(`fetch('/api${p}', { credentials: 'same-origin', headers: ${locale ? `{ 'X-Locale': '${locale}' }` : "{}"} }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }))`);
+  const k22Dlg = () => ev(`(() => { const d = document.querySelector('.modal[role="dialog"]'); if (!d) return null; const g = (id) => document.getElementById(id); return { title: (document.getElementById(d.getAttribute('aria-labelledby') || '__') || {}).textContent?.trim() || '', tv: g('knowledge_title')?.value ?? null, bv: g('knowledge_body')?.value ?? null, cat: g('knowledge_category')?.value ?? null, proj: g('knowledge_project')?.value ?? null, area: g('knowledge_area')?.value ?? null, grp: g('knowledge_group')?.value ?? null, res: g('knowledge_researcher')?.value ?? null, vis: g('knowledge_visibility')?.value ?? null, tja: g('knowledge_title_ja')?.value ?? null, bja: g('knowledge_body_ja')?.value ?? null, alert: d.querySelector('[role="alert"]')?.innerText.trim() || '', focusId: document.activeElement?.id || '', submitDisabled: d.querySelector('button.form-submit')?.disabled ?? null, projOpts: [...(g('knowledge_project')?.options || [])].map((o) => o.textContent.trim()) }; })()`);
+  const k22DlgWait = async (pred, ms = 6000) => { const t0 = Date.now(); let d; while (Date.now() - t0 < ms) { d = await k22Dlg(); if (d && pred(d)) return d; await sleep(120); } return d; };
+  const k22Fill = async (o) => { for (const [id, v] of Object.entries(o)) await setVal(id, v); };
+  const k22Save = async () => { await ev(`document.querySelector('.modal button.form-submit')?.scrollIntoView({ block: 'center' })`); await p15Settle(); return clickEl(".modal button.form-submit"); };
+  const k22Close = async () => { await press("esc"); return waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2500); };
+  const k22Add = async () => { await pClick(".admin-bar button", ""); return k22DlgWait((d) => d.bv !== null); };
+  const k22EditOn = async (title) => { // real click on the edit icon of the card with this title
+    const ok = await ev(`(() => { document.querySelectorAll('[data-k22-op]').forEach((e) => e.removeAttribute('data-k22-op')); const c = [...document.querySelectorAll('.knowledge-card')].find((x) => x.querySelector('.card__title')?.textContent.trim() === ${JSON.stringify(title)}); const b = c && c.querySelector('.card-edit-btn .icon-btn:not(.icon-btn--danger)'); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.setAttribute('data-k22-op', '1'); return true; })()`);
+    if (!ok) return null;
+    await p15Settle();
+    await clickEl("[data-k22-op]");
+    return k22DlgWait((d) => d.tv !== null && d.bv !== null && d.bv !== "");
+  };
+  const k22DelOn = async (title) => {
+    const ok = await ev(`(() => { document.querySelectorAll('[data-k22-op]').forEach((e) => e.removeAttribute('data-k22-op')); const c = [...document.querySelectorAll('.knowledge-card')].find((x) => x.querySelector('.card__title')?.textContent.trim() === ${JSON.stringify(title)}); const b = c && c.querySelector('.icon-btn--danger'); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.setAttribute('data-k22-op', '1'); return true; })()`);
+    if (!ok) return false;
+    await p15Settle();
+    await clickEl("[data-k22-op]");
+    return waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+  };
+  const k22Mk = async (key, role, name) => {
+    const r = await K22.a.req("POST", "/users", { email: `b9-k22-${key}@example.test`, password: PW, role, name, initials: "K" + key.slice(0, 1).toUpperCase(), memberRole: "Researcher", category: "RESEARCH" });
+    const team = (await K22.a.req("GET", "/team")).json;
+    D.userIds.push(r.json.id);
+    return { email: `b9-k22-${key}@example.test`, userId: r.json.id, tmId: team.find((m) => m.name === name).id, name };
+  };
+  const k22Login = (u) => login(u.email, PW);
+  // The browser run's own DB COPY (run-browser.sh exports K22_DB). Used ONLY to create the one fixture the API cannot: a project whose
+  // visibility is outside the allow-list ("PRIVATE"), i.e. invisible to every signed-in viewer.
+  const k22Sql = (sql, ...params) => { if (!process.env.K22_DB) throw new Error("K22_DB is not set"); const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync(process.env.K22_DB); try { const st = db.prepare(sql); return /^\s*select/i.test(sql) ? st.all(...params) : st.run(...params); } finally { db.close(); } };
+
+  await step("knowledge seed: five roles, public / lab-only / leaky / hostile / long / many documents with Japanese overrides", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const a = new Client();
+    await a.req("POST", "/auth/login", ADMIN);
+    K22.a = a;
+    const J = (r) => r.json;
+    K22.lead = await k22Mk("lead", "MEMBER", "ZZ B9 K22 Lead");
+    K22.mem = await k22Mk("mem", "MEMBER", "ZZ B9 K22 Member");
+    K22.mgr = await k22Mk("mgr", "LAB_MANAGER", "ZZ B9 K22 Manager");
+    K22.none = await k22Mk("none", "MEMBER", "ZZ B9 K22 Nobody");
+    K22.aPub = J(await a.req("POST", "/research", { title: "ZZ B9 K22 Area Public", description: "k22 area", tag: "ZZK22", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 K22 公開分野" } } }));
+    K22.aHid = J(await a.req("POST", "/research", { title: "ZZ B9 K22 Area Lab", description: "k22 lab area", tag: "ZZK22", visibility: "LAB_ONLY" }));
+    K22.aX = J(await a.req("POST", "/research", { title: "ZZ B9 K22 Area " + k22X(2), description: "hostile", tag: "ZZK22", visibility: "PUBLIC" }));
+    K22.gPub = J(await a.req("POST", "/groups", { name: "ZZ B9 K22 Group Public", description: "g", visibility: "PUBLIC", translations: { ja: { name: "ZZ B9 K22 公開グループ" } } }));
+    K22.gHid = J(await a.req("POST", "/groups", { name: "ZZ B9 K22 Group Lab", description: "g", visibility: "LAB_ONLY" }));
+    K22.gX = J(await a.req("POST", "/groups", { name: "ZZ B9 K22 Group <script>window.__k22Xss=7</script>", description: "gx", visibility: "PUBLIC" }));
+    const mkPrj = async (title, visibility, groupId, ja) => J(await a.req("POST", "/projects", { title, summary: "K22 summary", description: "d", status: "ACTIVE", visibility, ...(groupId ? { groupId } : {}), ...(ja ? { translations: { ja: { title: ja } } } : {}) }));
+    K22.p1 = await mkPrj("ZZ B9 K22 Project One", "PUBLIC", K22.gPub.id, "ZZ B9 K22 プロジェクト一");
+    K22.pHid = await mkPrj("ZZ B9 K22 Project Lab", "LAB_ONLY", null);
+    K22.pX = await mkPrj("ZZ B9 K22 Project " + k22X(4), "PUBLIC", K22.gX.id);
+    K22.pEmpty = await mkPrj("ZZ B9 K22 Project Without Docs", "PUBLIC", null);
+    await a.req("PUT", `/projects/${K22.p1.id}/members`, { members: [{ teamMemberId: K22.lead.tmId, role: "LEAD" }] });
+    await a.req("PUT", `/groups/${K22.gPub.id}/members`, { members: [{ teamMemberId: K22.lead.tmId, role: "MEMBER" }] });
+    await a.req("PUT", `/member/${K22.lead.tmId}/areas`, { areaIds: [K22.aPub.id] });
+    const doc = async (client, body) => J(await client.req("POST", "/knowledge", body));
+    // The manager writes the shared fixtures, so they carry a public author profile (byline) and the manager may set visibility.
+    const mgrC = new Client(); await mgrC.req("POST", "/auth/login", { email: K22.mgr.email, password: PW });
+    K22.dPub = await doc(mgrC, { title: "ZZ B9 K22 Public Methodology", body: "Step one: flash the board.\nStep two: run the tests.\n\n  Indented ZZKPUB note", category: "METHODOLOGY", visibility: "PUBLIC", projectId: K22.p1.id, researchAreaId: K22.aPub.id, groupId: K22.gPub.id, teamMemberId: K22.lead.tmId, translations: { ja: { title: "ZZ B9 K22 公開メソドロジー", body: "手順その一：ボードを書き込む。\n手順その二：テストを実行する。" } } });
+    K22.dLab = await doc(mgrC, { title: "ZZ B9 K22 Lab Only Procedure", body: "Internal ZZKLAB budget procedure", category: "LAB_PROCEDURE", visibility: "LAB_ONLY" });
+    K22.dLeak = await doc(mgrC, { title: "ZZ B9 K22 Leaky Public Note", body: "Public note on lab-only things ZZKLEAK", category: "EXPERIMENT", visibility: "PUBLIC", projectId: K22.pHid.id, researchAreaId: K22.aHid.id, groupId: K22.gHid.id });
+    K22.dX = await doc(mgrC, { title: "ZZ B9 K22 Hostile " + k22X(1), body: `<script>window.__k22Xss=3</script>\n<iframe src="javascript:window.__k22Xss=4"></iframe> javascript:alert(1) <a href="javascript:window.__k22Xss=8">x</a>`, category: "SOFTWARE", visibility: "PUBLIC", projectId: K22.pX.id, researchAreaId: K22.aX.id, groupId: K22.gX.id, translations: { ja: { title: "ZZ B9 K22 日本語 " + k22X(5), body: `日本語 <script>window.__k22Xss=6</script>` } } });
+    K22.dLongJa = await doc(mgrC, { title: k22JaLong.slice(0, 200), body: k22JaBody, category: "RESEARCH_NOTE", visibility: "PUBLIC", projectId: K22.p1.id });
+    K22.dLongTok = await doc(mgrC, { title: "ZZ B9 K22 " + "T".repeat(150), body: "U".repeat(3000) + " tail", category: "DATASET", visibility: "PUBLIC" });
+    K22.many = [];
+    for (let i = 0; i < 14; i++) K22.many.push(await doc(mgrC, { title: `ZZ B9 K22 Many ${String(i).padStart(2, "0")}`, body: `many body ${i} ZZKMANY`, category: "DATASET", visibility: "PUBLIC", projectId: K22.p1.id }));
+    const memC = new Client(); await memC.req("POST", "/auth/login", { email: K22.mem.email, password: PW });
+    const leadC = new Client(); await leadC.req("POST", "/auth/login", { email: K22.lead.email, password: PW });
+    K22.dMem = await doc(memC, { title: "ZZ B9 K22 Member Own Note", body: "written by the member ZZKMEM", category: "RESEARCH_NOTE" });
+    K22.dLead = await doc(leadC, { title: "ZZ B9 K22 Lead Note", body: "written by the lead ZZKLEAD", category: "PROJECT_DOCUMENTATION", projectId: K22.p1.id });
+    check("knowledge seed: the fixtures exist", [K22.lead.tmId, K22.mem.tmId, K22.mgr.tmId, K22.none.tmId, K22.aPub.id, K22.gPub.id, K22.p1.id, K22.dPub.id, K22.dLab.id, K22.dLeak.id, K22.dX.id, K22.dLongJa.id, K22.dLongTok.id, K22.many[13]?.id, K22.dMem.id, K22.dLead.id].every(Boolean), JSON.stringify([K22.dPub?.error, K22.dX?.error, K22.dLongJa?.error]));
+  });
+
+  await step("knowledge guest: navigation, PUBLIC list only, filters, paging, detail, hidden = not found, no leak", async () => {
+    await desktop(); await setLocale(null);
+    await k22Ready("/knowledge");
+    check("knowledge guest: the header offers Knowledge under Research", (await exists('#nav-panel-research a[href="/knowledge"]')) && (await panelLabels("research")).includes("knowledge"));
+    check("knowledge guest: one h1 'Knowledge base', one main, the tab title, a described page", (await pCount("h1")) === 1 && (await pCount("main")) === 1 && (await ev(`document.querySelector('h1').textContent.trim()`)) === "Knowledge base" && (await ev(`document.title`)).includes("Knowledge base"));
+    let t = await pMain();
+    check("knowledge guest: no '+ Add document' bar, no edit/delete icons, no visibility or 'related to me' controls", !t.includes("Add document") && !(await exists(".admin-bar")) && !(await exists(".card-edit-btn")) && !(await exists("#kf-visibility")) && !(await exists("#kf-mine")));
+    await k22Ready("/knowledge?q=ZZ%20B9%20K22%20Public");
+    const all = await k22Titles();
+    check("knowledge guest: a search of the list finds the PUBLIC documents", all.includes("ZZ B9 K22 Public Methodology") && all.includes("ZZ B9 K22 Leaky Public Note"), JSON.stringify(all));
+    for (const [word, label] of [["ZZKLAB", "the LAB_ONLY procedure"], ["ZZKMEM", "the member's LAB_ONLY note"], ["ZZKLEAD", "the lead's LAB_ONLY note"]]) {
+      await k22Ready(`/knowledge?q=${word}`);
+      check(`knowledge guest: ${label} is not listed, not counted and not searchable (the empty state, 0 documents)`, (await pCount(".knowledge-card")) === 0 && (await ev(`document.querySelector('.knowledge-status').innerText.trim()`)) === "0 documents" && (await pMain()).includes("No documents match these filters."));
+    }
+    await k22Ready("/knowledge?q=ZZKPUB");
+    check("knowledge guest: the result count reads '1 document' in a polite live region", (await ev(`document.querySelector('.knowledge-status').innerText.trim()`)) === "1 document" && (await exists('.knowledge-status[role="status"][aria-live="polite"]')));
+    const pub = await k22Card("ZZ B9 K22 Public Methodology");
+    check("knowledge guest: a card shows the category, an excerpt, the related project / area / group / researcher, the author byline and the update date, and links the title to /knowledge/:id", !!pub && pub.badges.includes("methodology") && pub.text.includes("Step one: flash the board.") && ["ZZ B9 K22 Project One", "ZZ B9 K22 Area Public", "ZZ B9 K22 Group Public", "ZZ B9 K22 Lead"].every((s) => pub.text.includes(s)) && pub.text.includes("By ZZ B9 K22 Manager") && /Updated [A-Z][a-z]{2} \d{1,2}, \d{4}/.test(pub.text) && pub.hrefs[0] === `/knowledge/${K22.dPub.id}` && pub.hrefs.includes(`/projects/${K22.p1.id}`) && pub.hrefs.includes(`/research/${K22.aPub.id}`) && pub.hrefs.includes(`/groups/${K22.gPub.id}`) && pub.hrefs.includes(`/team/${K22.lead.tmId}`), JSON.stringify(pub));
+    await k22Ready("/knowledge?q=ZZKLEAK");
+    const leak = await k22Card("ZZ B9 K22 Leaky Public Note");
+    check("knowledge guest: a PUBLIC note on LAB_ONLY project / area / group names none of them (card and page HTML)", !!leak && !leak.text.includes("Project Lab") && !leak.text.includes("Area Lab") && !leak.text.includes("Group Lab") && !(await ev(`document.documentElement.outerHTML`)).includes(K22.pHid.id) && !(await ev(`document.documentElement.outerHTML`)).includes(K22.gHid.id), JSON.stringify(leak));
+    check("knowledge guest: a card has NO related links when none are visible, and never an empty related list", !!leak && leak.hrefs.length === 1);
+    // filters through the real form
+    await k22Ready("/knowledge");
+    await setVal("kf-category", "METHODOLOGY");
+    await ev(`document.querySelector('form.knowledge-filters').requestSubmit()`);
+    await waitFor(`location.search.includes('category=METHODOLOGY')`, 4000);
+    await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(300);
+    check("knowledge guest: the category filter writes ?category= to the URL and narrows the list to that category", (await ev(`location.search`)).includes("category=METHODOLOGY") && (await k22Cards()).length > 0 && (await k22Cards()).every((c) => c.badges.includes("methodology")));
+    check("knowledge guest: after filtering, the form still shows the chosen value and 'Clear filters' returns to /knowledge", (await ev(`document.getElementById('kf-category').value`)) === "METHODOLOGY" && (await clickEl('a.btn--ghost[href="/knowledge"]')) && (await waitFor(`location.pathname === '/knowledge' && location.search === ''`, 4000)));
+    await k22Ready("/knowledge?q=nothingmatchesthiszzz");
+    check("knowledge guest: no match = a filtered empty state with a hint (not a blank page)", (await pMain()).includes("No documents match these filters.") && (await pCount(".knowledge-card")) === 0);
+    await k22Ready(`/knowledge?project=${K22.pHid.id}`);
+    check("knowledge guest: filtering by a hidden project shows the SAME empty state as any unknown project", (await pMain()).includes("No documents match these filters.") && (await pCount(".knowledge-card")) === 0 && !(await pMain()).includes("Leaky"));
+    await k22Ready("/knowledge?q=ZZ%20B9%20K22%20Many");
+    check("knowledge guest: 14 documents = page 1 of 2 with 12 cards, a Next link and 'Page 1 of 2'", (await pCount(".knowledge-card")) === 12 && (await exists('.search-pager a[rel="next"]')) && (await ev(`document.querySelector('.search-pager__pos').textContent.trim()`)) === "Page 1 of 2" && (await exists('.search-pager span.is-disabled')));
+    await pClick('.search-pager a[rel="next"]');
+    await waitFor(`location.search.includes('page=2')`, 4000); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(300);
+    check("knowledge guest: Next opens page 2 (the remaining 2 documents), ordering is stable and Previous is offered", (await pCount(".knowledge-card")) === 2 && (await exists('.search-pager a[rel="prev"]')) && (await ev(`document.querySelector('.search-pager__pos').textContent.trim()`)) === "Page 2 of 2");
+    check("knowledge guest: on the LAST page 'Next' is a disabled, non-link control (aria-disabled) and 'Previous' is a link", !(await exists('.search-pager a[rel="next"]')) && /Next/.test(await ev(`document.querySelector('.search-pager span.is-disabled[aria-disabled="true"]')?.textContent || ''`)) && (await exists('.search-pager a[rel="prev"]')));
+    check("knowledge guest: page 1 and page 2 hold 14 DIFFERENT documents", await (async () => { const p2 = await k22Titles(); await k22Ready("/knowledge?q=ZZ%20B9%20K22%20Many"); const p1 = await k22Titles(); return new Set([...p1, ...p2]).size === 14; })());
+    await k22Ready("/knowledge?page=abc&category=nope");
+    check("knowledge guest: a junk ?page= falls back to page 1, and an unknown ?category= is an error state, not a crash", (await pCount("h1")) === 1 && (await exists('[role="alert"]')));
+    // detail
+    await k22Ready(`/knowledge/${K22.dPub.id}`);
+    check("knowledge guest: the detail page: breadcrumbs (Home / Knowledge / title), one h1 = the title, category badge", (await ev(`[...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim())`)).join("|") === "Home|Knowledge|ZZ B9 K22 Public Methodology" && (await ev(`document.querySelector('h1').textContent.trim()`)) === "ZZ B9 K22 Public Methodology" && (await ev(`document.querySelector('.detail-meta').innerText.toLowerCase()`)).includes("methodology"));
+    const body = await ev(`(() => { const b = document.querySelector('.knowledge-body'); return { text: b.innerText, ws: getComputedStyle(b).whiteSpace, wrap: getComputedStyle(b).overflowWrap }; })()`);
+    check("knowledge guest: the body is TEXT with its line breaks and indentation kept (pre-wrap), wrapping long words", body.text.includes("Step one: flash the board.\nStep two: run the tests.") && body.text.includes("  Indented ZZKPUB note") && body.ws === "pre-wrap" && /anywhere|break-word/.test(body.wrap), JSON.stringify(body));
+    const facts = await ev(`[...document.querySelectorAll('.knowledge-facts > div')].map((d) => ({ k: d.querySelector('dt').textContent.trim(), v: d.querySelector('dd').innerText.trim(), href: d.querySelector('a')?.getAttribute('href') || null }))`);
+    check("knowledge guest: the details panel lists category, author, dates and the four related records with working links", facts.some((f) => f.k === "Category" && f.v === "Methodology") && facts.some((f) => f.k === "Project" && f.href === `/projects/${K22.p1.id}`) && facts.some((f) => f.k === "Research area" && f.href === `/research/${K22.aPub.id}`) && facts.some((f) => f.k === "Group" && f.href === `/groups/${K22.gPub.id}`) && facts.some((f) => f.k === "Related researcher" && f.href === `/team/${K22.lead.tmId}`) && facts.some((f) => f.k === "Last updated") && facts.some((f) => f.k === "Created"), JSON.stringify(facts));
+    const dHtml = await ev(`document.documentElement.outerHTML`);
+    check("knowledge guest: no manage bar, and the page HTML holds no account id or 'userId'", !(await exists(".admin-bar")) && !D.userIds.some((u) => dHtml.includes(u)) && !dHtml.includes("userId"));
+    await k22Ready(`/knowledge/${K22.dLeak.id}`);
+    const lf = await ev(`document.querySelector('.knowledge-facts').innerText`);
+    check("knowledge guest: the leaky note's detail names no hidden project / area / group, and none of their ids are in the page", !/Project Lab|Area Lab|Group Lab/.test(lf) && !lf.includes("Related researcher") && !(await ev(`document.documentElement.outerHTML`)).includes(K22.pHid.id));
+    await k22Ready(`/knowledge/${K22.dLab.id}`);
+    check("knowledge guest: a LAB_ONLY document by URL is the not-found state and leaks nothing", (await pMain()).includes("Document not found") && !(await pMain()).includes("Lab Only Procedure") && !(await pMain()).includes("ZZKLAB") && (await exists('a[href="/knowledge"]')));
+    const hiddenTxt = await pMain();
+    check("knowledge guest: the not-found state explains itself in words, offers no retry, and links back to the list", hiddenTxt.includes("This document doesn't exist, or you don't have access to it.") && !(await exists('[role="alert"] button')) && (await exists('a.btn[href="/knowledge"]')));
+    await k22Ready("/knowledge/nonexistentid12345");
+    check("knowledge guest: an unknown id renders exactly the same not-found state as the hidden one", (await pMain()) === hiddenTxt);
+    await k22Ready("/knowledge/bad!id");
+    check("knowledge guest: a malformed id is a not-found/error state, not a crash", (await pCount("h1")) === 1 && (((await pMain()).includes("not found")) || (await exists('[role="alert"]'))));
+    check("knowledge guest: the write APIs refuse a guest (401)", (await apiCall("POST", "/knowledge", { title: "x", body: "y" })) === 401 && (await apiCall("PUT", `/knowledge/${K22.dPub.id}`, { title: "x" })) === 401 && (await apiCall("DELETE", `/knowledge/${K22.dPub.id}`)) === 401);
+    await shot("k22-guest-list");
+  });
+
+  await step("knowledge integration: project / area / group / researcher pages show a bounded documentation section with View all", async () => {
+    await desktop(); await setLocale(null);
+    await k22Ready(`/projects/${K22.p1.id}`, "ZZ B9 K22 Project One");
+    const sec = async () => ev(`(() => { const s = document.querySelector('section[aria-labelledby$="-knowledge"]'); if (!s) return null; return { head: s.querySelector('h2, h3').textContent.trim(), cards: [...s.querySelectorAll('.knowledge-card .card__title')].map((x) => x.textContent.trim()), all: s.querySelector('a.link')?.getAttribute('href'), allText: s.querySelector('a.link')?.innerText.trim(), inList: !!s.querySelector('[role="list"]'), edit: !!s.querySelector('.card-edit-btn') }; })()`);
+    let s = await sec();
+    check("knowledge project: the section is 'Knowledge & documentation' with AT MOST 5 PUBLIC documents of this project (guest), newest first", !!s && s.head === "Knowledge & documentation" && s.cards.length === 5 && s.cards.every((c) => c.startsWith("ZZ B9 K22")) && !s.cards.includes("ZZ B9 K22 Lead Note") && s.inList, JSON.stringify(s));
+    check("knowledge project: 'View all documents (N)' shows the TRUE total and links to /knowledge?project=<id>", !!s && /^View all documents \((1[5-9]|[2-9]\d)\)/.test(s.allText) && s.all === `/knowledge?project=${K22.p1.id}`, JSON.stringify(s));
+    check("knowledge project: a related card has no edit controls (they live on the document)", !!s && !s.edit);
+    await pClick('section[aria-labelledby$="-knowledge"] a.link');
+    await waitFor(`location.pathname === '/knowledge' && location.search.includes('project=')`, 5000);
+    await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(400);
+    const list = await k22Titles();
+    check("knowledge project: View all opens the full list filtered to that project (12 per page) and the project picker shows it selected", list.length === 12 && list.every((x) => x.startsWith("ZZ B9 K22")) && (await ev(`document.getElementById('kf-project').selectedOptions[0]?.textContent.trim()`)) === "ZZ B9 K22 Project One" && (await ev(`document.querySelector('.knowledge-status').innerText`)).match(/1[5-9] documents/) !== null);
+    await k22Ready(`/projects/${K22.pEmpty.id}`, "Without Docs");
+    check("knowledge project: a project with no visible documents gets no documentation section at all", (await sec()) === null);
+    await k22Ready(`/research/${K22.aPub.id}`, "Area Public");
+    s = await sec();
+    check("knowledge area: the research area page lists the documents linked to it, with View all -> /knowledge?area=", !!s && s.cards.includes("ZZ B9 K22 Public Methodology") && s.all === `/knowledge?area=${K22.aPub.id}`, JSON.stringify(s));
+    await k22Ready(`/groups/${K22.gPub.id}`, "Group Public");
+    s = await sec();
+    check("knowledge group: the group page lists its documents, with View all -> /knowledge?group=", !!s && s.cards.includes("ZZ B9 K22 Public Methodology") && s.all === `/knowledge?group=${K22.gPub.id}`, JSON.stringify(s));
+    await k22Ready(`/team/${K22.lead.tmId}`, "ZZ B9 K22 Lead");
+    s = await sec();
+    check("knowledge researcher: the profile lists documents naming them as the related researcher, with View all -> /knowledge?researcher=", !!s && s.cards.join("|") === "ZZ B9 K22 Public Methodology" && s.all === `/knowledge?researcher=${K22.lead.tmId}`, JSON.stringify(s));
+    await k22Ready(`/team/${K22.mem.tmId}`, "ZZ B9 K22 Member");
+    check("knowledge researcher: a researcher no document names gets no section", (await sec()) === null);
+    await k22Ready(`/research/${K22.aHid.id}`);
+    check("knowledge area: a LAB_ONLY area is not-found for a guest, so its documents cannot be reached through it", (await pMain()).includes("not found") || (await pMain()).includes("Not found"));
+    await k22Ready(`/knowledge?area=${K22.aHid.id}`);
+    check("knowledge area: nor through the list filter (same empty state as an unknown area)", (await pCount(".knowledge-card")) === 0);
+    await k22Ready(`/projects/${K22.pX.id}`);
+    const hx = await sec();
+    check("knowledge hostile: a hostile-named project / area / group page lists the hostile document as inert TEXT", !!hx && hx.cards.some((c) => c.includes("<img src=x onerror=window.__k22Xss=1>")) && (await ev(`document.querySelectorAll('main img, main script, main iframe').length`)) === 0 && (await ev(`typeof window.__k22Xss`)) === "undefined");
+  });
+
+  await step("knowledge member: LAB_ONLY documents, create / validation / edit / delete, Japanese fields, no visibility control", async () => {
+    check("knowledge member: login", await k22Login(K22.mem));
+    for (const [word, title] of [["ZZKLAB", "ZZ B9 K22 Lab Only Procedure"], ["ZZKMEM", "ZZ B9 K22 Member Own Note"], ["ZZKLEAD", "ZZ B9 K22 Lead Note"]]) {
+      await k22Ready(`/knowledge?q=${word}`);
+      check(`knowledge member: sees the LAB_ONLY document "${title}" (a signed-in member may)`, (await k22Titles()).join("|") === title);
+    }
+    check("knowledge member: the bar says what a member can do; there is NO visibility badge, NO visibility filter", (await ev(`document.querySelector('.admin-bar__text').innerText`)).includes("add documents and edit the ones you wrote") && !(await pMain()).toLowerCase().includes("lab only") && !(await exists("#kf-visibility")));
+    check("knowledge member: the 'related to me' filter is offered to a signed-in account", await exists("#kf-mine"));
+    const other = await k22Card("ZZ B9 K22 Lead Note");
+    await k22Ready("/knowledge?q=ZZKMEM");
+    const own = await k22Card("ZZ B9 K22 Member Own Note");
+    check("knowledge member: edit AND delete icons on their own document only", !!own && own.edit && own.del && !!other && !other.edit && !other.del);
+    // create with validation (from the member's own list, so the new document shows up in it)
+    await k22Ready("/knowledge?mine=1");
+    let d = await k22Add();
+    check("knowledge member: '+ Add document' opens a named dialog with empty fields, category Resource, no visibility control, and the member note", !!d && d.title === "Add document" && d.tv === "" && d.bv === "" && d.cat === "RESOURCE" && d.vis === null && (await ev(`document.querySelector('.modal').innerText`)).includes("visible to signed-in lab members until a lab manager makes them public"), JSON.stringify(d));
+    check("knowledge member: the relationship pickers list the visible projects, areas, groups and researchers", await (async () => { const o = await ev(`['knowledge_project','knowledge_area','knowledge_group','knowledge_researcher'].map((id) => [...document.getElementById(id).options].map((x) => x.textContent.trim()))`); return o[0].includes("ZZ B9 K22 Project One") && o[0].includes("ZZ B9 K22 Project Lab") && o[1].includes("ZZ B9 K22 Area Public") && o[2].includes("ZZ B9 K22 Group Lab") && o[3].includes("ZZ B9 K22 Lead") && o.every((x) => x[0] === "None"); })());
+    await k22Save();
+    d = await k22DlgWait((x) => !!x.alert);
+    check("knowledge member: saving an empty form shows 'Title is required.' in an alert and moves focus to the title", !!d && d.alert === "Title is required." && d.focusId === "knowledge_title" && (await ev(`document.getElementById('knowledge_title').getAttribute('aria-invalid')`)) === "true", JSON.stringify(d));
+    await k22Fill({ knowledge_title: "ZZ B9 K22 Created By Member" });
+    await k22Save();
+    d = await k22DlgWait((x) => x.alert === "Body is required.");
+    check("knowledge member: a missing body is 'Body is required.' with focus on the body", d.alert === "Body is required." && d.focusId === "knowledge_body");
+    await k22Fill({ knowledge_body: "Made through the UI.\nSecond line ZZKNEW", knowledge_category: "HARDWARE", knowledge_project: K22.p1.id, knowledge_area: K22.aPub.id });
+    await k22Save();
+    check("knowledge member: a valid save closes the dialog and the new document appears in the list", await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000) && (await waitFor(`[...document.querySelectorAll('.knowledge-card .card__title')].some((x) => x.textContent.trim() === 'ZZ B9 K22 Created By Member')`, 6000)));
+    const made = (await k22Api(null, `/knowledge?q=ZZKNEW`)).json.items[0];
+    K22.dMade = made;
+    check("knowledge member: the server has it LAB_ONLY, by the member, with the category and the two links chosen", !!made && made.category === "HARDWARE" && made.project?.id === K22.p1.id && made.researchArea?.id === K22.aPub.id && made.group === null && made.canEdit === true && (await K22.a.req("GET", `/knowledge/${made.id}`)).json.visibility === "LAB_ONLY", JSON.stringify(made));
+    // edit
+    d = await k22EditOn("ZZ B9 K22 Created By Member");
+    check("knowledge member: Edit opens 'Edit document' with the stored English title, BODY (a list card has none), category and links", !!d && d.title === "Edit document" && d.tv === "ZZ B9 K22 Created By Member" && d.bv === "Made through the UI.\nSecond line ZZKNEW" && d.cat === "HARDWARE" && d.proj === K22.p1.id && d.area === K22.aPub.id && d.grp === "" && d.vis === null, JSON.stringify(d));
+    await k22Fill({ knowledge_title: "ZZ B9 K22 Created By Member (edited)", knowledge_title_ja: "ZZ B9 K22 メンバーが作成（編集）", knowledge_body_ja: "日本語の本文 ZZKJA", knowledge_group: K22.gPub.id });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    await waitFor(`[...document.querySelectorAll('.knowledge-card .card__title')].some((x) => x.textContent.trim() === 'ZZ B9 K22 Created By Member (edited)')`, 6000);
+    const ed = (await k22Api(null, `/knowledge/${made.id}`)).json;
+    const edJa = (await k22Api("ja", `/knowledge/${made.id}`)).json;
+    check("knowledge member: an edit changes the English text and the group, keeps the other links, and stores the Japanese title and body as overrides (English body untouched)", ed.title === "ZZ B9 K22 Created By Member (edited)" && ed.body === "Made through the UI.\nSecond line ZZKNEW" && ed.group?.id === K22.gPub.id && ed.project?.id === K22.p1.id && edJa.title === "ZZ B9 K22 メンバーが作成（編集）" && edJa.body === "日本語の本文 ZZKJA", JSON.stringify([ed.title, ed.group, edJa.title]));
+    d = await k22EditOn("ZZ B9 K22 Created By Member (edited)");
+    check("knowledge member: reopening Edit shows the saved Japanese title and body in the Japanese fields", !!d && d.tja === "ZZ B9 K22 メンバーが作成（編集）" && d.bja === "日本語の本文 ZZKJA", JSON.stringify(d));
+    await k22Fill({ knowledge_title_ja: "", knowledge_body_ja: "" });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    check("knowledge member: clearing both Japanese fields removes the overrides (Japanese falls back to English)", await (async () => { await sleep(400); const j = (await k22Api("ja", `/knowledge/${made.id}`)).json; return j.title === "ZZ B9 K22 Created By Member (edited)" && j.body === "Made through the UI.\nSecond line ZZKNEW"; })());
+    // cancel does not save
+    d = await k22EditOn("ZZ B9 K22 Created By Member (edited)");
+    await k22Fill({ knowledge_title: "ZZ B9 K22 SHOULD NOT SAVE" });
+    await clickEl(".modal button.btn--secondary");
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 3000);
+    check("knowledge member: Cancel discards the edit", (await k22Api(null, `/knowledge/${made.id}`)).json.title === "ZZ B9 K22 Created By Member (edited)" && !(await k22Titles()).includes("ZZ B9 K22 SHOULD NOT SAVE"));
+    // other people's documents
+    await k22Ready(`/knowledge/${K22.dLab.id}`);
+    check("knowledge member: another person's document: no manage bar on the detail page; the API refuses (403)", !(await exists(".admin-bar")) && (await apiCall("PUT", `/knowledge/${K22.dLab.id}`, { title: "hax" })) === 403 && (await apiCall("DELETE", `/knowledge/${K22.dLab.id}`)) === 403);
+    check("knowledge member: the API refuses visibility from a member (403) and nothing changed", (await apiCall("PUT", `/knowledge/${made.id}`, { visibility: "PUBLIC" })) === 403 && (await K22.a.req("GET", `/knowledge/${made.id}`)).json.visibility === "LAB_ONLY");
+    check("knowledge member: the LAB_ONLY document is readable and shows the lab-only body", (await pMain()).includes("Internal ZZKLAB budget procedure"));
+    // 'related to me'
+    await k22Ready("/knowledge?mine=1&limit=50");
+    all = await k22Titles();
+    check("knowledge member: 'related to me' lists their own documents and hides the ones that are not theirs", all.includes("ZZ B9 K22 Member Own Note") && all.includes("ZZ B9 K22 Created By Member (edited)") && !all.includes("ZZ B9 K22 Lab Only Procedure") && (await ev(`document.getElementById('kf-mine').checked`)));
+    // delete from the list
+    await k22Ready("/knowledge?mine=1&limit=50");
+    check("knowledge member: Delete opens a confirmation naming the document", await k22DelOn("ZZ B9 K22 Created By Member (edited)") && (await ev(`document.querySelector('.modal').innerText`)).includes('Delete "ZZ B9 K22 Created By Member (edited)"? This can\'t be undone.'));
+    await press("esc");
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2500);
+    check("knowledge member: Escape cancels the deletion and returns focus to the delete button", (await k22Api(null, `/knowledge/${made.id}`)).status === 200 && (await ev(`document.activeElement?.hasAttribute('data-k22-op')`)));
+    await k22DelOn("ZZ B9 K22 Created By Member (edited)");
+    await clickEl(".modal button.btn--danger");
+    check("knowledge member: confirming removes it from the list and the server (404 afterwards)", (await waitFor(`![...document.querySelectorAll('.knowledge-card .card__title')].some((x) => x.textContent.trim() === 'ZZ B9 K22 Created By Member (edited)')`, 6000)) && (await k22Api(null, `/knowledge/${made.id}`)).status === 404);
+    // detail page edit flow
+    await k22Ready(`/knowledge/${K22.dMem.id}`);
+    check("knowledge member: their own document's detail page has Edit and Delete in the bar", (await pBar()).join("|") === "Edit|Delete");
+    await pClick(".admin-bar button", "Edit");
+    d = await k22DlgWait((x) => x.bv !== null && x.bv !== "");
+    check("knowledge member: the detail page's Edit opens with the English body", !!d && d.bv === "written by the member ZZKMEM");
+    await k22Fill({ knowledge_body: "written by the member ZZKMEM (revised)" });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    check("knowledge member: saving from the detail page refreshes the body in place", await waitText("(revised)", 6000));
+    // the English base must have loaded before a save is possible: with that request failing the form says so and Save stays disabled
+    await k22Ready("/knowledge?q=ZZKMEM");
+    await fake("*/api/translations/KNOWLEDGE_DOC/*", 500, JSON.stringify({ error: "Internal server error" }));
+    const noBase = await k22EditOn("ZZ B9 K22 Member Own Note");
+    await unfake();
+    check("knowledge member: if the English base cannot be loaded the edit form says 'Could not load this document.', is empty of body text, and Save is DISABLED (it must never save a guess)", !!noBase && noBase.alert.includes("Could not load this document.") && noBase.submitDisabled === true && noBase.bv === "", JSON.stringify(noBase));
+    await k22Close();
+    // a link the form cannot display (its project is invisible to the editor) survives an edit that does not touch links
+    await K22.a.req("PUT", `/knowledge/${K22.dMem.id}`, { projectId: K22.pHid.id });
+    k22Sql("UPDATE ResearchProject SET visibility = 'PRIVATE' WHERE id = ?", K22.pHid.id);
+    await k22Ready("/knowledge?q=ZZKMEM");
+    await k22EditOn("ZZ B9 K22 Member Own Note");
+    const hd = await k22DlgWait((x) => x.projOpts.length > 1); // the picklists load after the dialog opens: wait for them, or "not offered" would pass vacuously
+    check("knowledge member: an invisible project shows as 'None' in the form (never named), the picklist does not offer it", !!hd && hd.proj === "" && !hd.projOpts.includes("ZZ B9 K22 Project Lab"), JSON.stringify({ proj: hd?.proj, tv: hd?.tv, opts: (hd?.projOpts || []).slice(0, 4) })); // exact title: other phases' fixtures ("ZZ B9 W21 Project Lab") also contain the words
+    await k22Fill({ knowledge_body: "written by the member ZZKMEM (revised twice)" });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    await sleep(500);
+    const kept = k22Sql("SELECT projectId, body FROM KnowledgeDoc WHERE id = ?", K22.dMem.id)[0];
+    k22Sql("UPDATE ResearchProject SET visibility = 'LAB_ONLY' WHERE id = ?", K22.pHid.id);
+    check("knowledge member: saving an edit that does not touch links KEEPS the link the form could not display (it is not cleared to None)", kept.projectId === K22.pHid.id && kept.body === "written by the member ZZKMEM (revised twice)", JSON.stringify(kept));
+    await K22.a.req("PUT", `/knowledge/${K22.dMem.id}`, { projectId: null });
+    // delete from the detail page: confirm -> gone -> back on the list
+    const mine = await ev(`fetch('/api/knowledge', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'ZZ B9 K22 Delete From Detail', body: 'to be removed ZZKDEL' }) }).then((r) => r.json())`);
+    await k22Ready(`/knowledge/${mine.id}`);
+    await pClick(".admin-bar button", "Delete");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+    check("knowledge member: the detail page's delete dialog names the document", (await ev(`document.querySelector('.modal').innerText`)).includes('Delete "ZZ B9 K22 Delete From Detail"? This can\'t be undone.'));
+    await clickEl(".modal button.btn--danger");
+    check("knowledge member: confirming a delete on the detail page removes the document AND returns to the list", (await waitFor(`location.pathname === '/knowledge'`, 6000)) && (await k22Api(null, `/knowledge/${mine.id}`)).status === 404);
+    await k22Ready(`/knowledge/${K22.dMem.id}`);
+    await pClick(".admin-bar button", "Delete");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000);
+    await press("esc");
+    check("knowledge member: Escape on the detail-page delete dialog closes it and the document is still there", await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2500) && (await k22Api(null, `/knowledge/${K22.dMem.id}`)).status === 200);
+    await shot("k22-member");
+    await logout();
+  });
+
+  await step("knowledge lead: a project lead has no special power over documents; create from a project's View all presets the link", async () => {
+    check("knowledge lead: login", await k22Login(K22.lead));
+    await k22Ready(`/knowledge?project=${K22.p1.id}&limit=50`);
+    const cards = await k22Cards();
+    check("knowledge lead: the project's list shows the lead's own note editable and everyone else's read-only (a LEAD is only a member for documents)", cards.length > 0 && cards.filter((c) => c.edit).map((c) => c.title).join("|") === "ZZ B9 K22 Lead Note");
+    const d = await k22Add();
+    check("knowledge lead: '+ Add document' from ?project= preselects that project (and nothing else)", !!d && d.proj === K22.p1.id && d.area === "" && d.grp === "" && d.res === "", JSON.stringify(d));
+    await k22Close();
+    await k22Ready("/knowledge");
+    const d2 = await k22Add();
+    check("knowledge lead: from the unfiltered list nothing is preselected", !!d2 && d2.proj === "" && d2.area === "");
+    await k22Close();
+    check("knowledge lead: the API refuses the lead on someone else's document (403)", (await apiCall("PUT", `/knowledge/${K22.dPub.id}`, { title: "hax" })) === 403 && (await apiCall("DELETE", `/knowledge/${K22.dPub.id}`)) === 403);
+    await logout();
+  });
+
+  await step("knowledge manager: visibility badge and filter, edit anything, publish, delete", async () => {
+    check("knowledge manager: login", await k22Login(K22.mgr));
+    await k22Ready("/knowledge?q=ZZKLAB");
+    const lab = await k22Card("ZZ B9 K22 Lab Only Procedure");
+    await k22Ready("/knowledge?q=ZZKPUB");
+    const pub = await k22Card("ZZ B9 K22 Public Methodology");
+    check("knowledge manager: the bar says managers edit any document; LAB_ONLY documents carry a 'Lab only' badge, PUBLIC ones none", (await ev(`document.querySelector('.admin-bar__text').innerText`)).includes("edit any document") && !!lab && lab.badges.includes("lab only") && !!pub && !pub.badges.includes("lab only"), JSON.stringify(lab?.badges));
+    await k22Ready("/knowledge");
+    check("knowledge manager: edit and delete icons on EVERY card", (await k22Cards()).length === 12 && (await k22Cards()).every((c) => c.edit && c.del));
+    check("knowledge manager: the visibility filter is offered and narrows to Lab only", (await exists("#kf-visibility")) && await (async () => { await setVal("kf-visibility", "LAB_ONLY"); await ev(`document.querySelector('form.knowledge-filters').requestSubmit()`); await waitFor(`location.search.includes('visibility=LAB_ONLY')`, 4000); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(300); const c = await k22Cards(); return c.length > 0 && c.every((x) => x.badges.includes("lab only")); })());
+    await k22Ready("/knowledge?q=ZZ%20B9%20K22%20Lab%20Only");
+    const d = await k22EditOn("ZZ B9 K22 Lab Only Procedure");
+    check("knowledge manager: the edit dialog has the Visibility control set to Lab only, and the Japanese fields", !!d && d.vis === "LAB_ONLY" && d.tja === "" && d.bja === "" && d.bv === "Internal ZZKLAB budget procedure", JSON.stringify(d));
+    await k22Fill({ knowledge_visibility: "PUBLIC" });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    await sleep(600);
+    check("knowledge manager: publishing changes visibility (server) and the card loses its 'Lab only' badge", (await K22.a.req("GET", `/knowledge/${K22.dLab.id}`)).json.visibility === "PUBLIC" && !(await k22Card("ZZ B9 K22 Lab Only Procedure")).badges.includes("lab only"));
+    await logout();
+    await k22Ready(`/knowledge/${K22.dLab.id}`);
+    check("knowledge manager: once published, a guest can read it", (await pMain()).includes("Internal ZZKLAB budget procedure"));
+    await k22Login(K22.mgr);
+    await K22.a.req("PUT", `/knowledge/${K22.dLab.id}`, { visibility: "LAB_ONLY" });
+    await k22Ready(`/knowledge/${K22.dMem.id}`);
+    check("knowledge manager: someone else's document's detail page has Edit and Delete", (await pBar()).join("|") === "Edit|Delete" && (await ev(`document.querySelector('.admin-bar__text').innerText`)).includes("manage this document"));
+    check("knowledge manager: the detail page shows the Lab only badge", (await ev(`document.querySelector('.detail-meta').innerText.toLowerCase()`)).includes("lab only"));
+    await logout();
+  });
+
+  await step("knowledge admin: the admin Content view lists knowledge with filters, inspect, deep links and the overview count", async () => {
+    check("knowledge admin: login", await login(ADMIN.email, ADMIN.password));
+    await k22Ready("/admin");
+    check("knowledge admin: the overview has a 'Knowledge documents' count card linking to the filtered admin list", await exists('a.admin-count[href="/admin/content?type=knowledge"]') && (await ev(`document.querySelector('a.admin-count[href="/admin/content?type=knowledge"]').innerText`)).includes("Knowledge documents") && /public/i.test(await ev(`document.querySelector('a.admin-count[href="/admin/content?type=knowledge"]').innerText`)));
+    await k22Ready("/admin/content?type=knowledge");
+    await waitFor(`!!document.querySelector('.admin-row')`, 8000);
+    check("knowledge admin: 'Knowledge documents' is a content type chip and the list shows knowledge rows with Public / Lab only, category and owner", (await ev(`[...document.querySelectorAll('.admin-types .chip')].map((c) => c.textContent.trim())`)).includes("Knowledge documents") && (await ev(`document.querySelector('.admin-row').innerText`)).match(/Public|Lab only/) !== null);
+    check("knowledge admin: the filter form offers category, project, research area, group, visibility and 'Created by'", await ev(`['af-category','af-project','af-area','af-group','af-visibility','af-owner'].every((id) => !!document.getElementById(id))`));
+    await waitFor(`document.getElementById('af-project').options.length > 1`, 6000);
+    await setVal("af-category", "METHODOLOGY");
+    await ev(`document.querySelector('form.admin-filters').requestSubmit()`);
+    await waitFor(`location.search.includes('category=METHODOLOGY')`, 4000); await sleep(600);
+    check("knowledge admin: the category filter narrows the rows (URL is the source of truth)", (await ev(`[...document.querySelectorAll('.admin-row')].length`)) >= 1 && (await ev(`[...document.querySelectorAll('.admin-row')].every((r) => /Methodology/.test(r.innerText))`)));
+    await k22Ready("/admin/content?type=knowledge&q=ZZKLAB");
+    await waitFor(`!!document.querySelector('.admin-row')`, 6000);
+    check("knowledge admin: the category is shown as its LOCALIZED label in a badge ('Lab procedure', not LAB_PROCEDURE)", await ev(`(() => { const b = [...document.querySelectorAll('.admin-row .badge')].map((x) => x.textContent.trim()); return b.includes('Lab procedure') && !b.includes('LAB_PROCEDURE'); })()`));
+    await setLocale("ja");
+    await k22Ready("/admin/content?type=knowledge&q=ZZKLAB");
+    await waitFor(`!!document.querySelector('.admin-row')`, 6000);
+    check("knowledge admin ja: the same badge is Japanese ('ラボの手順')", await ev(`[...document.querySelectorAll('.admin-row .badge')].some((x) => x.textContent.trim() === 'ラボの手順')`));
+    await setLocale(null);
+    await k22Ready(`/admin/content?type=knowledge&project=${K22.p1.id}`);
+    await sleep(500);
+    check("knowledge admin: the project filter (deep link) keeps only that project's documents", (await ev(`document.querySelectorAll('.admin-row').length`)) >= 15 && await ev(`document.getElementById('af-project').value === ${JSON.stringify(K22.p1.id)}`));
+    await k22Ready("/admin/content?type=knowledge&q=Public%20Methodology");
+    await waitFor(`!!document.querySelector('.admin-row')`, 6000);
+    const link = await ev(`[...document.querySelectorAll('.admin-row')].map((r) => r.querySelector('a.btn--ghost')?.getAttribute('href'))`);
+    check("knowledge admin: each row has a deep link 'Open' to /knowledge/:id", link.includes(`/knowledge/${K22.dPub.id}`));
+    await pClick(".admin-row__actions button", "");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 4000);
+    await waitFor(`!!document.querySelector('.modal dl, .modal ul, .modal .admin-detail')`, 4000); await sleep(400);
+    const md = await ev(`document.querySelector('.modal').innerText`);
+    check("knowledge admin: Inspect shows the record's relationship counts (projects, areas, groups, researchers) and its Japanese override state", /Projects/.test(md) && /Research areas/.test(md) && /Groups/.test(md) && /Researchers/.test(md));
+    await press("esc");
+    check("knowledge admin: bulk visibility controls exist for knowledge rows (a checkbox per row)", (await pCount(".admin-row__check")) === (await pCount(".admin-row")) && (await pCount(".admin-row")) > 0);
+    await k22Ready("/admin/translations?type=KNOWLEDGE_DOC");
+    await waitFor(`!!document.querySelector('.admin-tr, .admin-list, .admin-row, [class*="admin-tr"]') || document.body.innerText.includes('Knowledge documents')`, 6000);
+    check("knowledge admin: the Translations view has a 'Knowledge documents' type with the title and body fields", (await ev(`[...document.querySelectorAll('.admin-types .chip')].map((c) => c.textContent.trim())`)).includes("Knowledge documents") && (await pMain()).toLowerCase().includes("body"));
+    await k22Ready("/admin/content?type=knowledge&category=nope");
+    check("knowledge admin: an invalid filter is shown as an error state (not a blank page)", await exists('[role="alert"]'));
+    await logout();
+    await go("/admin/content?type=knowledge"); await sleep(700);
+    check("knowledge admin: signed out, the admin knowledge list is behind the login (redirect) and its API is 401", (await pathNow()) === "/login" && (await apiCall("GET", "/admin/content?type=knowledge")) === 401);
+  });
+
+  await step("knowledge search: the Knowledge type, counts, links, Japanese titles, related links, no hidden document", async () => {
+    await desktop(); await setLocale(null);
+    await k22Ready("/search?q=ZZKMANY");
+    check("knowledge search: a body word finds the 14 documents and the 'Knowledge' chip carries the API's count (14)", (await ev(`[...document.querySelectorAll('.search-filters .chip')].map((c) => c.textContent.trim())`)).includes("Knowledge14") && (await pCount(".search-result")) === 14 && (await k22Api(null, "/search?q=ZZKMANY")).json.counts.knowledge === 14);
+    await k22Ready("/search?q=Public%20Methodology&type=knowledge");
+    const r = await ev(`[...document.querySelectorAll('.search-result')].map((c) => ({ badge: c.querySelector('.search-result__type').textContent.trim().toLowerCase(), title: c.querySelector('.search-result__title').textContent.trim(), href: c.querySelector('.search-result__link').getAttribute('href'), rel: [...c.querySelectorAll('.search-result__related a')].map((a) => a.textContent.trim()), cta: c.querySelector('.search-result__cta').textContent.trim() }))`);
+    const one = r.find((x) => x.title === "ZZ B9 K22 Public Methodology");
+    check("knowledge search: the result is badged Knowledge, links to /knowledge/:id, says 'View document' and lists its related project, area and group", !!one && one.badge === "knowledge" && one.href === `/knowledge/${K22.dPub.id}` && one.cta === "View document →" && ["ZZ B9 K22 Project One", "ZZ B9 K22 Area Public", "ZZ B9 K22 Group Public"].every((x) => one.rel.includes(x)), JSON.stringify(one));
+    await k22Ready("/search?q=ZZKLEAK&type=knowledge");
+    const leak = await ev(`[...document.querySelectorAll('.search-result')].map((c) => c.innerText).join('\\n')`);
+    check("knowledge search: a PUBLIC note on hidden things is found but shows no related links to them", leak.includes("Leaky Public Note") && !/Project Lab|Area Lab|Group Lab/.test(leak) && (await pCount(".search-result__related")) === 0);
+    await k22Ready("/search?q=ZZKLAB");
+    check("knowledge search: a LAB_ONLY document is invisible to a guest (no result, no count, no chip)", (await pCount(".search-result")) === 0 && !(await pMain()).includes("Lab Only Procedure") && !(await ev(`[...document.querySelectorAll('.search-filters .chip')].map((c) => c.textContent.trim())`)).some((x) => /^Knowledge[1-9]/.test(x)));
+    await k22Ready("/search?q=ZZKMANY&type=knowledge&limit=5");
+    check("knowledge search: clicking a result opens the document", await (async () => { await pClick(".search-result__link", "Many"); return waitFor(`location.pathname.startsWith('/knowledge/')`, 5000); })());
+    await setLocale("ja");
+    await k22Ready("/search?q=" + encodeURIComponent("公開メソドロジー") + "&type=knowledge");
+    check("knowledge search ja: a Japanese title override is found, shown as the title, and the chrome is Japanese ('ナレッジ' badge, chip and call to action)", (await ev(`[...document.querySelectorAll('.search-result__title')].map((x) => x.textContent.trim())`)).includes("ZZ B9 K22 公開メソドロジー") && (await ev(`document.querySelector('.search-result__type').textContent.trim()`)).includes("ナレッジ") && (await ev(`document.querySelector('.search-result__cta').textContent.trim()`)) === "ドキュメントを見る →");
+    await k22Ready("/search?q=" + encodeURIComponent("その二"));
+    check("knowledge search ja: a Japanese BODY override is found too, and the excerpt is the Japanese text", (await ev(`[...document.querySelectorAll('.search-result')].map((c) => c.innerText).join('\\n')`)).includes("手順その二"));
+    await setLocale(null);
+    await login(K22.mem.email, PW);
+    await k22Ready("/search?q=ZZKLAB&type=knowledge");
+    check("knowledge search: a signed-in member finds the LAB_ONLY document", (await pMain()).includes("Lab Only Procedure"));
+    await logout();
+  });
+
+  await step("knowledge workspace: 'Recent documentation' is bounded, private and links to the related list", async () => {
+    check("knowledge workspace: lead login", await k22Login(K22.lead));
+    await wsReady();
+    const sec = await ev(`(() => { const s = document.querySelector('section[aria-labelledby="ws-knowledge"]'); return s ? { head: document.getElementById('ws-knowledge').textContent.trim(), cards: [...s.querySelectorAll('.knowledge-card .card__title')].map((x) => x.textContent.trim()), link: s.querySelector('a.btn')?.getAttribute('href'), linkText: s.querySelector('a.btn')?.innerText.trim(), more: s.querySelector('.ws-more')?.innerText || '' } : null; })()`);
+    check("knowledge workspace: the section lists at most 5 documents the lead wrote or that belong to their project / group / area (public methodology, their own note, long note ...)", !!sec && sec.head === "Recent documentation" && sec.cards.length === 5 && sec.cards.includes("ZZ B9 K22 Lead Note") && sec.cards.every((c) => c.startsWith("ZZ B9 K22")), JSON.stringify(sec));
+    check("knowledge workspace: 'View all my documents (N)' has the true total and links to /knowledge?mine=1; the 'Showing 5 of N' note is there", !!sec && sec.link === "/knowledge?mine=1" && /^View all my documents \(\d+\)/.test(sec.linkText) && /Showing 5 of \d+/.test(sec.more), JSON.stringify(sec));
+    check("knowledge workspace: the workspace section and the page it links to report the SAME total", await (async () => { const n = +sec.linkText.match(/\((\d+)\)/)[1]; const api = (await k22Api(null, "/knowledge?mine=1&limit=1")).json.pagination.total; return n === api; })());
+    check("knowledge workspace: the workspace never accepts someone else's id (an extra ?userId= changes nothing)", JSON.stringify((await k22Api(null, `/workspace?userId=${K22.mem.userId}&teamMemberId=${K22.mem.tmId}`)).json.knowledge) === JSON.stringify((await k22Api(null, "/workspace")).json.knowledge));
+    await pClick(".ws-section a.btn", "View all my documents");
+    await waitFor(`location.pathname === '/knowledge' && location.search.includes('mine=1')`, 5000);
+    await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(300);
+    check("knowledge workspace: the link opens the 'related to me' list with the box ticked", (await ev(`document.getElementById('kf-mine').checked`)) && (await pCount(".knowledge-card")) > 0);
+    await logout();
+    check("knowledge workspace: none login", await k22Login(K22.none));
+    await wsReady();
+    const e = await ev(`(() => { const s = document.querySelector('section[aria-labelledby="ws-knowledge"]'); return s ? { empty: s.innerText, cards: s.querySelectorAll('.knowledge-card').length, link: !!s.querySelector('a.btn') } : null; })()`);
+    check("knowledge workspace: a researcher with no documents gets a friendly empty state and no link", !!e && e.cards === 0 && !e.link && e.empty.includes("No documentation yet."), JSON.stringify(e));
+    await logout();
+  });
+
+  await step("knowledge ja: Japanese chrome, category labels, overrides, form, errors and empty states; identical authorization", async () => {
+    await desktop(); await setLocale("ja");
+    await k22Ready("/knowledge");
+    check("knowledge ja: the page title, description, filter labels and category options are Japanese", (await ev(`document.querySelector('h1').textContent.trim()`)) === "ナレッジベース" && (await pMain()).includes("研究分野・プロジェクト・グループ・研究者に沿って") && (await ev(`document.querySelector('label[for="kf-category"]').textContent.trim()`)) === "カテゴリ" && (await ev(`[...document.getElementById('kf-category').options].map((o) => o.textContent.trim())`)).includes("方法論") && (await ev(`[...document.getElementById('kf-category').options].map((o) => o.textContent.trim())`))[0] === "指定なし");
+    check("knowledge ja: no raw key ('knowledge.') and no English UI word leaks into the page chrome", !(await pMain()).includes("knowledge.") && !/Apply filters|Clear filters|Search documents/.test(await pMain()));
+    await k22Ready("/knowledge?q=ZZKPUB");
+    const c = await k22Card("ZZ B9 K22 公開メソドロジー");
+    check("knowledge ja: a document with Japanese overrides shows the Japanese title and excerpt, the Japanese category label, and Japanese related names", !!c && c.text.includes("手順その一") && c.badges.includes("方法論") && c.text.includes("ZZ B9 K22 プロジェクト一") && c.text.includes("ZZ B9 K22 公開分野") && c.text.includes("ZZ B9 K22 公開グループ") && /更新/.test(c.text) && /著/.test(c.text), JSON.stringify(c));
+    await k22Ready("/knowledge?q=Leaky");
+    check("knowledge ja: a document with NO override falls back to its English title (never blank)", (await k22Titles()).includes("ZZ B9 K22 Leaky Public Note"));
+    await k22Ready(`/knowledge/${K22.dPub.id}`);
+    check("knowledge ja: the detail page is Japanese: breadcrumb, Japanese title and body (line breaks kept), fact labels and dates", (await ev(`[...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim())`)).slice(1, 2).join() === "ナレッジ" && (await ev(`document.querySelector('h1').textContent.trim()`)) === "ZZ B9 K22 公開メソドロジー" && (await ev(`document.querySelector('.knowledge-body').innerText`)).includes("手順その一：ボードを書き込む。\n手順その二：テストを実行する。") && (await ev(`[...document.querySelectorAll('.knowledge-facts dt')].map((d) => d.textContent.trim())`)).join("|").includes("カテゴリ|著者|最終更新|作成日|プロジェクト|研究分野|グループ|関連する研究者"));
+    await k22Ready(`/knowledge/${K22.dLab.id}`);
+    check("knowledge ja: a hidden document is the same Japanese not-found state (authorization does not depend on the language)", (await pMain()).includes("ドキュメントが見つかりません") && !(await pMain()).includes("ZZKLAB") && (await k22Api("ja", `/knowledge/${K22.dLab.id}`)).status === 404 && (await k22Api("xx", `/knowledge/${K22.dLab.id}`)).status === 404);
+    await k22Ready("/knowledge?q=nothingmatchesthiszzz");
+    check("knowledge ja: the filtered empty state is Japanese", (await pMain()).includes("条件に一致するドキュメントはありません。") && (await pMain()).includes("条件を減らすか"));
+    check("knowledge ja: the API returns the same document ids in en, ja and a tampered locale", await (async () => { const a = (await k22Api("en", "/knowledge?limit=50")).json.items.map((x) => x.id).join(); const b = (await k22Api("ja", "/knowledge?limit=50")).json.items.map((x) => x.id).join(); const c2 = (await k22Api("ja,en;q=0.1", "/knowledge?limit=50")).json.items.map((x) => x.id).join(); return a === b && a === c2; })());
+    check("knowledge ja: the project page's documentation section is Japanese (heading and View all)", await (async () => { await k22Ready(`/projects/${K22.p1.id}`); await waitFor(`!!document.querySelector('section[aria-labelledby$="-knowledge"]')`, 6000); const s = await ev(`(() => { const x = document.querySelector('section[aria-labelledby$="-knowledge"]'); return { head: x.querySelector('h2, h3').textContent.trim(), all: x.querySelector('a.link').innerText.trim() }; })()`); return s.head === "ナレッジとドキュメント" && /^すべてのドキュメントを見る（\d+）/.test(s.all); })());
+    // member form in Japanese
+    await login(K22.mem.email, PW);
+    await k22Ready("/knowledge?mine=1");
+    let d = await k22Add();
+    check("knowledge ja: the add dialog is Japanese (title, labels, hint, member visibility note, Japanese-field labels)", !!d && d.title === "ドキュメントを追加" && (await ev(`document.querySelector('.modal').innerText`)).includes("追加したドキュメントは、ラボ管理者が公開するまで") && (await ev(`document.querySelector('label[for="knowledge_body"]').textContent.trim()`)) === "本文" && (await ev(`document.querySelector('.modal').innerText`)).includes("プレーンテキストです。"));
+    await k22Save();
+    d = await k22DlgWait((x) => !!x.alert);
+    check("knowledge ja: a validation error is Japanese ('タイトルは必須です。' via the mapped message)", !!d && d.alert.length > 0 && !/^Title is required\.$/.test(d.alert), d?.alert);
+    await k22Fill({ knowledge_title: "ZZ B9 K22 JA Form Note" });
+    await k22Save();
+    d = await k22DlgWait((x) => !!x.alert && x.alert !== "");
+    check("knowledge ja: 'Body is required.' shows in Japanese ('本文は必須です。')", !!d && d.alert === "本文は必須です。", d?.alert);
+    await k22Fill({ knowledge_body: "日本語で作成した本文 ZZKJAFORM" });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    await sleep(600);
+    const made = (await k22Api("en", "/knowledge?q=ZZKJAFORM")).json.items[0];
+    check("knowledge ja: a document created through the Japanese UI stores the typed text as the ENGLISH base (the Japanese fields are the overrides), and nothing is duplicated", !!made && made.title === "ZZ B9 K22 JA Form Note" && (await k22Override(made.id)) === 0, JSON.stringify(made));
+    // editing while in Japanese: English inputs show the English base, ja inputs show the override
+    K22.jaEdit = made;
+    d = await k22EditOn("ZZ B9 K22 JA Form Note");
+    check("knowledge ja: Edit in Japanese shows the ENGLISH base in the main fields and the (empty) override in the Japanese fields — never the other way round", !!d && d.tv === "ZZ B9 K22 JA Form Note" && d.bv === "日本語で作成した本文 ZZKJAFORM" && d.tja === "" && d.bja === "", JSON.stringify(d));
+    await k22Fill({ knowledge_title_ja: "ZZ B9 K22 日本語フォームのノート" });
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    await sleep(500);
+    check("knowledge ja: saving from the Japanese UI stores the override and does NOT replace the English title with Japanese", await (async () => { const en = (await k22Api("en", `/knowledge/${made.id}`)).json; const ja = (await k22Api("ja", `/knowledge/${made.id}`)).json; return en.title === "ZZ B9 K22 JA Form Note" && ja.title === "ZZ B9 K22 日本語フォームのノート"; })());
+    await k22Ready("/knowledge?mine=1");
+    await k22DelOn("ZZ B9 K22 日本語フォームのノート");
+    check("knowledge ja: the delete confirmation is Japanese and names the (Japanese) title", (await ev(`document.querySelector('.modal').innerText`)).includes("「ZZ B9 K22 日本語フォームのノート」を削除しますか？この操作は元に戻せません。"));
+    await clickEl(".modal button.btn--danger");
+    check("knowledge ja: confirming deletes it", await waitFor(`![...document.querySelectorAll('.knowledge-card .card__title')].some((x) => x.textContent.trim().includes('日本語フォームのノート'))`, 6000) && (await k22Api("en", `/knowledge/${made.id}`)).status === 404);
+    await logout();
+    check("knowledge ja: manager login", await login(K22.mgr.email, PW));
+    await k22Ready("/knowledge?q=ZZKPUB");
+    const dJa = await k22EditOn("ZZ B9 K22 公開メソドロジー");
+    check("knowledge ja: editing a document that HAS Japanese overrides, in the Japanese UI, shows the ENGLISH title and body in the main fields and the overrides in the Japanese fields", !!dJa && dJa.tv === "ZZ B9 K22 Public Methodology" && dJa.bv.includes("Step one: flash the board.") && dJa.tja === "ZZ B9 K22 公開メソドロジー" && dJa.bja.includes("手順その一"), JSON.stringify(dJa));
+    await k22Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000);
+    await sleep(600);
+    check("knowledge ja: saving that form unchanged writes NOTHING new: the English title and body are still English, the Japanese ones are unchanged", await (async () => { const en = (await k22Api("en", `/knowledge/${K22.dPub.id}`)).json; const ja = (await k22Api("ja", `/knowledge/${K22.dPub.id}`)).json; return en.title === "ZZ B9 K22 Public Methodology" && en.body.includes("Step one: flash the board.") && ja.title === "ZZ B9 K22 公開メソドロジー" && ja.body.includes("手順その一"); })());
+    await logout();
+    await setLocale(null);
+  });
+
+  await step("knowledge loading / error: skeleton, an error state with Try again, and a 401 is never shown as content", async () => {
+    await desktop(); await setLocale(null);
+    await go("/"); await navReady();
+    await fake("*/api/knowledge?*", 500, JSON.stringify({ error: "Internal server error" }));
+    await go("/knowledge"); await waitFor(`!!document.querySelector('[role="alert"]')`, 6000);
+    check("knowledge error: a 500 on the list renders the localized error with Try again, plus the header (no blank page)", (await ev(`document.querySelector('[role="alert"]').innerText`)).includes("Could not load documents.") && (await exists('[role="alert"] button')) && (await pCount("h1")) === 1);
+    await unfake();
+    await clickEl('[role="alert"] button');
+    check("knowledge error: Try again loads the list", await waitFor(`!!document.querySelector('.knowledge-card')`, 8000));
+    await go("/"); await navReady();
+    await fake(`*/api/knowledge/${K22.dPub.id}*`, 500, JSON.stringify({ error: "Internal server error" }));
+    await go(`/knowledge/${K22.dPub.id}`); await waitFor(`!!document.querySelector('[role="alert"]')`, 6000);
+    check("knowledge error: a 500 on a document shows 'Could not load this document.' with Try again, not the not-found state", (await ev(`document.querySelector('[role="alert"]').innerText`)).includes("Could not load this document.") && (await exists('[role="alert"] button')));
+    await unfake();
+    await go("/"); await navReady();
+    await fake("*/api/knowledge?*", 200, JSON.stringify({ items: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 0 } }));
+    await go("/knowledge"); await waitFor(`!!document.querySelector('.empty-state')`, 6000);
+    check("knowledge empty: an empty knowledge base says 'No documents yet.' with a hint", (await pMain()).includes("No documents yet.") && (await pMain()).includes("Documentation, methods and lab notes will appear here.") && (await ev(`document.querySelector('.knowledge-status').innerText.trim()`)) === "0 documents");
+    await unfake();
+    await go("/"); await navReady();
+    await go("/"); await navReady();
+    await send("Network.emulateNetworkConditions", { offline: false, latency: 1500, downloadThroughput: -1, uploadThroughput: -1 });
+    await ev(`history.pushState({}, '', '/knowledge'); window.dispatchEvent(new PopStateEvent('popstate'))`);
+    const busy = await waitFor(`!!document.querySelector('[role="status"][aria-busy="true"] .sr-only') && document.querySelector('[role="status"][aria-busy="true"] .sr-only').textContent === 'Loading documents…' && document.querySelectorAll('.skeleton-block').length > 0`, 3000);
+    await send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    check("knowledge loading: while the list loads there is a labelled skeleton ('Loading documents…', aria-busy) and no cards", busy);
+    check("knowledge loading: the skeleton is replaced by the cards when the data arrives", await waitFor(`!!document.querySelector('.knowledge-card') && !document.querySelector('.skeleton-block')`, 10000));
+  });
+
+  await step("knowledge hostile text: markup in titles, bodies, Japanese overrides and related names is inert everywhere (EN + JA, guest + admin)", async () => {
+    const dialogsBefore = P15.jsDialogs.length;
+    for (const loc of [null, "ja"]) {
+      await setLocale(loc);
+      for (const who of ["guest", "admin"]) {
+        if (who === "admin") await login(ADMIN.email, ADMIN.password);
+        const pages = [["list", "/knowledge?q=Hostile"], ["detail", `/knowledge/${K22.dX.id}`], ["project page", `/projects/${K22.pX.id}`], ["area page", `/research/${K22.aX.id}`], ["group page", `/groups/${K22.gX.id}`], ["search", "/search?q=Hostile&type=knowledge"], ...(who === "admin" ? [["admin list", "/admin/content?type=knowledge&q=Hostile"]] : [])];
+        for (const [lbl, p] of pages) {
+          await k22Ready(p);
+          await sleep(200);
+          const f = await ev(`(() => { const m = document.querySelector('main'); return { bad: m.querySelectorAll('img, script, iframe, svg[onload], a[href^="javascript"]').length, xss: typeof window.__k22Xss, text: m.innerText }; })()`);
+          check(`knowledge hostile ${loc || "en"} ${who} ${lbl}: no element is created from any hostile text and no script ran`, f.bad === 0 && f.xss === "undefined", JSON.stringify({ bad: f.bad, xss: f.xss }));
+        }
+        await k22Ready(`/knowledge/${K22.dX.id}`);
+        const t = await ev(`document.querySelector('.knowledge-body').innerText`);
+        check(`knowledge hostile ${loc || "en"} ${who}: the hostile body is visible as TEXT (script tag, iframe, javascript: link, anchor)`, loc ? t.includes("日本語 <script>window.__k22Xss=6</script>") : t.includes("<script>window.__k22Xss=3</script>") && t.includes('<iframe src="javascript:window.__k22Xss=4"></iframe>') && t.includes('<a href="javascript:window.__k22Xss=8">x</a>'), t.slice(0, 200));
+        check(`knowledge hostile ${loc || "en"} ${who}: the hostile title is text in the heading, breadcrumb and tab title`, (await ev(`document.querySelector('h1').textContent`)).includes("<img src=x onerror=window.__k22Xss=") && (await ev(`document.title`)).includes("<img"));
+        if (who === "admin") await logout();
+      }
+    }
+    // the edit form must show hostile text as a VALUE and save it back unchanged (English UI: the form's main fields are the English base)
+    await setLocale(null);
+    await login(ADMIN.email, ADMIN.password);
+    await k22Ready("/knowledge?q=Hostile");
+    const hostileTitles = await k22Titles();
+    const d = await k22EditOn("ZZ B9 K22 Hostile " + k22X(1));
+    check("knowledge hostile: the edit form holds the hostile title/body as plain values", !!d && d.tv === "ZZ B9 K22 Hostile " + k22X(1) && d.bv.includes("<script>window.__k22Xss=3</script>"), JSON.stringify(d).slice(0, 200) + " titles=" + JSON.stringify(hostileTitles));
+    await k22Close();
+    await setLocale(null);
+    check("knowledge hostile: no script ran and no JS dialog opened during the whole step", (await ev(`typeof window.__k22Xss`)) === "undefined" && P15.jsDialogs.length === dialogsBefore, P15.jsDialogs.slice(dialogsBefore).join("|"));
+    await logout();
+  });
+
+  await step("knowledge long text: a 190-character unbroken title, a 3000-character token and long Japanese stay inside cards, detail and dialogs at 390px", async () => {
+    await desktopAt(390, 844);
+    check("knowledge long: login", await k22Login(K22.mgr));
+    await desktopAt(390, 844);
+    for (const [lbl, p] of [["list", "/knowledge?q=ZZ%20B9%20K22&limit=50"], ["long token detail", `/knowledge/${K22.dLongTok.id}`], ["long Japanese detail", `/knowledge/${K22.dLongJa.id}`], ["project page", `/projects/${K22.p1.id}`]]) {
+      await k22Ready(p);
+      check(`knowledge long ${lbl}: no horizontal overflow at 390px`, (await overflowPx()) <= 1);
+      const au = await p15Audit(null, false);
+      check(`knowledge long ${lbl}: no clipped/spilling text, overlapping or unnamed controls`, au.resp.length === 0 && au.a11y.length === 0, [...au.resp, ...au.a11y].slice(0, 3).join(" | "));
+    }
+    await k22Ready("/knowledge?q=" + encodeURIComponent("超長い日本語"));
+    const d = await k22EditOn(k22JaLong.slice(0, 200));
+    const m = await ev(`(() => { const dd = document.querySelector('.modal[role="dialog"]'); if (!dd) return null; const b = dd.getBoundingClientRect(); return { fitsX: b.left >= -0.5 && b.right <= innerWidth + 0.5, inner: dd.scrollWidth - dd.clientWidth }; })()`);
+    check("knowledge long: the edit dialog holding a long Japanese title and a 60-line Japanese body fits 390px (no internal horizontal scroll)", !!d && !!m && m.fitsX && m.inner <= 1, JSON.stringify(m));
+    const aud = await p15Audit(".modal", false);
+    check("knowledge long: the dialog's contents have no clipped/overlapping text and every control is named", aud.resp.length === 0 && aud.a11y.length === 0, [...aud.resp, ...aud.a11y].slice(0, 3).join(" | "));
+    await k22Close();
+    await logout();
+    await desktop();
+  });
+
+  const k22DialogChecks = async (loc, w, tag) => {
+    // The add dialog on the list page (real click, semantics, fit, trap, Escape, focus return) and the edit / delete dialogs of a card.
+    await p15Ready("/knowledge?q=ZZ%20B9%20K22%20Public");
+    await p15Dialog(`knowledge ${loc} ${w}px ${tag} add`, ".admin-bar button", 0, loc === "ja");
+    if (await exists(".knowledge-card .card-edit-btn")) {
+      await p15Dialog(`knowledge ${loc} ${w}px ${tag} edit`, ".knowledge-card .card-edit-btn .icon-btn:not(.icon-btn--danger)", 0, loc === "ja");
+      await p15Dialog(`knowledge ${loc} ${w}px ${tag} delete`, ".knowledge-card .icon-btn--danger", 0, loc === "ja");
+    }
+  };
+  const K22_PAGES = () => [
+    ["knowledge list", "/knowledge"],
+    ["knowledge filtered", "/knowledge?category=METHODOLOGY&project=" + K22.p1.id],
+    ["knowledge page 2", "/knowledge?q=ZZ%20B9%20K22%20Many&page=2"],
+    ["knowledge empty filter", "/knowledge?q=nothingmatchesthiszzz"],
+    ["knowledge detail", `/knowledge/${K22.dPub.id}`],
+    ["knowledge long Japanese", `/knowledge/${K22.dLongJa.id}`],
+    ["knowledge long token", `/knowledge/${K22.dLongTok.id}`],
+    ["knowledge hostile", `/knowledge/${K22.dX.id}`],
+    ["knowledge not found", `/knowledge/${K22.dLab.id}`],
+    ["project with documentation", `/projects/${K22.p1.id}`],
+    ["research area with documentation", `/research/${K22.aPub.id}`],
+    ["group with documentation", `/groups/${K22.gPub.id}`],
+    ["researcher with documentation", `/team/${K22.lead.tmId}`],
+    ["search knowledge", "/search?q=ZZKMANY&type=knowledge"],
+  ];
+  await step("knowledge sweep: guest -- 390..1920, EN + JA, keyboard", async () => {
+    await p15Loop("k22-guest", null, K22_PAGES(), async (loc, w) => { if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`knowledge ${loc} ${w}px guest`, [["list", "/knowledge"], ["detail", `/knowledge/${K22.dPub.id}`]]); });
+  });
+  await step("knowledge sweep: member -- 390..1920, EN + JA, add / edit / delete dialogs", async () => {
+    await p15Loop("k22-member", () => k22Login(K22.mem), K22_PAGES(), async (loc, w) => { await k22DialogChecks(loc, w, "member"); if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`knowledge ${loc} ${w}px member`, [["list", "/knowledge"], ["detail", `/knowledge/${K22.dPub.id}`]]); });
+  });
+  await step("knowledge sweep: project lead -- 390..1920, EN + JA, workspace section and dialogs", async () => {
+    await p15Loop("k22-lead", () => k22Login(K22.lead), [...K22_PAGES().slice(0, 5), ["workspace", "/workspace"]], async (loc, w) => { await k22DialogChecks(loc, w, "lead"); });
+    check("knowledge sweep lead: no script from hostile text ever ran", (await ev(`typeof window.__k22Xss`)) === "undefined");
+  });
+  await step("knowledge sweep: lab manager -- 390..1920, EN + JA, dialogs and the admin list", async () => {
+    await p15Loop("k22-manager", () => k22Login(K22.mgr), [...K22_PAGES().slice(0, 5), ["admin knowledge", "/admin/content?type=knowledge"], ["admin knowledge filtered", `/admin/content?type=knowledge&category=METHODOLOGY&project=${K22.p1.id}`]], async (loc, w) => { await k22DialogChecks(loc, w, "manager"); });
+  });
+  await step("knowledge sweep: admin -- 390..1920, EN + JA, dialogs, admin list, translations and overview", async () => {
+    await p15Loop("k22-admin", () => login(ADMIN.email, ADMIN.password), [...K22_PAGES().slice(0, 5), ["admin overview", "/admin"], ["admin knowledge", "/admin/content?type=knowledge"], ["admin translations knowledge", "/admin/translations?type=KNOWLEDGE_DOC"]], async (loc, w) => { await k22DialogChecks(loc, w, "admin"); });
+  });
+
+  await step("knowledge filters: folded behind a 'Filters' summary on a phone; open on wider screens and whenever a filter is active; keyboard and JA", async () => {
+    await setLocale(null);
+    await p15Vp(390);
+    await k22Ready("/knowledge");
+    const st = () => ev(`(() => { const d = document.querySelector('details.knowledge-filters-wrap'); const s = d.querySelector('summary'); const q = document.getElementById('kf-q'); return { open: d.open, summary: s.textContent.trim(), h: Math.round(s.getBoundingClientRect().height), qShown: q.checkVisibility(), formLabel: d.querySelector('form').getAttribute('aria-label') }; })()`);
+    let s = await st();
+    check("knowledge filters 390px: with no filter the panel is closed, its summary reads 'Filters' (>= 44px tall) and the controls are not rendered", !s.open && s.summary === "Filters" && s.h >= 44 && !s.qShown, JSON.stringify(s));
+    check("knowledge filters 390px: the results start right under the summary (the eight controls do not push them off the screen)", await ev(`(() => { const c = document.querySelector('.knowledge-card'); return !!c && c.getBoundingClientRect().top < innerHeight; })()`));
+    await pClick("summary.knowledge-filters-wrap__summary", "Filters");
+    await sleep(300);
+    s = await st();
+    check("knowledge filters 390px: a real click on the summary opens the panel and shows the search box", s.open && s.qShown && s.formLabel === "Filter documents", JSON.stringify(s));
+    await ev(`document.querySelector('summary.knowledge-filters-wrap__summary').focus()`);
+    await press("enter");
+    await sleep(250);
+    check("knowledge filters 390px: Enter on the focused summary closes it again, focus stays on the summary", !(await st()).open && (await ev(`document.activeElement.classList.contains('knowledge-filters-wrap__summary')`)));
+    await press("space");
+    await sleep(250);
+    check("knowledge filters 390px: Space opens it", (await st()).open);
+    await k22Ready("/knowledge?category=METHODOLOGY&q=ZZKPUB");
+    s = await st();
+    check("knowledge filters 390px: with filters active the panel is open and the summary counts them ('Filters (2 active)')", s.open && s.summary === "Filters (2 active)" && s.qShown, JSON.stringify(s));
+    await p15Vp(1280);
+    await k22Ready("/knowledge");
+    s = await st();
+    check("knowledge filters 1280px: the panel is open by default (no filter active) and still has the summary", s.open && s.summary === "Filters" && s.qShown, JSON.stringify(s));
+    await setLocale("ja");
+    await p15Vp(390);
+    await k22Ready("/knowledge");
+    s = await st();
+    check("knowledge filters ja: the summary is Japanese ('絞り込み') and the form's accessible name is Japanese", s.summary === "絞り込み" && !s.open && s.formLabel === "ドキュメントを絞り込む", JSON.stringify(s));
+    await k22Ready("/knowledge?category=METHODOLOGY");
+    check("knowledge filters ja: an active filter is counted in Japanese ('絞り込み（1 件適用中）')", (await st()).summary === "絞り込み（1 件適用中）");
+    await setLocale(null);
+    await desktop();
+  });
+
+  await step("knowledge screenshots: list, detail, form, mobile and Japanese (for eyeballing)", async () => {
+    await setLocale(null);
+    await login(K22.mgr.email, PW);
+    for (const [w, tag] of [[1280, "d"], [390, "m"]]) {
+      await p15Vp(w);
+      await k22Ready("/knowledge?q=ZZ%20B9%20K22&limit=50");
+      await shot(`k22-list-${tag}`);
+      await k22Ready(`/knowledge/${K22.dPub.id}`);
+      await shot(`k22-detail-${tag}`);
+      await k22Ready("/knowledge");
+      const d = await k22Add();
+      if (d) await shot(`k22-form-${tag}`);
+      await k22Close();
+      await k22Ready(`/projects/${K22.p1.id}`);
+      await shot(`k22-project-${tag}`);
+    }
+    await logout();
+    await setLocale("ja");
+    await p15Vp(390);
+    await k22Ready("/knowledge?q=ZZ%20B9%20K22&limit=50");
+    await shot("k22-list-ja-m");
+    check("knowledge screenshots: taken", fs.existsSync(path.join(SHOTS, "k22-list-d.png")) && fs.existsSync(path.join(SHOTS, "k22-list-ja-m.png")));
+    await setLocale(null);
+  });
+  await step("knowledge restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -5066,12 +5768,19 @@ async function connect() {
     /^(401|500) GET .*\/api\/workspace$/,
     /^(401|403|409|500) (POST|PUT|DELETE) .*\/api\/(projects|groups)\/[\w-]+\/members(\/[\w-]+)?$/,
     /^403 PUT .*\/api\/users\/[\w-]+$/,
+    // Phase 22: a hidden / missing / malformed knowledge id opened directly (400/404) and the faked 500 that proves the error state;
+    // the deliberate unknown-category list query (400); the write API probed on purpose by guests, members and leads (401/403).
+    /^(400|404|500) GET .*\/api\/knowledge\/[^/]+$/,
+    /^(400|500) GET .*\/api\/knowledge(\?.*)?$/,
+    /^40[13] (POST|PUT|DELETE) .*\/api\/knowledge(\/[\w-]+)?$/,
+    // ...and the faked 500 of the translations read that proves the edit form refuses to save without the English base.
+    /^500 GET .*\/api\/translations\/KNOWLEDGE_DOC\/[\w-]+$/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || ONLY_DISCOVERY || ONLY_WORKSPACE || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || ONLY_DISCOVERY || ONLY_WORKSPACE || ONLY_KNOWLEDGE || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

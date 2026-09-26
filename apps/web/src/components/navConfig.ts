@@ -50,6 +50,7 @@ export const MAIN_NAV: NavEntry[] = [
       { to: "/projects", labelKey: "nav.projects" },
       { to: "/publications", labelKey: "nav.publications" },
       { to: "/news", labelKey: "nav.news" },
+      { to: "/knowledge", labelKey: "nav.knowledge" },
     ],
   },
   {

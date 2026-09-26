@@ -1,5 +1,5 @@
 import { en } from "@scl/shared";
-import type { Category, EventKind, GalleryCategory, ProjectStatus, SearchFilter, SearchType, TranslationKey } from "@scl/shared";
+import type { Category, EventKind, GalleryCategory, KnowledgeCategory, ProjectStatus, SearchFilter, SearchType, TranslationKey } from "@scl/shared";
 
 /** Localized label for a team member's category — same `Record<value, TranslationKey>`
  * convention as `ROLE_LABEL_KEY` in `auth/usePolicy.ts`. The stored value is unchanged in every
@@ -38,6 +38,7 @@ export const SEARCH_TYPE_LABEL_KEY: Record<SearchType, TranslationKey> = {
   news: "search.type.news",
   "forum-topic": "search.type.forum-topic",
   event: "search.type.event",
+  knowledge: "search.type.knowledge",
 };
 
 /** Localized label for a search type filter chip. */
@@ -51,6 +52,7 @@ export const SEARCH_FILTER_LABEL_KEY: Record<SearchFilter, TranslationKey> = {
   news: "search.filter.news",
   "forum-topic": "search.filter.forum-topic",
   event: "search.filter.event",
+  knowledge: "search.filter.knowledge",
 };
 
 /** Localized call-to-action text on a search result card. */
@@ -63,6 +65,7 @@ export const SEARCH_CTA_LABEL_KEY: Record<SearchType, TranslationKey> = {
   news: "search.cta.news",
   "forum-topic": "search.cta.forum-topic",
   event: "search.cta.event",
+  knowledge: "search.cta.knowledge",
 };
 
 /** Localized label for an event's type. The stored `kind` value is unchanged in every locale. */
@@ -72,6 +75,20 @@ export const EVENT_KIND_LABEL_KEY: Record<EventKind, TranslationKey> = {
   DEADLINE: "events.kind.DEADLINE",
   SOCIAL: "events.kind.SOCIAL",
   OTHER: "events.kind.OTHER",
+};
+
+/** Localized label for a knowledge document's category. The stored value is unchanged in every locale. */
+export const KNOWLEDGE_CATEGORY_LABEL_KEY: Record<KnowledgeCategory, TranslationKey> = {
+  PROJECT_DOCUMENTATION: "knowledge.category.PROJECT_DOCUMENTATION",
+  RESEARCH_NOTE: "knowledge.category.RESEARCH_NOTE",
+  METHODOLOGY: "knowledge.category.METHODOLOGY",
+  EXPERIMENT: "knowledge.category.EXPERIMENT",
+  HARDWARE: "knowledge.category.HARDWARE",
+  SOFTWARE: "knowledge.category.SOFTWARE",
+  DATASET: "knowledge.category.DATASET",
+  REPRODUCIBILITY: "knowledge.category.REPRODUCIBILITY",
+  LAB_PROCEDURE: "knowledge.category.LAB_PROCEDURE",
+  RESOURCE: "knowledge.category.RESOURCE",
 };
 
 /**

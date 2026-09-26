@@ -15,6 +15,7 @@ const TYPE_ICON: Record<SearchType, IconName> = {
   news: "newspaper",
   "forum-topic": "file",
   event: "calendar",
+  knowledge: "file",
 };
 
 /**

@@ -177,3 +177,16 @@ export const canLinkAccounts = canManageUsers;
 export const canViewWorkspace = isMember;
 export const canManageProjectMembers = canEditProject;
 export const canManageGroupMembers = canEditGroup;
+
+// ---- research knowledge base (Phase 22) ------------------------------------
+// Knowledge documents are OWNED content, exactly like events and gallery items: any signed-in account
+// may create one, and only its author or a manager may edit/delete it. `isOwner` comes from the server's
+// own lookup (KnowledgeDoc.authorId === the acting account), never from the client. A document whose
+// author's account was deleted has no owner, so only managers can change it. Visibility is manager-only
+// (same as news/events); a member's document stays LAB_ONLY until a manager publishes it. Translation
+// edits ride on the document's own PUT, so they follow `canEditKnowledge` exactly.
+// See docs/architecture/phase22-research-knowledge-base.md.
+export const canCreateKnowledge = isMember;
+export const canEditKnowledge = (a: MaybeActor, isOwner: boolean): boolean => isManager(a) || (isMember(a) && isOwner);
+export const canDeleteKnowledge = canEditKnowledge;
+export const canFilterKnowledgeByVisibility = canChangeVisibility;

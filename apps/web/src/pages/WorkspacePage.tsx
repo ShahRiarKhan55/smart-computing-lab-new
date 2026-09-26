@@ -23,6 +23,7 @@ import { Avatar } from "../components/Avatar";
 import { PublicationItem } from "../components/PublicationItem";
 import { EventCard } from "../components/EventCard";
 import { NewsCard } from "../components/NewsCard";
+import { KnowledgeCard } from "../components/KnowledgeCard";
 import { ManageMembersModal, type MembershipKind } from "../components/ManageMembersModal";
 import { formatNumber } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
@@ -180,6 +181,19 @@ export function WorkspacePage() {
             ))}
           </div>,
           link("/news", t("workspace.link.news")),
+        )}
+
+        {section(
+          "knowledge",
+          t("knowledge.workspace.heading"),
+          data.knowledge,
+          t("knowledge.workspace.empty"),
+          <div className="grid">
+            {data.knowledge.items.map((doc) => (
+              <KnowledgeCard key={doc.id} doc={doc} />
+            ))}
+          </div>,
+          link("/knowledge?mine=1", t("knowledge.workspace.viewAll", { count: n(data.knowledge.total) })),
         )}
 
         <section className="detail-section ws-section" aria-labelledby="ws-network">

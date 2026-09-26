@@ -18,6 +18,7 @@ import { asGroupRole, asProjectRole, asProjectStatus, toAreaRef } from "./serial
 import { eventInclude, eventOrderBy, eventScopeWhere, serializeEvents } from "./eventSerializers.js";
 import { loadRefTranslations, localizedNews, localizedPublications, pick } from "./researchGraph.js";
 import { loadTranslations, localize } from "./translations.js";
+import { loadKnowledgeSection, researcherScope } from "./knowledge.js";
 
 /**
  * Phase 21: the research collaboration workspace is a READ model over relationships that already exist
@@ -49,6 +50,7 @@ export const emptyWorkspace = (): WorkspaceResponse => ({
   publications: emptySection(),
   events: emptySection(),
   news: emptySection(),
+  knowledge: emptySection(),
   collaborators: emptySection(),
 });
 
@@ -243,10 +245,12 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
     linked: a.researcherLinks.length > 0,
   }));
 
-  const [publications, events, news] = await Promise.all([
+  // Knowledge: documents this researcher wrote or that belong to their projects, groups and areas (bounded, same visibility).
+  const [publications, events, news, knowledge] = await Promise.all([
     localizedPublications(pubRows, viewer, locale),
     serializeEvents(eventRows, viewer, locale),
     localizedNews(newsRows, viewer, locale),
+    loadKnowledgeSection({ AND: [visible, { OR: researcherScope(viewer, me.id) }] }, viewer, locale, L.knowledge),
   ]);
 
   // ---- collaborators: distinct people, with how many DISTINCT projects/groups/areas they share --------
@@ -274,6 +278,7 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
     publications: { items: publications, total: pubTotal },
     events: { items: events, total: eventTotal },
     news: { items: news, total: newsTotal },
+    knowledge,
     collaborators: { items: collaborators.slice(0, L.collaborators), total: collaborators.length },
   };
 }

@@ -1,4 +1,4 @@
-import type { TranslationKey } from "@scl/shared";
+import { KNOWLEDGE_CATEGORIES, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -41,6 +41,15 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "Japanese description must be at most 5000 characters.": "events.err.jaDescriptionMax",
   "Only lab managers and admins can link an event to a project.": "events.err.projectLinkForbidden",
   "Project not found.": "events.err.projectNotFound",
+  // Knowledge base (Phase 22): the fixed messages the knowledge API and schemas produce.
+  "Body is required.": "knowledge.err.bodyRequired",
+  "Body must be at most 20000 characters.": "knowledge.err.bodyMax",
+  [`Category must be one of: ${KNOWLEDGE_CATEGORIES.join(", ")}.`]: "knowledge.err.categoryInvalid",
+  "Japanese body must be at most 20000 characters.": "knowledge.err.jaBodyMax",
+  "Research area not found.": "knowledge.err.areaNotFound",
+  "Group not found.": "knowledge.err.groupNotFound",
+  "Researcher not found.": "knowledge.err.researcherNotFound",
+  "Only lab managers and admins can filter by visibility.": "knowledge.err.visibilityFilterForbidden",
   // Admin / CMS (Phase 17): account link/unlink.
   "That account is already linked to a team profile. Unlink it first.": "adm.err.alreadyLinked",
   "That account isn't linked to a team profile.": "adm.err.notLinked",

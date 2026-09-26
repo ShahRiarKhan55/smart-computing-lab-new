@@ -26,6 +26,7 @@ import { StatusBadge } from "../components/Badge";
 import { SectionHeader } from "../components/SectionHeader";
 import { PublicationItem } from "../components/PublicationItem";
 import { RelatedResearch } from "../components/RelatedResearch";
+import { RelatedKnowledge } from "../components/RelatedKnowledge";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
 import { ProjectFormModal } from "../components/ProjectFormModal";
@@ -283,6 +284,8 @@ export function ProjectDetailPage() {
                 </div>
               )}
             </section>
+
+            <RelatedKnowledge relation="project" id={project.id} idPrefix="project" />
 
             {gallery && gallery.items.length > 0 && (
               <section className="detail-section" aria-labelledby="project-gallery">

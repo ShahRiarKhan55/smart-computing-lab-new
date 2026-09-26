@@ -13,6 +13,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import { SectionHeader } from "../components/SectionHeader";
 import { RelatedResearch } from "../components/RelatedResearch";
+import { RelatedKnowledge } from "../components/RelatedKnowledge";
 import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
@@ -269,6 +270,8 @@ export function MemberPage() {
                 </div>
               )}
             </section>
+
+            <RelatedKnowledge relation="researcher" id={profile.id} idPrefix="member" />
           </div>
 
           <aside className="detail-layout__aside" aria-label={t("member.researcherSummaryAria")}>

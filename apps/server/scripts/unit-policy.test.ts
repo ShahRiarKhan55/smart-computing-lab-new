@@ -96,6 +96,13 @@ const rows: Row[] = [
   ["canDeleteEvent (not the owner)", (a) => P.canDeleteEvent(a, false), [F, F, T, T]],
   ["canDeleteEvent (is the owner)", (a) => P.canDeleteEvent(a, true), [F, T, T, T]],
   ["canLinkEventToProject", P.canLinkEventToProject, [F, F, T, T]],
+  // Phase 22: knowledge documents are OWNED content (author or manager); visibility is manager-only.
+  ["canCreateKnowledge", P.canCreateKnowledge, [F, T, T, T]],
+  ["canEditKnowledge (not the owner)", (a) => P.canEditKnowledge(a, false), [F, F, T, T]],
+  ["canEditKnowledge (is the owner)", (a) => P.canEditKnowledge(a, true), [F, T, T, T]],
+  ["canDeleteKnowledge (not the owner)", (a) => P.canDeleteKnowledge(a, false), [F, F, T, T]],
+  ["canDeleteKnowledge (is the owner)", (a) => P.canDeleteKnowledge(a, true), [F, T, T, T]],
+  ["canFilterKnowledgeByVisibility", P.canFilterKnowledgeByVisibility, [F, F, T, T]],
   // Phase 17: admin / CMS. Managers get the content views; accounts and account audit stay ADMIN-only.
   ["canAccessAdmin", P.canAccessAdmin, [F, F, T, T]],
   ["canBulkChangeVisibility (same rule as canChangeVisibility)", P.canBulkChangeVisibility, [F, F, T, T]],
@@ -138,6 +145,7 @@ for (const [name, fn] of rows) {
       "canUploadFile",
       "canCreateGalleryItem",
       "canCreateEvent",
+      "canCreateKnowledge",
     ].includes(name)
   )
     continue;

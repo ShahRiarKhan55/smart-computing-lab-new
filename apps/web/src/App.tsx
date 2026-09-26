@@ -22,6 +22,8 @@ import { ForumTopicPage } from "./pages/community/ForumTopicPage";
 import { GalleryPage } from "./pages/GalleryPage";
 import { EventsPage } from "./pages/EventsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
+import { KnowledgePage } from "./pages/KnowledgePage";
+import { KnowledgeDetailPage } from "./pages/KnowledgeDetailPage";
 import { SearchPage } from "./pages/SearchPage";
 import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -66,6 +68,8 @@ export default function App() {
         <Route path="/gallery" element={<GalleryPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
+        <Route path="/knowledge" element={<KnowledgePage />} />
+        <Route path="/knowledge/:id" element={<KnowledgeDetailPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
         <Route path="/publications" element={<PublicationsPage />} />

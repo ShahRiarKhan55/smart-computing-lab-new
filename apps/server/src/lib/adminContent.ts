@@ -16,6 +16,7 @@ import {
 import { prisma } from "./prisma.js";
 import { translationMatchIds } from "./search.js";
 import { eventInclude, eventOrderBy, eventScopeWhere } from "./eventSerializers.js";
+import { knowledgeInclude } from "./knowledge.js";
 
 
 /**
@@ -145,6 +146,33 @@ const DEFS: Record<AdminContentType, Def> = {
         ["projects", prisma.event.count({ where: { id, projectId: { not: null } } })],
       ]),
   },
+  knowledge: {
+    entity: "KNOWLEDGE_DOC",
+    titleField: "title",
+    textFields: ["title", "body"],
+    count: (where) => prisma.knowledgeDoc.count({ where }),
+    find: (where, orderBy, skip, take) =>
+      prisma.knowledgeDoc.findMany({ where, orderBy: orderBy as Prisma.KnowledgeDocOrderByWithRelationInput[], skip, take, include: knowledgeInclude }),
+    base: (r) => {
+      const profile = r.author?.teamMember ?? null;
+      return {
+        title: r.title,
+        subtitle: "",
+        visibility: vis(r),
+        status: r.category,
+        date: null,
+        owner: profile ? { id: profile.id, name: profile.name } : null,
+        href: `/knowledge/${r.id}`,
+      };
+    },
+    relations: (id) =>
+      rel([
+        ["projects", prisma.knowledgeDoc.count({ where: { id, projectId: { not: null } } })],
+        ["areas", prisma.knowledgeDoc.count({ where: { id, researchAreaId: { not: null } } })],
+        ["groups", prisma.knowledgeDoc.count({ where: { id, groupId: { not: null } } })],
+        ["researchers", prisma.knowledgeDoc.count({ where: { id, teamMemberId: { not: null } } })],
+      ]),
+  },
   "team-member": {
     entity: "TEAM_MEMBER",
     titleField: "name",
@@ -204,7 +232,11 @@ async function buildWhere(query: AdminContentQuery, def: Def, now: Date): Promis
   if (query.status) and.push({ status: query.status });
   if (query.newsType) and.push({ type: query.newsType });
   if (query.kind) and.push({ kind: query.kind });
-  if (query.owner) and.push({ createdBy: { teamMember: { id: query.owner } } });
+  if (query.owner) and.push(query.type === "knowledge" ? { author: { teamMember: { id: query.owner } } } : { createdBy: { teamMember: { id: query.owner } } });
+  if (query.category) and.push({ category: query.category });
+  if (query.project) and.push({ projectId: query.project });
+  if (query.area) and.push({ researchAreaId: query.area });
+  if (query.group) and.push({ groupId: query.group });
   if (query.scope) and.push(eventScopeWhere(query.scope, now) as Where);
   if (query.from || query.to) {
     and.push({ updatedAt: { ...(query.from ? { gte: query.from } : {}), ...(query.to ? { lt: new Date(query.to.getTime() + DAY_MS) } : {}) } });
@@ -308,4 +340,5 @@ export const VISIBILITY_TARGETS: Record<
   publication: { delegate: (tx) => tx.publication as unknown as VisDelegate, action: "PUBLICATION_UPDATED", entityType: "PUBLICATION", titleField: "title" },
   news: { delegate: (tx) => tx.newsItem as unknown as VisDelegate, action: "NEWS_UPDATED", entityType: "NEWS_ITEM", titleField: "title" },
   event: { delegate: (tx) => tx.event as unknown as VisDelegate, action: "EVENT_UPDATED", entityType: "EVENT", titleField: "title" },
+  knowledge: { delegate: (tx) => tx.knowledgeDoc as unknown as VisDelegate, action: "KNOWLEDGE_UPDATED", entityType: "KNOWLEDGE_DOC", titleField: "title" },
 };

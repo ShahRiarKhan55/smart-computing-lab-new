@@ -436,6 +436,38 @@ const sources = [
       ...visibilityField(viewer, r.visibility),
     }),
   }),
+
+  // Knowledge documents (Phase 22): own `visibility` column, so the SAME visibleTo() as news/events. The body is
+  // searched too (plain `contains`, bounded by the 20,000-character body cap) and Japanese title/body overrides match
+  // through the same translationMatchIds() as every other translatable entity. Linked project/area/group are never
+  // searched or returned as columns (only as Phase 20 `related` links, read through visibleTo), so a hidden project
+  // can't surface from a document. `meta` is empty: the type badge already says "Knowledge" and a category label
+  // would put English words into a Japanese result.
+  defineSource<Prisma.KnowledgeDocWhereInput, { id: string; title: string; body: string; visibility: string }>({
+    type: "knowledge",
+    title: "title",
+    fields: ["body"],
+    translatable: "KNOWLEDGE_DOC",
+    base: visibleTo,
+    count: (where) => prisma.knowledgeDoc.count({ where }),
+    find: (where, skip, take) =>
+      prisma.knowledgeDoc.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ title: "asc" }, { id: "asc" }],
+        select: { id: true, title: true, body: true, visibility: true },
+      }),
+    toResult: (r, viewer, terms) => ({
+      type: "knowledge",
+      id: r.id,
+      title: r.title,
+      description: describe([r.body], terms),
+      meta: "",
+      href: `/knowledge/${r.id}`,
+      ...visibilityField(viewer, r.visibility),
+    }),
+  }),
 ];
 
 // Sources are listed in SEARCH_TYPES order: that order IS the "type" step of the sort above.

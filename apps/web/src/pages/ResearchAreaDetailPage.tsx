@@ -15,6 +15,7 @@ import { ProjectCard } from "../components/ProjectCard";
 import { SectionHeader } from "../components/SectionHeader";
 import { RelatedOutputs } from "../components/RelatedOutputs";
 import { RelatedResearch } from "../components/RelatedResearch";
+import { RelatedKnowledge } from "../components/RelatedKnowledge";
 import { ResearchFormModal } from "../components/ResearchFormModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
@@ -129,6 +130,8 @@ export function ResearchAreaDetailPage() {
             </section>
 
             <RelatedOutputs idPrefix="area" publications={area.publications} news={area.news} events={area.events} note={t("rs.area.outputsNote")} />
+
+            <RelatedKnowledge relation="area" id={area.id} idPrefix="area" />
           </div>
 
           <aside className="detail-layout__aside" aria-label={t("rs.a11y.relatedNav")}>

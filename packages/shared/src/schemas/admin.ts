@@ -3,6 +3,7 @@ import { idSchema } from "./common.js";
 import { visibilitySchema, type Visibility } from "./enums.js";
 import { EVENT_KINDS, EVENT_SCOPES, EVENT_TRANSLATION_MAX } from "./event.js";
 import { GROUP_TRANSLATION_MAX } from "./group.js";
+import { KNOWLEDGE_CATEGORIES, KNOWLEDGE_TRANSLATION_MAX } from "./knowledge.js";
 import { NEWS_TRANSLATION_MAX, NEWS_TYPES } from "./news.js";
 import { PUBLICATION_TRANSLATION_MAX } from "./publication.js";
 import { PROJECT_STATUSES, PROJECT_TRANSLATION_MAX } from "./project.js";
@@ -17,10 +18,10 @@ import { isTranslatableEntityType, TRANSLATABLE_FIELDS, type TranslatableEntityT
  */
 
 // ---- content types ------------------------------------------------------------
-export const ADMIN_CONTENT_TYPES = ["research-area", "project", "group", "publication", "news", "event", "team-member"] as const;
+export const ADMIN_CONTENT_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge", "team-member"] as const;
 export type AdminContentType = (typeof ADMIN_CONTENT_TYPES)[number];
 /** The types whose table has a `visibility` column (a team profile has none: it is always public). */
-export const ADMIN_VISIBILITY_TYPES = ["research-area", "project", "group", "publication", "news", "event"] as const;
+export const ADMIN_VISIBILITY_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge"] as const;
 export type AdminVisibilityType = (typeof ADMIN_VISIBILITY_TYPES)[number];
 export const hasVisibility = (t: AdminContentType): t is AdminVisibilityType => (ADMIN_VISIBILITY_TYPES as readonly string[]).includes(t);
 
@@ -31,6 +32,7 @@ export const ADMIN_TRANSLATION_ENTITY: Partial<Record<AdminContentType, Translat
   group: "RESEARCH_GROUP",
   news: "NEWS_ITEM",
   event: "EVENT",
+  knowledge: "KNOWLEDGE_DOC",
   publication: "PUBLICATION",
   "team-member": "TEAM_MEMBER",
 };
@@ -123,6 +125,10 @@ const rawContentQuery = z.object({
   status: optionalEnum(PROJECT_STATUSES, "Status"),
   newsType: optionalEnum(NEWS_TYPES, "News type"),
   translation: optionalEnum(CONTENT_TRANSLATION_STATES, "Translation"),
+  category: optionalEnum(KNOWLEDGE_CATEGORIES, "Category"),
+  project: z.string({ invalid_type_error: "Project must be an id." }).optional(),
+  area: z.string({ invalid_type_error: "Research area must be an id." }).optional(),
+  group: z.string({ invalid_type_error: "Group must be an id." }).optional(),
   from: dayParam("From"),
   to: dayParam("To"),
   sort: optionalEnum(CONTENT_SORTS, "Sort"),
@@ -133,12 +139,16 @@ const rawContentQuery = z.object({
 /** Which optional filters mean something for which content type; sending one that does not apply is a 400 (never silently ignored). */
 const FILTER_APPLIES: Record<string, (t: AdminContentType) => boolean> = {
   visibility: hasVisibility,
-  owner: (t) => t === "event",
+  owner: (t) => t === "event" || t === "knowledge",
   scope: (t) => t === "event",
   kind: (t) => t === "event",
   status: (t) => t === "project",
   newsType: (t) => t === "news",
   translation: (t) => ADMIN_TRANSLATION_ENTITY[t] !== undefined,
+  category: (t) => t === "knowledge",
+  project: (t) => t === "knowledge",
+  area: (t) => t === "knowledge",
+  group: (t) => t === "knowledge",
 };
 
 export const adminContentQuerySchema = rawContentQuery.superRefine((v, ctx) => {
@@ -147,8 +157,10 @@ export const adminContentQuerySchema = rawContentQuery.superRefine((v, ctx) => {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `The "${key}" filter does not apply to ${v.type}.` });
     }
   }
-  if (v.owner !== undefined && !idSchema.safeParse(v.owner).success) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid id." });
+  for (const id of [v.owner, v.project, v.area, v.group]) {
+    if (id !== undefined && id !== "" && !idSchema.safeParse(id).success) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid id." });
+    }
   }
   if (v.from && v.to && v.from.getTime() > v.to.getTime()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "From can't be after To." });
@@ -168,7 +180,7 @@ export interface AdminContentRow {
   status: string | null;
   /** The record's own date where it has one (event start, news date), ISO. */
   date: string | null;
-  /** Public team profile of the creator (events only). Never an account id or email. */
+  /** Public team profile of the creator (events and knowledge documents). Never an account id or email. */
   owner: { id: string; name: string } | null;
   /** Japanese overrides present / translatable fields; null when the type has none. */
   translation: { done: number; total: number } | null;
@@ -236,6 +248,7 @@ export const ADMIN_TRANSLATION_MAX: Record<TranslatableEntityType, Record<string
   RESEARCH_GROUP: GROUP_TRANSLATION_MAX,
   NEWS_ITEM: NEWS_TRANSLATION_MAX,
   EVENT: EVENT_TRANSLATION_MAX,
+  KNOWLEDGE_DOC: KNOWLEDGE_TRANSLATION_MAX,
   PUBLICATION: PUBLICATION_TRANSLATION_MAX,
   TEAM_MEMBER: TEAM_MEMBER_TRANSLATION_MAX,
 };
@@ -319,6 +332,7 @@ export interface AdminOverview {
   publications: AdminCount;
   news: AdminCount;
   events: AdminCount & { upcoming: number };
+  knowledgeDocs: AdminCount;
   forumCategories: AdminCount;
   forumTopics: number;
   galleryItems: AdminCount;
