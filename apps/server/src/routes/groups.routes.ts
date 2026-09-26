@@ -7,6 +7,8 @@ import {
   canEditGroup,
   canManageGroupSettings,
   createGroupSchema,
+  addGroupMemberSchema,
+  setGroupMemberRoleSchema,
   setGroupMembersSchema,
   updateGroupSchema,
   type GroupDetail,
@@ -23,6 +25,7 @@ import { slugify, uniqueSlug } from "../lib/slug.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
 import { loadProjectOutputs, loadRefTranslations, pick } from "../lib/researchGraph.js";
+import { mountMemberRoutes } from "../lib/membership.js";
 import type { Locale } from "@scl/shared";
 
 const router = Router();
@@ -306,5 +309,25 @@ router.put(
     res.json({ success: true });
   }),
 );
+
+// Phase 21: single-researcher add / change-role / remove (the workspace and detail-page actions).
+mountMemberRoutes(router, {
+  guard: requireGroupEditor,
+  addSchema: addGroupMemberSchema,
+  roleSchema: setGroupMemberRoleSchema,
+  action: "GROUP_MEMBERS_CHANGED",
+  entityType: "RESEARCH_GROUP",
+  parent: {
+    load: async (tx, id) => {
+      const g = await tx.researchGroup.findUnique({ where: { id }, select: { id: true, name: true } });
+      return g && { id: g.id, label: g.name, labelKey: "name" };
+    },
+    find: (tx, groupId, teamMemberId) => tx.groupMember.findUnique({ where: { groupId_teamMemberId: { groupId, teamMemberId } }, select: { role: true } }),
+    leads: async (tx, groupId) => (await tx.groupMember.findMany({ where: { groupId, role: "LEAD" }, select: { teamMemberId: true } })).map((m) => m.teamMemberId).sort(),
+    create: (tx, groupId, teamMemberId, role) => tx.groupMember.create({ data: { groupId, teamMemberId, role } }),
+    update: (tx, groupId, teamMemberId, role) => tx.groupMember.update({ where: { groupId_teamMemberId: { groupId, teamMemberId } }, data: { role } }),
+    remove: (tx, groupId, teamMemberId) => tx.groupMember.delete({ where: { groupId_teamMemberId: { groupId, teamMemberId } } }),
+  },
+});
 
 export default router;

@@ -46,6 +46,11 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "That account isn't linked to a team profile.": "adm.err.notLinked",
   "Selected team member does not exist.": "adm.err.memberMissing",
   "That team member already has a linked account.": "adm.err.memberTaken",
+  // Research collaboration workspace (Phase 21): single-researcher membership writes.
+  "That researcher is already a member.": "workspace.err.alreadyMember",
+  "That researcher is not a member.": "workspace.err.notMember",
+  "That researcher already has this role.": "workspace.err.alreadyRole",
+  "One or more team members do not exist.": "workspace.err.memberMissing",
 };
 
 /** The localized text for a known server/schema message, else the message itself (the same rule as `apiErrorMessage`). */

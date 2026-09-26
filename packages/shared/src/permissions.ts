@@ -168,3 +168,12 @@ export const canViewAuditLog = isManager;
 export const canViewAccountAudit = isAdmin;
 /** Link or unlink an existing account and a team profile: an account operation, so admin only. */
 export const canLinkAccounts = canManageUsers;
+
+// ---- research collaboration workspace (Phase 21) ---------------------------
+// The workspace is a researcher-facing READ view of the caller's OWN research relationships, so
+// viewing it is "any signed-in account" (a manager/admin sees their own workspace, not someone else's,
+// and it grants no extra visibility). Membership management from it is exactly the Phase 9 rule for
+// project/group membership: a manager, or a LEAD of that project/group. No new power is added.
+export const canViewWorkspace = isMember;
+export const canManageProjectMembers = canEditProject;
+export const canManageGroupMembers = canEditGroup;

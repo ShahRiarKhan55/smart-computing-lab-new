@@ -8,6 +8,7 @@
 //   ONLY_EVENTS=1 runs just the Phase 16 events section (steps named "events ..."; P15_W narrows its widths too).
 //   ONLY_ADMIN=1 runs just the Phase 17 admin/CMS section (steps named "admin ..."; P15_W / P15_USERS=admin-manager,admin-admin narrow the sweeps).
 //   ONLY_DISCOVERY=1 runs just the Phase 20 discovery section (steps named "discovery ..."; P15_W / P15_USERS=disc-guest,disc-member narrow the sweeps).
+//   ONLY_WORKSPACE=1 runs just the Phase 21 workspace section (steps named "workspace ..."; P15_W / P15_USERS=ws-guest,ws-member,ws-lead,ws-manager,ws-admin,ws-noprofile,ws-empty narrow the sweeps).
 //   ONLY_PUBS=1 runs just the Phase 19 publications section (steps named "publications ..."; P15_W / P15_USERS=pubs-guest,pubs-member,pubs-manager narrow the sweeps).
 //   ONLY_RESEARCH=1 runs just the Phase 18 research-structure section (steps named "research ..."; P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
@@ -50,6 +51,7 @@ const ONLY_ADMIN = !!process.env.ONLY_ADMIN;
 const ONLY_RESEARCH = !!process.env.ONLY_RESEARCH;
 const ONLY_PUBS = !!process.env.ONLY_PUBS;
 const ONLY_DISCOVERY = !!process.env.ONLY_DISCOVERY;
+const ONLY_WORKSPACE = !!process.env.ONLY_WORKSPACE;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -221,7 +223,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery "))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery ")) || (ONLY_WORKSPACE && !name.startsWith("workspace "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -1176,7 +1178,7 @@ async function connect() {
       // Account-menu assertions"). Updated to the already-shipped Phase 12 navigation; not a new
       // feature, and no assertion here is weakened — the exact expected set just now matches
       // what navConfig.ts (ACCOUNT_NAV) has rendered since Phase 12.
-      check(`${label}: the Account menu holds ${isAdminRole ? "My Profile, Messages, Notifications, Admin Dashboard, Log out" : "My Profile, Messages, Notifications, Log out (no Admin Dashboard)"}`, eqJson(acct, isAdminRole ? ["my profile", "messages", "notifications", "admin dashboard", "log out"] : ["my profile", "messages", "notifications", "log out"]), JSON.stringify(acct));
+      check(`${label}: the Account menu holds ${isAdminRole ? "My Workspace, My Profile, Messages, Notifications, Admin Dashboard, Log out" : "My Workspace, My Profile, Messages, Notifications, Log out (no Admin Dashboard)"}`, eqJson(acct, isAdminRole ? ["my workspace", "my profile", "messages", "notifications", "admin dashboard", "log out"] : ["my workspace", "my profile", "messages", "notifications", "log out"]), JSON.stringify(acct));
       check(`${label}: ${isAdminRole ? "an /admin link exists" : "no /admin link exists anywhere in the header"}`, (await hrefEverywhere("/admin")) === isAdminRole);
       check(`${label}: the Account panel opens right-aligned, fully inside the viewport`, await inViewport("#nav-panel-account"));
       await shot(`nav-${label.toLowerCase()}-account-open`);
@@ -1317,7 +1319,7 @@ async function connect() {
       await openMenu("account");
       const acct = await panelLabels("account");
       // Phase 14 test maintenance: same pre-Phase-12 staleness fix as the desktop version above.
-      check(`M390 ${label}: Account holds ${isAdminRole ? "My Profile, Messages, Notifications, Admin Dashboard, Log out" : "My Profile, Messages, Notifications, Log out"}`, eqJson(acct, isAdminRole ? ["my profile", "messages", "notifications", "admin dashboard", "log out"] : ["my profile", "messages", "notifications", "log out"]), JSON.stringify(acct));
+      check(`M390 ${label}: Account holds ${isAdminRole ? "My Workspace, My Profile, Messages, Notifications, Admin Dashboard, Log out" : "My Workspace, My Profile, Messages, Notifications, Log out"}`, eqJson(acct, isAdminRole ? ["my workspace", "my profile", "messages", "notifications", "admin dashboard", "log out"] : ["my workspace", "my profile", "messages", "notifications", "log out"]), JSON.stringify(acct));
       check(`M390 ${label}: menu fits the screen (scrolls inside itself if it must), page has no horizontal overflow`, (await inViewport(".nav__links")) && (await overflowPx()) <= 1 && (await ev(`(() => { const b = document.querySelector('.nav__links').getBoundingClientRect(); return b.bottom <= innerHeight + 1; })()`)));
       await shot(`nav-mobile-390-${label.toLowerCase()}`);
       check(`M390 ${label}: Schedule from the phone menu opens the calendar page`, (await clickEl('.nav__links > li > a[href="/schedule"]')) && (await waitFor(`location.pathname === '/schedule'`)) && (await waitText("Lab Schedule")));
@@ -4515,6 +4517,443 @@ async function connect() {
   await step("discovery: restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
 
 
+  // ================================================================ PHASE 21: research collaboration workspace
+  // /workspace (one request, login-gated), the members dialog (single-researcher add / role / remove), EN/JA, hostile text,
+  // long text, five roles and the nine-width sweep. (Steps are named "workspace ..."; ONLY_WORKSPACE=1 runs just them;
+  // P15_W / P15_USERS=ws-guest,ws-member,ws-lead,ws-manager,ws-admin,ws-noprofile,ws-empty narrow the sweeps.)
+  section("phase 21: research collaboration workspace");
+  const R21 = {};
+  const w21Long = "ZZ B9 W21 Long " + "K".repeat(110);
+  const w21X = (n) => `<img src=x onerror=window.__w21Xss=${n}>`;
+  const w21JaLong = "ZZ B9 W21 " + "超長い日本語の研究者名前がカードとダイアログの幅を壊さないことを確認するためのテスト".repeat(2);
+  const wsSecText = (id) => ev(`document.querySelector('section[aria-labelledby="ws-${id}"]')?.innerText || ''`);
+  const wsHead = (id) => ev(`document.getElementById('ws-${id}')?.textContent.trim() || ''`);
+  const wsCards = (id) => ev(`(() => [...document.querySelectorAll('section[aria-labelledby="ws-${id}"] .ws-card')].map((c) => ({ title: c.querySelector('.card__title')?.textContent.trim(), text: c.innerText, manage: [...c.querySelectorAll('button')].map((b) => b.getAttribute('aria-label')), hrefs: [...c.querySelectorAll('a')].map((a) => a.getAttribute('href')) })))()`);
+  const wsCard = async (id, title) => (await wsCards(id)).find((c) => c.title === title) || null;
+  const wsPeople = () => ev(`[...document.querySelectorAll('.ws-people .ws-person')].map((p) => ({ name: p.querySelector('.ws-person__name')?.textContent.trim(), href: p.querySelector('a')?.getAttribute('href'), text: p.innerText }))`);
+  const wsReady = async (p = "/workspace") => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]') && (!!document.querySelector('#ws-projects') || !!document.querySelector('.empty-state') || !!document.querySelector('[role="alert"]'))`, 9000); await sleep(300); };
+  const wsApi = (locale) => ev(`fetch('/api/workspace', { credentials: 'same-origin', headers: ${locale ? `{ 'X-Locale': '${locale}' }` : "{}"} }).then((r) => r.json())`);
+  const wsIds = (j) => JSON.stringify(["projects", "groups", "areas", "publications", "events", "news", "collaborators"].map((k) => j[k].items.map((x) => x.id)));
+  const wsDlg = () => ev(`(() => { const d = document.querySelector('.modal[role="dialog"]'); if (!d) return null; const t = document.getElementById(d.getAttribute('aria-labelledby') || '__'); const opts = document.getElementById('manage-pick'); return { title: t ? t.textContent.trim() : '', ready: !!d.querySelector('.manage__list, .manage__add') || /^(No members|メンバーはまだ)/.test(d.innerText), members: [...d.querySelectorAll('.manage__row')].map((r) => ({ name: r.querySelector('.manage__name')?.textContent.trim(), role: r.querySelector('select')?.value || null, confirming: !!r.querySelector('.manage__confirm') })), pick: opts ? [...opts.options].map((o) => o.textContent.trim()) : null, pickDisabled: opts ? opts.disabled : null, addDisabled: d.querySelector('.manage__add button[type="submit"]')?.disabled ?? null, roleOptions: [...(d.querySelector('#manage-role')?.options || [])].map((o) => o.value), status: d.querySelector('[role="status"]')?.textContent.trim() || '', alert: d.querySelector('[role="alert"]')?.innerText.trim() || '' }; })()`);
+  const wsDlgWait = async (pred, ms = 6000) => { const t0 = Date.now(); let d; while (Date.now() - t0 < ms) { d = await wsDlg(); if (d && pred(d)) return d; await sleep(120); } return d; };
+  const wsOpen = async (label) => {
+    const ok = await ev(`(() => { document.querySelectorAll('[data-w21-op]').forEach((e) => e.removeAttribute('data-w21-op')); const b = [...document.querySelectorAll('.ws-card button')].find((x) => (x.getAttribute('aria-label') || '').includes(${JSON.stringify(label)})); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.setAttribute('data-w21-op', '1'); return true; })()`);
+    if (!ok) return null;
+    await p15Settle();
+    await clickEl("[data-w21-op]");
+    return wsDlgWait((d) => d.ready);
+  };
+  const wsRowBtn = async (name, matchLabel) => { // real click on a button inside the member row of `name`
+    const ok = await ev(`(() => { const r = [...document.querySelectorAll('.manage__row')].find((x) => x.querySelector('.manage__name')?.textContent.trim() === ${JSON.stringify(name)}); const b = r && [...r.querySelectorAll('button')].find((x) => ${matchLabel}.test(x.getAttribute('aria-label') || x.textContent)); if (!b) return false; b.setAttribute('data-w21-row', '1'); return true; })()`);
+    if (!ok) return false;
+    await ev(`document.querySelector('[data-w21-row]').scrollIntoView({ block: 'center' })`);
+    await p15Settle();
+    const r = await clickEl("[data-w21-row]");
+    await ev(`document.querySelectorAll('[data-w21-row]').forEach((e) => e.removeAttribute('data-w21-row'))`);
+    return r;
+  };
+  const wsSetRole = (name, role) => ev(`(() => { const r = [...document.querySelectorAll('.manage__row')].find((x) => x.querySelector('.manage__name')?.textContent.trim() === ${JSON.stringify(name)}); const s = r?.querySelector('select'); if (!s) return false; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(role)}); s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  const wsPick = (id) => ev(`(() => { const s = document.getElementById('manage-pick'); if (!s) return false; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(id)}); s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  const wsMembersApi = (kind, id) => ev(`fetch('/api/${kind}/${id}').then((r) => r.json()).then((j) => j.members.map((m) => m.teamMemberId + ':' + m.role))`);
+  const wsClickAdd = async () => { await ev(`document.querySelector('.manage__add button[type="submit"]')?.scrollIntoView({ block: 'center' })`); await p15Settle(); return clickEl('.manage__add button[type="submit"]'); };
+  const wsClose = async () => { await press("esc"); return waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2500); };
+
+  await step("workspace seed: five roles, a project lead, collaborators with long / hostile / Japanese names, hostile and long titles", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const a = new Client();
+    await a.req("POST", "/auth/login", ADMIN);
+    R21.a = a;
+    const J = (r) => r.json;
+    const mkAcct = async (key, role, name) => {
+      const r = await a.req("POST", "/users", { email: `b9-w21-${key}@example.test`, password: PW, role, name, initials: "W" + key.slice(0, 1).toUpperCase(), memberRole: "Researcher", category: "RESEARCH" });
+      const team = (await a.req("GET", "/team")).json;
+      D.userIds.push(r.json.id); // the browser's body scanner now also looks for these account ids
+      return { email: `b9-w21-${key}@example.test`, userId: r.json.id, tmId: team.find((m) => m.name === name).id, name };
+    };
+    R21.lead = await mkAcct("lead", "MEMBER", "ZZ B9 W21 Lead");
+    R21.mem = await mkAcct("mem", "MEMBER", "ZZ B9 W21 Member");
+    R21.mgr = await mkAcct("mgr", "LAB_MANAGER", "ZZ B9 W21 Manager");
+    R21.adm = await mkAcct("adm", "ADMIN", "ZZ B9 W21 Admin");
+    R21.none = await mkAcct("none", "MEMBER", "ZZ B9 W21 Nobody");
+    const mkPerson = async (name) => J(await a.req("POST", "/team", { name, role: "Fellow", category: "RESEARCH", initials: "ZW", department: "", bio: "" }));
+    R21.cJa = await mkPerson(w21JaLong);
+    R21.cX = await mkPerson("ZZ B9 W21 " + w21X(1));
+    R21.cAdd = await mkPerson("ZZ B9 W21 Candidate One");
+    R21.cAdd2 = await mkPerson("ZZ B9 W21 Candidate Two");
+    R21.cUnb = await mkPerson("ZZ B9 W21 " + "U".repeat(90));
+    R21.cGrp = await mkPerson("ZZ B9 W21 Group Only Colleague"); // shares a GROUP with the lead, no project
+    R21.many = await mkAcct("many", "MEMBER", "ZZ B9 W21 Many");
+    R21.area = J(await a.req("POST", "/research", { title: "ZZ B9 W21 Area Alpha", description: "W21 area", tag: "ZZW21", visibility: "PUBLIC", translations: { ja: { title: "ZZ B9 W21 アルファ分野" } } }));
+    R21.areaH = J(await a.req("POST", "/research", { title: "ZZ B9 W21 Area Lab", description: "W21 lab area", tag: "ZZW21", visibility: "LAB_ONLY" }));
+    R21.areaX = J(await a.req("POST", "/research", { title: "ZZ B9 W21 Area " + w21X(2), description: "hostile", tag: "ZZW21", visibility: "PUBLIC" }));
+    R21.grp = J(await a.req("POST", "/groups", { name: "ZZ B9 W21 Group", description: "g", visibility: "PUBLIC", translations: { ja: { name: "ZZ B9 W21 グループ" } } }));
+    R21.grpX = J(await a.req("POST", "/groups", { name: "ZZ B9 W21 Group <script>window.__w21Xss=3</script>", description: "gx", visibility: "PUBLIC" }));
+    const mkPrj = async (title, visibility, groupId, ja) => J(await a.req("POST", "/projects", { title, summary: "W21 summary", description: "d", status: "ACTIVE", visibility, ...(groupId ? { groupId } : {}), ...(ja ? { translations: { ja: { title: ja } } } : {}) }));
+    R21.p1 = await mkPrj("ZZ B9 W21 Project One", "PUBLIC", R21.grp.id, "ZZ B9 W21 プロジェクト一");
+    R21.p2 = await mkPrj("ZZ B9 W21 Project Lab", "LAB_ONLY", R21.grp.id);
+    R21.p3 = await mkPrj(w21Long, "PUBLIC", null);
+    R21.p4 = await mkPrj("ZZ B9 W21 Project " + w21X(4), "PUBLIC", R21.grpX.id);
+    await a.req("PUT", `/projects/${R21.p1.id}/areas`, { areaIds: [R21.area.id, R21.areaH.id] });
+    await a.req("PUT", `/projects/${R21.p4.id}/areas`, { areaIds: [R21.areaX.id] });
+    const P = (id, list) => a.req("PUT", `/projects/${id}/members`, { members: list });
+    await P(R21.p1.id, [{ teamMemberId: R21.lead.tmId, role: "LEAD" }, { teamMemberId: R21.mem.tmId, role: "MEMBER" }, { teamMemberId: R21.adm.tmId, role: "MEMBER" }, { teamMemberId: R21.mgr.tmId, role: "MEMBER" }, { teamMemberId: R21.cJa.id, role: "MEMBER" }, { teamMemberId: R21.cX.id, role: "COLLABORATOR" }, { teamMemberId: R21.cUnb.id, role: "MEMBER" }]);
+    await P(R21.p2.id, [{ teamMemberId: R21.lead.tmId, role: "MEMBER" }, { teamMemberId: R21.mem.tmId, role: "MEMBER" }, { teamMemberId: R21.mgr.tmId, role: "MEMBER" }]);
+    await P(R21.p3.id, [{ teamMemberId: R21.lead.tmId, role: "MEMBER" }]);
+    await P(R21.p4.id, [{ teamMemberId: R21.lead.tmId, role: "MEMBER" }]);
+    await a.req("PUT", `/groups/${R21.grp.id}/members`, { members: [{ teamMemberId: R21.lead.tmId, role: "LEAD" }, { teamMemberId: R21.mem.tmId, role: "MEMBER" }, { teamMemberId: R21.cGrp.id, role: "MEMBER" }] });
+    // A researcher with MORE projects than the workspace cap (12): the heading must show the true total, the page the cap.
+    R21.manyProjects = [];
+    for (let i = 0; i < 14; i++) {
+      const pr = await mkPrj(`ZZ B9 W21 Many ${String(i).padStart(2, "0")}`, "PUBLIC", null);
+      await a.req("PUT", `/projects/${pr.id}/members`, { members: [{ teamMemberId: R21.many.tmId, role: "MEMBER" }] });
+      R21.manyProjects.push(pr);
+    }
+    await a.req("PUT", `/groups/${R21.grpX.id}/members`, { members: [{ teamMemberId: R21.lead.tmId, role: "MEMBER" }] });
+    await a.req("PUT", `/member/${R21.lead.tmId}/areas`, { areaIds: [R21.area.id, R21.areaX.id] });
+    R21.pub = J(await a.req("POST", "/publications", { year: 2038, title: "ZZ B9 W21 Paper Alpha", authors: "ZZ B9 W21 Lead", venue: "ZZ B9 W21 Journal" }));
+    R21.pubX = J(await a.req("POST", "/publications", { year: 2038, title: "ZZ B9 W21 Paper " + w21X(5), authors: "x", venue: "v" }));
+    await a.req("PUT", `/member/${R21.lead.tmId}/publications`, { publicationIds: [R21.pub.id, R21.pubX.id] });
+    await a.req("PUT", `/projects/${R21.p1.id}/publications`, { publicationIds: [R21.pub.id] });
+    R21.news = J(await a.req("POST", "/news", { date: "Jan 2038", sortDate: "2038-01-01", type: "Update", title: "ZZ B9 W21 News One", description: "d", visibility: "PUBLIC" }));
+    R21.newsX = J(await a.req("POST", "/news", { date: "Jan 2038", sortDate: "2038-01-02", type: "Update", title: "ZZ B9 W21 News " + w21X(6), description: "d", visibility: "PUBLIC" }));
+    await a.req("PUT", `/projects/${R21.p1.id}/news`, { newsIds: [R21.news.id, R21.newsX.id] });
+    const at = new Date(Date.now() + 9 * 864e5).toISOString();
+    R21.ev = J(await a.req("POST", "/events", { title: "ZZ B9 W21 Event One", kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", projectId: R21.p1.id }));
+    R21.evX = J(await a.req("POST", "/events", { title: "ZZ B9 W21 Event " + w21X(7), kind: "SEMINAR", startsAt: at, visibility: "PUBLIC", projectId: R21.p1.id }));
+    R21.teamCount = (await a.req("GET", "/team")).json.length;
+    check("workspace seed: the fixtures exist", [R21.lead.tmId, R21.mem.tmId, R21.mgr.tmId, R21.adm.tmId, R21.none.tmId, R21.cJa.id, R21.cX.id, R21.cAdd.id, R21.area.id, R21.grp.id, R21.p1.id, R21.p2.id, R21.p3.id, R21.p4.id, R21.pub.id, R21.news.id, R21.ev.id].every(Boolean));
+  });
+
+  await step("workspace guest: /workspace is gated in the UI and the API; the header offers no link", async () => {
+    await desktop(); await setLocale(null);
+    await go("/workspace"); await sleep(700);
+    check("workspace guest: /workspace redirects to /login", (await pathNow()) === "/login");
+    check("workspace guest: the page shows the login form and nothing about the workspace", (await exists("#email")) && !(await text()).includes("My research workspace") && !(await exists("#ws-projects")));
+    check("workspace guest: GET /api/workspace is 401 and the body names nothing", (await apiCall("GET", "/workspace")) === 401 && !(await ev(`fetch('/api/workspace').then((r) => r.text())`)).includes("ZZ B9"));
+    check("workspace guest: the header has no workspace link (even in closed panels)", !(await hrefEverywhere("/workspace")));
+    check("workspace guest: the membership write APIs refuse a guest (401)", (await apiCall("POST", `/projects/${R21.p1.id}/members`, { teamMemberId: R21.cAdd.id })) === 401 && (await apiCall("DELETE", `/projects/${R21.p1.id}/members/${R21.mem.tmId}`)) === 401 && (await apiCall("PUT", `/groups/${R21.grp.id}/members/${R21.mem.tmId}`, { role: "LEAD" })) === 401);
+    check("workspace guest: the public project page still shows no manage controls", await (async () => { await pReady(`/projects/${R21.p1.id}`, "ZZ B9 W21 Project One"); return !(await exists(".admin-bar")); })());
+  });
+
+  await step("workspace member: own workspace, LAB_ONLY project visible, no visibility badge, no manage controls", async () => {
+    check("workspace member: login", await login(R21.mem.email, PW));
+    await wsReady();
+    check("workspace member: one h1, one main, the page title", (await pCount("h1")) === 1 && (await pCount("main")) === 1 && (await ev(`document.querySelector('h1').textContent.trim()`)) === "My research workspace" && (await ev(`document.title`)).includes("My research workspace"));
+    const heads = await ev(`[...document.querySelectorAll('main h2')].map((h) => h.textContent.trim())`);
+    check("workspace member: seven labelled sections with real counts in their headings", heads.length === 7 && heads[0] === "My projects (2)" && heads[1] === "My groups (1)" && heads[2] === "My research areas (2)" && heads[3] === "My publications (0)" && heads[4].startsWith("Upcoming events (") && heads[5].startsWith("Recent research news (") && heads[6].startsWith("Research network ("), JSON.stringify(heads));
+    check("workspace member: every section is a named region (aria-labelledby resolves)", await ev(`[...document.querySelectorAll('main section[aria-labelledby]')].every((s) => !!document.getElementById(s.getAttribute('aria-labelledby'))) && document.querySelectorAll('main section[aria-labelledby]').length === 7`));
+    const p1 = await wsCard("projects", "ZZ B9 W21 Project One");
+    const p2 = await wsCard("projects", "ZZ B9 W21 Project Lab");
+    check("workspace member: both projects, the LAB_ONLY one included (a signed-in member may see it)", !!p1 && !!p2);
+    check("workspace member: a project card shows status, lead, group, areas, counts and the member's own role", !!p1 && /active/i.test(p1.text) && p1.text.includes("Lead: ZZ B9 W21 Lead") && p1.text.includes("ZZ B9 W21 Group") && p1.text.includes("ZZ B9 W21 Area Alpha") && /Members: 7/.test(p1.text) && /Publications: 1/.test(p1.text) && /Upcoming events: 2/.test(p1.text) && p1.text.includes("Your role: Member"), JSON.stringify(p1));
+    check("workspace member: no 'Lab only' badge anywhere (the visibility field is not sent to members)", !(await ev(`document.querySelector('main').innerText.toLowerCase().includes('lab only')`)) && !(await ev(`fetch('/api/workspace').then((r) => r.text())`)).includes('"visibility"'));
+    check("workspace member: no Manage members button (not a lead, not a manager)", (await pCount(".ws-card button")) === 0 && !(await text()).includes("Manage members"));
+    check("workspace member: the empty publications section says so and offers no 'all my publications' link", (await wsSecText("publications")).includes("No publications list you as an author yet.") && !(await exists('a[href^="/publications?researcher="]')));
+    check("workspace member: 'All my projects' goes to the researcher-filtered list the projects page really reads", await exists(`a[href="/projects?researcher=${R21.mem.tmId}"]`));
+    const people = await wsPeople();
+    check("workspace member: the research network lists the OTHER people on the same projects/groups, once each, never the member themself", people.some((p) => p.name === "ZZ B9 W21 Lead") && people.some((p) => p.name === w21JaLong) && new Set(people.map((p) => p.name)).size === people.length && !people.some((p) => p.name === "ZZ B9 W21 Member"), JSON.stringify(people.map((p) => p.name)));
+    const lead = people.find((p) => p.name === "ZZ B9 W21 Lead");
+    check("workspace member: a collaborator shows the lab role and shared counts (distinct projects, groups, areas), and links to /team/:id", !!lead && lead.text.includes("Shared projects: 2") && lead.text.includes("Shared groups: 1") && lead.href === `/team/${R21.lead.tmId}`, JSON.stringify(lead));
+    const cja = people.find((p) => p.name === w21JaLong);
+    check("workspace member: a collaborator shows ONLY the shared kinds that are non-zero (no 'Shared areas: 0' / 'Shared groups: 0' noise)", !!cja && cja.text.includes("Shared projects: 1") && !cja.text.includes("Shared groups") && !cja.text.includes("Shared areas") && !!lead && !lead.text.includes("Shared areas"), JSON.stringify(cja));
+    const html = await ev(`document.querySelector('main').outerHTML`);
+    check("workspace member: no account id, e-mail or 'userId' anywhere in the page", !D.userIds.some((u) => html.includes(u)) && !html.includes("userId") && !html.includes("@example.test"));
+    await openMenu("account");
+    check("workspace member: the Account menu lists 'My Workspace' first, and it opens the page with a real click", (await panelHrefs("account"))[0] === "/workspace" && (await clickEl('#nav-panel-account a[href="/workspace"]')) && (await waitFor(`location.pathname === '/workspace'`)));
+    await wsReady();
+    await pClick(".ws-card .card__title a", "ZZ B9 W21 Project One");
+    check("workspace member: a project title opens the existing detail page, and Back returns to the workspace", (await waitFor(`location.pathname === '/projects/${R21.p1.id}'`, 6000)) && (await (async () => { await ev(`history.back()`); return waitFor(`location.pathname === '/workspace'`, 5000); })()));
+    await shot("w21-member");
+    await logout();
+  });
+
+  await step("workspace lead: manage members of a project (add / role / remove, one request each), keyboard, focus and errors", async () => {
+    check("workspace lead: login", await login(R21.lead.email, PW));
+    await wsReady();
+    const p1 = await wsCard("projects", "ZZ B9 W21 Project One");
+    const p2 = await wsCard("projects", "ZZ B9 W21 Project Lab");
+    const g1 = await wsCard("groups", "ZZ B9 W21 Group");
+    check("workspace lead: Manage members on the projects/groups they LEAD only (P1 and the group), not on the ones they merely belong to", !!p1 && p1.manage.length === 1 && p1.manage[0] === "Manage members of ZZ B9 W21 Project One" && !!p2 && p2.manage.length === 0 && !!g1 && g1.manage.length === 1 && (await pCount(".ws-card button")) === 2, JSON.stringify([p1?.manage, p2?.manage, g1?.manage]));
+    check("workspace lead: role text, 'All my publications' link, area 'On your profile' badge, hostile-titled cards all present", p1.text.includes("Your role: Lead") && (await exists(`a[href="/publications?researcher=${R21.lead.tmId}"]`)) && (await wsSecText("areas")).includes("On your profile"));
+    const gpeople = await wsPeople();
+    const cg = gpeople.find((x) => x.name === "ZZ B9 W21 Group Only Colleague");
+    check("workspace lead: a colleague who shares only the GROUP shows 'Shared groups: 1' and no project/area counts", !!cg && cg.text.includes("Shared groups: 1") && !cg.text.includes("Shared projects") && !cg.text.includes("Shared areas"), JSON.stringify(cg));
+    const before = await wsMembersApi("projects", R21.p1.id);
+    const dlg = await wsOpen("ZZ B9 W21 Project One");
+    check("workspace lead: the dialog opens named 'Members of <project>', with the current members and a picker that excludes them", !!dlg && dlg.title === "Members of ZZ B9 W21 Project One" && dlg.members.length === 7 && dlg.members.some((m) => m.name === "ZZ B9 W21 Lead" && m.role === "LEAD") && !dlg.pick.some((o) => o.includes("ZZ B9 W21 Lead")) && dlg.pick.some((o) => o.includes("ZZ B9 W21 Candidate One")), JSON.stringify(dlg));
+    check("workspace lead: focus moved into the dialog; page scroll locked; Add is disabled until someone is chosen; project roles offered: Lead, Member, Collaborator", (await ev(`document.querySelector('.modal[role="dialog"]').contains(document.activeElement)`)) && dlg.addDisabled === true && eqJ(dlg.roleOptions, ["LEAD", "MEMBER", "COLLABORATOR"]));
+    // add
+    await wsPick(R21.cAdd.id);
+    check("workspace lead: choosing a researcher enables Add", (await wsDlg()).addDisabled === false);
+    await wsClickAdd();
+    let d = await wsDlgWait((x) => x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    check("workspace lead: Add is ONE request: the researcher appears (role Member), leaves the picker, and a polite status announces it", d.members.some((m) => m.name === "ZZ B9 W21 Candidate One" && m.role === "MEMBER") && !d.pick.some((o) => o.includes("Candidate One")) && d.status === "ZZ B9 W21 Candidate One was added." && d.pick[0] === "Choose a researcher…", JSON.stringify(d));
+    check("workspace lead: the server agrees (the join row exists, the other members are untouched)", await (async () => { const now = await wsMembersApi("projects", R21.p1.id); return now.length === before.length + 1 && now.includes(`${R21.cAdd.id}:MEMBER`) && before.every((x) => now.includes(x)); })());
+    check("workspace lead: focus goes back to the picker so the next add is a keystroke away", await ev(`document.activeElement?.id === 'manage-pick'`));
+    // role change
+    await wsSetRole("ZZ B9 W21 Candidate One", "COLLABORATOR");
+    d = await wsDlgWait((x) => x.status.includes("is now"));
+    check("workspace lead: changing a role is one request and is announced ('… is now Collaborator.')", d.status === "ZZ B9 W21 Candidate One is now Collaborator." && d.members.find((m) => m.name === "ZZ B9 W21 Candidate One").role === "COLLABORATOR" && (await wsMembersApi("projects", R21.p1.id)).includes(`${R21.cAdd.id}:COLLABORATOR`), JSON.stringify(d));
+    await wsSetRole("ZZ B9 W21 Candidate One", "LEAD");
+    d = await wsDlgWait((x) => x.status.includes("Lead"));
+    check("workspace lead: promoting to Lead works (the server allows a lead to name another lead, exactly as Phase 9)", (await wsMembersApi("projects", R21.p1.id)).includes(`${R21.cAdd.id}:LEAD`), d.status);
+    await wsSetRole("ZZ B9 W21 Candidate One", "MEMBER");
+    await wsDlgWait((x) => x.status.includes("Member"));
+    // remove: two steps, Cancel returns focus
+    check("workspace lead: Remove asks first ('Remove <name> from <project>?') with focus on the confirming button", (await wsRowBtn("ZZ B9 W21 Candidate One", /Remove/)) && (await wsDlgWait((x) => x.members.some((m) => m.confirming))).members.some((m) => m.confirming) && (await ev(`document.activeElement?.textContent.trim()`)) === "Yes, remove" && (await ev(`document.querySelector('.manage__confirm-text').textContent.trim()`)) === "Remove ZZ B9 W21 Candidate One from ZZ B9 W21 Project One?");
+    await ev(`[...document.querySelectorAll('.manage__confirm button')].find((b) => b.textContent.trim() === 'Cancel').click()`);
+    d = await wsDlgWait((x) => !x.members.some((m) => m.confirming));
+    check("workspace lead: Cancel changes nothing and puts focus back on that row's Remove button", d.members.some((m) => m.name === "ZZ B9 W21 Candidate One") && (await ev(`(document.activeElement?.getAttribute('aria-label') || '') === 'Remove ZZ B9 W21 Candidate One'`)));
+    await wsRowBtn("ZZ B9 W21 Candidate One", /Remove/);
+    await wsDlgWait((x) => x.members.some((m) => m.confirming));
+    await ev(`[...document.querySelectorAll('.manage__confirm button')].find((b) => b.textContent.trim() === 'Yes, remove').click()`);
+    d = await wsDlgWait((x) => !x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    check("workspace lead: confirming removes exactly that researcher (server row gone), announces it and offers them in the picker again", !d.members.some((m) => m.name === "ZZ B9 W21 Candidate One") && d.status === "ZZ B9 W21 Candidate One was removed." && d.pick.some((o) => o.includes("Candidate One")) && !(await wsMembersApi("projects", R21.p1.id)).some((x) => x.startsWith(R21.cAdd.id)));
+    // stale list -> duplicate (409) shown in place and the list refreshes
+    await R21.a.req("POST", `/projects/${R21.p1.id}/members`, { teamMemberId: R21.cAdd2.id, role: "MEMBER" });
+    await wsPick(R21.cAdd2.id);
+    await wsClickAdd();
+    d = await wsDlgWait((x) => !!x.alert);
+    check("workspace lead: adding someone who was added meanwhile shows the server's duplicate message IN the dialog and refreshes the list (no second row)", d.alert.includes("That researcher is already a member.") || d.alert.includes("already"), d.alert);
+    d = await wsDlg();
+    check("workspace lead: … and the refreshed list now shows them once, gone from the picker", d.members.filter((m) => m.name === "ZZ B9 W21 Candidate Two").length === 1 && !d.pick.some((o) => o.includes("Candidate Two")));
+    await R21.a.req("DELETE", `/projects/${R21.p1.id}/members/${R21.cAdd2.id}`);
+    // errors from the network
+    await fake("*/api/projects/*/members", 403, JSON.stringify({ error: "Forbidden" }));
+    await wsPick(R21.cAdd.id);
+    await wsClickAdd();
+    d = await wsDlgWait((x) => !!x.alert);
+    check("workspace lead: a 403 from the API is shown localized inside the dialog (role=alert), the dialog stays open and nothing was added", d.alert.includes("You don't have permission to do that.") && !d.members.some((m) => m.name === "ZZ B9 W21 Candidate One"), d.alert);
+    await unfake();
+    await fake("*/api/projects/*/members", 500, JSON.stringify({ error: "Internal server error" }));
+    await wsPick(R21.cAdd.id);
+    await wsClickAdd();
+    d = await wsDlgWait((x) => !!x.alert && x.alert.includes("Internal"));
+    check("workspace lead: a 500 is shown as an error and the dialog is still usable (Add enabled again, no stuck spinner)", !!d.alert && d.addDisabled === false && !/Adding/.test(await ev(`document.querySelector('.modal').innerText`)), d.alert);
+    await unfake();
+    // add once for real, then Done: the page reloads and the card count moves
+    await wsPick(R21.cAdd.id);
+    await wsClickAdd();
+    await wsDlgWait((x) => x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    await ev(`[...document.querySelectorAll('.modal__actions button')].find((b) => /^Done$/.test(b.textContent.trim())).click()`);
+    check("workspace lead: Done closes the dialog and returns focus to the Manage button that opened it", (await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 3000)) && (await ev(`document.activeElement?.getAttribute('aria-label') === 'Manage members of ZZ B9 W21 Project One'`)));
+    check("workspace lead: the project card was refreshed (7 -> 8 members) without a page reload", await waitFor(`document.querySelector('section[aria-labelledby="ws-projects"]').innerText.includes('Members: 8')`, 6000));
+    // escape closes, focus returns
+    await wsOpen("ZZ B9 W21 Project One");
+    check("workspace lead: Escape closes the dialog and focus returns to the opener", (await wsClose()) && (await ev(`document.activeElement?.getAttribute('aria-label') === 'Manage members of ZZ B9 W21 Project One'`)));
+    // remove the researcher again so later steps see the seed state
+    await R21.a.req("DELETE", `/projects/${R21.p1.id}/members/${R21.cAdd.id}`);
+    // group dialog
+    const gd = await wsOpen("ZZ B9 W21 Group");
+    check("workspace lead: the GROUP dialog offers only Lead and Member and lists the group's members", !!gd && gd.title === "Members of ZZ B9 W21 Group" && eqJ(gd.roleOptions, ["LEAD", "MEMBER"]) && gd.members.length === 3, JSON.stringify(gd));
+    await wsPick(R21.cAdd.id);
+    await wsClickAdd();
+    await wsDlgWait((x) => x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    check("workspace lead: adding to the group is one request against /groups/:id/members", (await wsMembersApi("groups", R21.grp.id)).some((x) => x.startsWith(R21.cAdd.id)));
+    await wsRowBtn("ZZ B9 W21 Candidate One", /Remove/);
+    await wsDlgWait((x) => x.members.some((m) => m.confirming));
+    await ev(`[...document.querySelectorAll('.manage__confirm button')].find((b) => b.textContent.trim() === 'Yes, remove').click()`);
+    await wsDlgWait((x) => !x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    check("workspace lead: removing from the group works and is confirmed first", !(await wsMembersApi("groups", R21.grp.id)).some((x) => x.startsWith(R21.cAdd.id)));
+    await wsClose();
+    check("workspace lead: a request to a project the lead does NOT lead is refused by the API (403) even if the UI were bypassed", (await apiCall("POST", `/projects/${R21.p2.id}/members`, { teamMemberId: R21.cAdd.id })) === 403 && (await apiCall("DELETE", `/projects/${R21.p2.id}/members/${R21.mem.tmId}`)) === 403);
+    check("workspace lead: the lead cannot change their OWN account role (no such control, API refuses)", (await apiCall("PUT", `/users/${R21.lead.userId}`, { role: "ADMIN" })) === 403 && !(await text()).includes("Role: Admin"));
+    await shot("w21-lead");
+    await logout();
+  });
+
+  await step("workspace manager and admin: own workspace, visibility badge, manage on every card; the real admin has no profile", async () => {
+    check("workspace manager: login", await login(R21.mgr.email, PW));
+    await wsReady();
+    const p2 = await wsCard("projects", "ZZ B9 W21 Project Lab");
+    const p1 = await wsCard("projects", "ZZ B9 W21 Project One");
+    check("workspace manager: the LAB_ONLY project card carries the 'Lab only' badge (managers may act on visibility)", !!p2 && /lab only/i.test(p2.text) && !!p1 && !/lab only/i.test(p1.text), JSON.stringify(p2));
+    check("workspace manager: Manage members on every project card even where they are a plain member, and on no card they are not in", !!p1 && p1.manage.length === 1 && !!p2 && p2.manage.length === 1 && (await pCount(".ws-card button")) === 2);
+    check("workspace manager: the workspace is THEIR OWN (their two projects, not the lab's four) and shows no private data of others", (await ev(`document.querySelector('#ws-projects').textContent`)) === "My projects (2)" && !(await pMain()).includes(w21Long));
+    check("workspace manager: no messages / notifications content anywhere on the page", !/message|notification/i.test(await pMain()));
+    await logout();
+    check("workspace admin: login (an ADMIN account with a linked profile)", await login(R21.adm.email, PW));
+    await wsReady();
+    const ap = await wsCard("projects", "ZZ B9 W21 Project One");
+    check("workspace admin: populated workspace with manage controls and the visibility badge system", !!ap && ap.manage.length === 1 && (await wsHead("projects")) === "My projects (1)");
+    check("workspace admin: the Admin Dashboard link still exists and /admin is unaffected (workspace is not an admin surface)", (await hrefEverywhere("/admin")) && (await hrefEverywhere("/workspace")));
+    await logout();
+    const before = (await R21.a.req("GET", "/team")).json.length;
+    check("workspace real admin without a linked profile: login", await login(ADMIN.email, ADMIN.password));
+    await wsReady();
+    check("workspace real admin without a linked profile: a clear localized state, no sections, one h1", (await text()).includes("No researcher profile is linked to your account") && !(await exists("#ws-projects")) && (await pCount("h1")) === 1 && (await exists('main a[href="/team"]')));
+    check("workspace real admin without a linked profile: visiting it created no TeamMember", (await R21.a.req("GET", "/team")).json.length === before && before === R21.teamCount);
+    await shot("w21-admin-noprofile");
+    await logout();
+  });
+
+  await step("workspace empty: a researcher with no relationships gets seven friendly empty states", async () => {
+    check("workspace empty: login", await login(R21.none.email, PW));
+    await wsReady();
+    const t = await pMain();
+    check("workspace empty: every section says what is missing, in words", ["You are not a member of any project you can see yet.", "You are not a member of any group you can see yet.", "No research areas are connected to you yet.", "No publications list you as an author yet.", "No upcoming events for your projects.", "No news about your projects yet.", "Nobody shares a project, group or research area with you yet."].every((s) => t.includes(s)), t.slice(0, 300));
+    check("workspace empty: counts read 0 and no 'all ...' links, cards or manage buttons appear", (await wsHead("projects")) === "My projects (0)" && (await pCount(".ws-card")) === 0 && (await pCount(".ws-person")) === 0 && !(await exists('a[href^="/projects?researcher="]')));
+    await logout();
+  });
+
+  await step("workspace bounded: more projects than the cap -> the true total in the heading, the cap on the page, a link to the full list", async () => {
+    check("workspace bounded: login", await login(R21.many.email, PW));
+    await wsReady();
+    const cards = await wsCards("projects");
+    const secText = await wsSecText("projects");
+    check("workspace bounded: the heading reports the TRUE total (14) while only the first 12 cards are shown", (await wsHead("projects")) === "My projects (14)" && cards.length === 12, `${await wsHead("projects")} / ${cards.length}`);
+    check("workspace bounded: the 12 shown are the first by (sortOrder, title) and the 13th/14th are not on the page", cards.map((c) => c.title).join("|") === Array.from({ length: 12 }, (_, i) => `ZZ B9 W21 Many ${String(i).padStart(2, "0")}`).join("|") && !secText.includes("Many 12") && !secText.includes("Many 13"));
+    check("workspace bounded: the section says 'Showing 12 of 14' and links to the full researcher-filtered list", secText.includes("Showing 12 of 14") && (await exists(`a[href="/projects?researcher=${R21.many.tmId}"]`)));
+    await setLocale("ja");
+    await wsReady();
+    check("workspace bounded ja: the heading and the 'showing' note are Japanese with the same numbers", (await wsHead("projects")) === "マイプロジェクト（14）" && (await wsSecText("projects")).includes("14件中12件を表示"));
+    await setLocale(null);
+    await logout();
+  });
+
+  await step("workspace loading / error: skeleton while loading, an error state with Try again, then the page", async () => {
+    check("workspace error: login", await login(R21.mem.email, PW));
+    await go("/"); await navReady();
+    await fake("*/api/workspace", 500, JSON.stringify({ error: "Internal server error" }));
+    await go("/workspace"); await waitFor(`!!document.querySelector('[role="alert"]')`, 6000);
+    check("workspace error: a 500 renders an alert with the message and a Try again button, plus the page header (no blank page)", (await ev(`document.querySelector('[role="alert"]').innerText`)).includes("Internal server error") && (await exists('[role="alert"] button')) && (await pCount("h1")) === 1);
+    await unfake();
+    await clickEl('[role="alert"] button');
+    check("workspace error: Try again loads the workspace", await waitFor(`!!document.querySelector('#ws-projects')`, 6000));
+    await go("/"); await navReady();
+    await fake("*/api/workspace", 401, JSON.stringify({ error: "Unauthorized" }));
+    await go("/workspace"); await waitFor(`!!document.querySelector('[role="alert"]')`, 6000);
+    check("workspace error: a 401 shows an error state, never the workspace", (await ev(`document.querySelector('[role="alert"]').innerText`)).length > 0 && !(await ev(`document.querySelector('main').innerText`)).includes("ZZ B9 W21"));
+    await unfake();
+    await logout();
+  });
+
+  await step("workspace ja: Japanese chrome and overrides, identical authorization, identical ids", async () => {
+    await desktop(); await setLocale("ja");
+    check("workspace ja: login", await login(R21.lead.email, PW));
+    await wsReady();
+    check("workspace ja: <html lang>, h1 and headings are Japanese", (await ev(`document.documentElement.lang`)) === "ja" && (await ev(`document.querySelector('h1').textContent.trim()`)) === "マイ研究ワークスペース" && (await wsHead("projects")) === "マイプロジェクト（4）" && (await wsHead("groups")).startsWith("マイグループ"));
+    const p1 = await wsCard("projects", "ZZ B9 W21 プロジェクト一");
+    check("workspace ja: the project card uses the Japanese title, group name and area override", !!p1 && p1.text.includes("ZZ B9 W21 グループ") && p1.text.includes("ZZ B9 W21 アルファ分野") && p1.text.includes("リード：ZZ B9 W21 Lead") && p1.text.includes("あなたの役割：リード") && /メンバー：7/.test(p1.text), JSON.stringify(p1));
+    check("workspace ja: 'Manage members' is Japanese and its accessible name names the project", !!p1 && p1.manage[0] === "ZZ B9 W21 プロジェクト一のメンバーを管理");
+    const en = await wsApi("en"), ja = await wsApi("ja"), bad = await wsApi("xx"), tam = await wsApi("ja,en;q=0.1");
+    check("workspace ja: the API returns the same ids in EN, JA and a tampered locale (locale never changes what is shown)", wsIds(en) === wsIds(ja) && wsIds(en) === wsIds(bad) && wsIds(en) === wsIds(tam) && ja.projects.items.some((x) => x.title === "ZZ B9 W21 プロジェクト一") && en.projects.items.some((x) => x.title === "ZZ B9 W21 Project One") && bad.projects.items.some((x) => x.title === "ZZ B9 W21 Project One"));
+    const dlg = await wsOpen("プロジェクト一");
+    check("workspace ja: the members dialog is Japanese (title, headings, buttons, role labels) and lists the same members", !!dlg && dlg.title === "ZZ B9 W21 プロジェクト一のメンバー" && dlg.members.length === 7 && dlg.pick[0] === "研究者を選択…" && (await ev(`document.querySelector('.modal').innerText`)).includes("研究者を追加") && (await ev(`[...document.querySelectorAll('.manage__row select')][0].selectedOptions[0].textContent.trim()`)) === "リード", JSON.stringify(dlg));
+    await wsPick(R21.cAdd.id);
+    await wsClickAdd();
+    let d = await wsDlgWait((x) => x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    check("workspace ja: adding announces in Japanese ('…を追加しました。')", d.status === "ZZ B9 W21 Candidate Oneを追加しました。", d.status);
+    await R21.a.req("POST", `/projects/${R21.p1.id}/members`, { teamMemberId: R21.cAdd2.id, role: "MEMBER" });
+    await wsPick(R21.cAdd2.id);
+    await wsClickAdd();
+    d = await wsDlgWait((x) => !!x.alert);
+    check("workspace ja: a duplicate is reported in Japanese (the fixed API message is mapped, never shown raw)", d.alert.includes("すでにメンバーです"), d.alert);
+    await wsRowBtn("ZZ B9 W21 Candidate One", /削除/);
+    check("workspace ja: the removal question is Japanese and the row's Remove button carries a Japanese accessible name", (await wsDlgWait((x) => x.members.some((m) => m.confirming))).members.some((m) => m.confirming) && (await ev(`document.querySelector('.manage__confirm-text').textContent.trim()`)) === "ZZ B9 W21 Candidate OneをZZ B9 W21 プロジェクト一から削除しますか？");
+    await ev(`[...document.querySelectorAll('.manage__confirm button')].find((b) => b.textContent.trim() === 'はい、削除します').click()`);
+    await wsDlgWait((x) => !x.members.some((m) => m.name === "ZZ B9 W21 Candidate One"));
+    await R21.a.req("DELETE", `/projects/${R21.p1.id}/members/${R21.cAdd2.id}`);
+    await wsClose();
+    check("workspace ja: guests stay refused in Japanese (401) and members stay refused writes (403)", (await (async () => { const c = new Client(); const r = await c.req("GET", "/workspace"); return r.status === 401; })()) && (await apiCall("POST", `/projects/${R21.p2.id}/members`, { teamMemberId: R21.cAdd.id })) === 403);
+    await shot("w21-lead-ja");
+    await logout();
+    await setLocale(null);
+  });
+
+  await step("workspace hostile text: markup in project, group, area, person, publication, event and news names is inert (EN + JA)", async () => {
+    const dialogsBefore = P15.jsDialogs.length;
+    check("workspace hostile: login", await login(R21.lead.email, PW));
+    for (const loc of [null, "ja"]) {
+      await setLocale(loc);
+      await wsReady();
+      const facts = await ev(`(() => { const m = document.querySelector('main'); return { imgs: m.querySelectorAll('img, script, iframe, svg[onload]').length, text: m.innerText, xss: typeof window.__w21Xss }; })()`);
+      check(`workspace hostile ${loc || "en"}: no element is created from any hostile name on the page`, facts.imgs === 0 && facts.xss === "undefined");
+      check(`workspace hostile ${loc || "en"}: the hostile project, group, area, publication, news and event names are visible as TEXT`, ["Project <img src=x onerror=window.__w21Xss=4>", "Group <script>window.__w21Xss=3</script>", "Area <img src=x onerror=window.__w21Xss=2>", "Paper <img src=x onerror=window.__w21Xss=5>"].every((s) => facts.text.includes(s)), facts.text.slice(0, 200));
+      const dlg = await wsOpen(loc ? "ZZ B9 W21 プロジェクト一" : "ZZ B9 W21 Project One");
+      const df = await ev(`(() => { const d = document.querySelector('.modal'); return { imgs: d.querySelectorAll('img, script').length, hostile: d.innerText.includes('<img src=x onerror=window.__w21Xss=1>'), xss: typeof window.__w21Xss }; })()`);
+      check(`workspace hostile ${loc || "en"}: the hostile person name in the dialog (list and picker) is text, not markup`, !!dlg && df.imgs === 0 && df.hostile && df.xss === "undefined");
+      await wsClose();
+    }
+    await setLocale(null);
+    check("workspace hostile: no script from hostile text ever ran and no JS dialog opened", (await ev(`typeof window.__w21Xss`)) === "undefined" && P15.jsDialogs.length === dialogsBefore, P15.jsDialogs.slice(dialogsBefore).join("|"));
+    await logout();
+  });
+
+  await step("workspace long text: a 110-character unbroken title and 60+ character Japanese names stay inside cards, network and dialog at 390px", async () => {
+    await desktopAt(390, 844);
+    check("workspace long: login", await login(R21.lead.email, PW));
+    await desktopAt(390, 844);
+    await wsReady();
+    check("workspace long: the page has no horizontal overflow at 390px with the long title and long names", (await overflowPx()) <= 1);
+    const au = await p15Audit(null, false);
+    check("workspace long: no clipped/spilling text, overlapping controls or unnamed controls", au.resp.length === 0 && au.a11y.length === 0, [...au.resp, ...au.a11y].slice(0, 3).join(" | "));
+    const dlg = await wsOpen("ZZ B9 W21 Project One");
+    const m = await ev(`(() => { const d = document.querySelector('.modal[role="dialog"]'); const b = d.getBoundingClientRect(); return { fitsX: b.left >= -0.5 && b.right <= innerWidth + 0.5, inner: d.scrollWidth - d.clientWidth }; })()`);
+    check("workspace long: the members dialog fits 390px with the long Japanese and unbroken names (no internal horizontal scroll)", !!dlg && m.fitsX && m.inner <= 1, JSON.stringify(m));
+    const aud = await p15Audit(".modal", false);
+    check("workspace long: the dialog contents have no clipped/overlapping text and every control is named", aud.resp.length === 0 && aud.a11y.length === 0, [...aud.resp, ...aud.a11y].slice(0, 3).join(" | "));
+    await wsClose();
+    await logout();
+    await desktop();
+  });
+
+  const wsDialogChecks = async (loc, w, tagUser) => {
+    const d = await wsOpen(loc === "ja" ? "のメンバーを管理" : "Manage members of");
+    if (!d) { check(`workspace ${loc} ${w}px ${tagUser}: the Manage members dialog opens`, false); return; }
+    const au = await p15Audit(".modal", loc === "ja");
+    check(`workspace ${loc} ${w}px ${tagUser} dialog: no clipped/overlapping text, every control named, fits the viewport`, au.resp.length === 0 && au.a11y.length === 0 && (await ev(`(() => { const b = document.querySelector('.modal[role="dialog"]').getBoundingClientRect(); return b.left >= -0.5 && b.right <= innerWidth + 0.5 && document.querySelector('.modal[role="dialog"]').scrollWidth - document.querySelector('.modal[role="dialog"]').clientWidth <= 1; })()`)), [...au.resp, ...au.a11y].slice(0, 3).join(" | "));
+    await wsClose();
+    if (P15_TAB_WIDTHS.includes(w)) await p15Dialog(`workspace ${loc} ${w}px ${tagUser} manage`, ".ws-card button", 0, loc === "ja");
+  };
+
+  await step("workspace sweep: guest -- the gate at every width, EN + JA", async () => {
+    await p15Loop("ws-guest", null, [["workspace (redirected to the login form)", "/workspace"]], async () => {});
+  });
+  await step("workspace sweep: member -- 390..1920, EN + JA", async () => {
+    await p15Loop("ws-member", () => login(R21.mem.email, PW), [["workspace", "/workspace"]], async (loc, w) => { if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`workspace ${loc} ${w}px member`, [["workspace", "/workspace"]]); });
+  });
+  await step("workspace sweep: project lead -- 390..1920, EN + JA, members dialog at every width", async () => {
+    await p15Loop("ws-lead", () => login(R21.lead.email, PW), [["workspace", "/workspace"]], async (loc, w) => {
+      await wsReady();
+      await wsDialogChecks(loc, w, "lead");
+      if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`workspace ${loc} ${w}px lead`, [["workspace", "/workspace"]]);
+    });
+    check("workspace sweep lead: no script from hostile text ever ran", (await ev(`typeof window.__w21Xss`)) === "undefined");
+  });
+  await step("workspace sweep: lab manager -- 390..1920, EN + JA, members dialog at every width", async () => {
+    await p15Loop("ws-manager", () => login(R21.mgr.email, PW), [["workspace", "/workspace"]], async (loc, w) => { await wsReady(); await wsDialogChecks(loc, w, "manager"); });
+  });
+  await step("workspace sweep: admin -- 390..1920, EN + JA, members dialog at every width", async () => {
+    await p15Loop("ws-admin", () => login(R21.adm.email, PW), [["workspace", "/workspace"]], async (loc, w) => { await wsReady(); await wsDialogChecks(loc, w, "admin"); });
+  });
+  await step("workspace sweep: an account with no linked profile and one with no relationships -- 390..1920, EN + JA", async () => {
+    await p15Loop("ws-noprofile", () => login(ADMIN.email, ADMIN.password), [["workspace (no profile)", "/workspace"]], async () => {});
+    await p15Loop("ws-empty", () => login(R21.none.email, PW), [["workspace (empty)", "/workspace"]], async () => {});
+  });
+
+  await step("workspace screenshots: populated, lead dialog, JA and phone (for eyeballing)", async () => {
+    await setLocale(null);
+    await login(R21.lead.email, PW);
+    for (const [w, tag] of [[1280, "d"], [390, "m"]]) {
+      await p15Vp(w);
+      await wsReady();
+      await shot(`w21-workspace-${tag}`);
+      const d = await wsOpen("ZZ B9 W21 Project One");
+      if (d) await shot(`w21-dialog-${tag}`);
+      await wsClose();
+    }
+    await setLocale("ja");
+    await login(R21.lead.email, PW);
+    await p15Vp(390);
+    await wsReady();
+    await shot("w21-workspace-ja-m");
+    check("workspace screenshots: taken", fs.existsSync(path.join(SHOTS, "w21-workspace-d.png")) && fs.existsSync(path.join(SHOTS, "w21-workspace-ja-m.png")));
+    await logout();
+    await setLocale(null);
+  });
+  await step("workspace restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -4621,12 +5060,18 @@ async function connect() {
     /^(400|404) GET .*\/api\/publications\/[^/]+$/,
     /^403 GET .*\/api\/publications\/browse\?/,
     /^40[13] (PUT|DELETE) .*\/api\/publications\/[\w-]+$/,
+    // Phase 21: the workspace probed by a guest (401) and the faked 401/500 that prove its error state; the single-researcher
+    // membership writes probed on purpose (401/403), the duplicate (409) and the faked 500 shown inside the dialog; a lead
+    // trying to change their own account role (403).
+    /^(401|500) GET .*\/api\/workspace$/,
+    /^(401|403|409|500) (POST|PUT|DELETE) .*\/api\/(projects|groups)\/[\w-]+\/members(\/[\w-]+)?$/,
+    /^403 PUT .*\/api\/users\/[\w-]+$/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));
 
   await Promise.all(pendingBodies);
-  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || ONLY_DISCOVERY || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
+  check("9.1 no real browser API response (team, member, projects, groups, publications, ...) carried an account id or credential key", bodyLeaks.length === 0 && (ONLY_NAV || ONLY_UI || ONLY_I18N || ONLY_EVENTS || ONLY_ADMIN || ONLY_RESEARCH || ONLY_PUBS || ONLY_DISCOVERY || ONLY_WORKSPACE || process.env.ONLY_STEPS || bodiesScanned > 60), `${bodiesScanned} bodies scanned; ${bodyLeaks.slice(0, 3).join(" | ")}`);
   console.log(`(${bodiesScanned} real API response bodies scanned for account ids / credential keys)`);
 
   console.log(`(${badResponses.length} provoked error responses, all accounted for: ${unexpected.length === 0})`);

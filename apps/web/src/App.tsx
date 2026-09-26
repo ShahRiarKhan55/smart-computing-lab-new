@@ -27,6 +27,7 @@ import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SchedulePage } from "./pages/SchedulePage";
+import { WorkspacePage } from "./pages/WorkspacePage";
 import { AdminLayout } from "./pages/admin/AdminLayout";
 import { AdminOverviewPage } from "./pages/admin/AdminOverviewPage";
 import { AdminPeoplePage } from "./pages/admin/AdminPeoplePage";
@@ -78,6 +79,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <SchedulePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workspace"
+          element={
+            <ProtectedRoute>
+              <WorkspacePage />
             </ProtectedRoute>
           }
         />

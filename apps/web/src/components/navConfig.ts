@@ -78,6 +78,7 @@ export const ACCOUNT_NAV: NavGroupDef = {
   id: "account",
   labelKey: "nav.account",
   items: [
+    { to: "/workspace", labelKey: "nav.workspace" },
     { to: "/profile", labelKey: "nav.myProfile" },
     { to: "/messages", labelKey: "nav.messages" },
     { to: "/notifications", labelKey: "nav.notifications" },

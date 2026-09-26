@@ -22,3 +22,5 @@ export * from "./permissions.js";
 export * from "./i18n/index.js";
 
 export * from "./schemas/admin.js";
+
+export * from "./schemas/workspace.js";

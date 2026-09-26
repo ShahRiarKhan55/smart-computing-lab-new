@@ -11,6 +11,8 @@ import {
   setProjectAreasSchema,
   setProjectMembersSchema,
   setProjectNewsSchema,
+  addProjectMemberSchema,
+  setProjectMemberRoleSchema,
   setProjectPublicationsSchema,
   updateProjectSchema,
   type ProjectDetail,
@@ -35,6 +37,7 @@ import { changedFields, idList, recordAudit, recordVisibilityChange } from "../l
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
 import { localizedNews, localizedPublications, loadRefTranslations, pick, type RefTranslations } from "../lib/researchGraph.js";
 import { eventInclude, eventOrderBy, serializeEvents } from "../lib/eventSerializers.js";
+import { mountMemberRoutes } from "../lib/membership.js";
 import type { Locale } from "@scl/shared";
 
 const router = Router();
@@ -373,6 +376,26 @@ router.put(
     res.json({ success: true });
   }),
 );
+
+// Phase 21: single-researcher add / change-role / remove (the workspace and detail-page actions).
+mountMemberRoutes(router, {
+  guard: requireProjectEditor,
+  addSchema: addProjectMemberSchema,
+  roleSchema: setProjectMemberRoleSchema,
+  action: "PROJECT_MEMBERS_CHANGED",
+  entityType: "RESEARCH_PROJECT",
+  parent: {
+    load: async (tx, id) => {
+      const p = await tx.researchProject.findUnique({ where: { id }, select: { id: true, title: true } });
+      return p && { id: p.id, label: p.title, labelKey: "title" };
+    },
+    find: (tx, projectId, teamMemberId) => tx.projectMember.findUnique({ where: { projectId_teamMemberId: { projectId, teamMemberId } }, select: { role: true } }),
+    leads: async (tx, projectId) => (await tx.projectMember.findMany({ where: { projectId, role: "LEAD" }, select: { teamMemberId: true } })).map((m) => m.teamMemberId).sort(),
+    create: (tx, projectId, teamMemberId, role) => tx.projectMember.create({ data: { projectId, teamMemberId, role } }),
+    update: (tx, projectId, teamMemberId, role) => tx.projectMember.update({ where: { projectId_teamMemberId: { projectId, teamMemberId } }, data: { role } }),
+    remove: (tx, projectId, teamMemberId) => tx.projectMember.delete({ where: { projectId_teamMemberId: { projectId, teamMemberId } } }),
+  },
+});
 
 // PUT /api/projects/:id/areas { areaIds }
 router.put(
