@@ -75,7 +75,20 @@ export function EventDetailPage() {
 
   return (
     <>
-      <PageHeader crumbs={[...crumbsTo, { label: event.title }]} title={event.title} />
+      <PageHeader
+        crumbs={[...crumbsTo, { label: event.title }]}
+        title={event.title}
+        seoDescription={event.description || undefined}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Event",
+          name: event.title,
+          startDate: event.startsAt,
+          ...(event.endsAt ? { endDate: event.endsAt } : {}),
+          ...(event.location ? { location: { "@type": "Place", name: event.location } } : {}),
+          ...(event.description ? { description: event.description } : {}),
+        }}
+      />
 
       <div className="container">
         {event.canEdit && (

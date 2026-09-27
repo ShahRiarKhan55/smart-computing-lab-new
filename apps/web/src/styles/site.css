@@ -478,7 +478,7 @@
 
 .footer__inner {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr));
   gap: var(--space-8) var(--space-10);
   max-width: var(--container);
   margin-inline: auto;

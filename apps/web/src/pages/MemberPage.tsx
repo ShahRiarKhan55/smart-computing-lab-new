@@ -155,6 +155,13 @@ export function MemberPage() {
         crumbs={[{ label: t("nav.team"), to: "/team" }, { label: profile.name }]}
         title={profile.name}
         description={[profile.role, profile.department].filter(Boolean).join(" · ")}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Person",
+          name: profile.name,
+          jobTitle: profile.role,
+          worksFor: { "@type": "Organization", name: "Smart Computing Lab" },
+        }}
       />
 
       <div className="container">

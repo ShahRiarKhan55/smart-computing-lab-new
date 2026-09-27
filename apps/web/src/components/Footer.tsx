@@ -5,6 +5,7 @@ import { useT } from "../i18n/LocaleContext";
 // The footer repeats the public destinations from the same source as the header, so the two never drift.
 const RESEARCH = MAIN_NAV.filter(isGroup).find((g) => g.id === "research");
 const PEOPLE = MAIN_NAV.filter(isGroup).find((g) => g.id === "people");
+const COMMUNITY = MAIN_NAV.filter(isGroup).find((g) => g.id === "community");
 
 export function Footer() {
   const t = useT();
@@ -30,6 +31,16 @@ export function Footer() {
           <h2 className="footer__heading">{t("footer.peopleHeading")}</h2>
           <ul className="footer__links">
             {PEOPLE?.items.map((item) => (
+              <li key={item.to}>
+                <NavLink to={item.to}>{t(item.labelKey)}</NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <nav aria-label={t("nav.footerAria", { group: t("footer.communityHeading") })}>
+          <h2 className="footer__heading">{t("footer.communityHeading")}</h2>
+          <ul className="footer__links">
+            {COMMUNITY?.items.map((item) => (
               <li key={item.to}>
                 <NavLink to={item.to}>{t(item.labelKey)}</NavLink>
               </li>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { ProjectSummary, ResearchArea } from "@scl/shared";
+import type { ProjectSummary, Publication, ResearchArea, TeamMember } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
@@ -9,6 +9,7 @@ import { PageHeader } from "../components/PageHeader";
 import { Icon } from "../components/Icon";
 import { AdminBar } from "../components/AdminBar";
 import { ResearchCard } from "../components/ResearchCard";
+import { StatCard } from "../components/StatCard";
 import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
@@ -22,6 +23,9 @@ export function ResearchPage() {
   const { data: areas, loading, error, reload } = useApiResource<ResearchArea[]>("/research");
   // Projects already say which areas they belong to; that is the relationship shown on each card.
   const { data: projects } = useApiResource<ProjectSummary[]>("/projects");
+  // Bounded, already-existing list endpoints, reused just for their counts (no new relationship).
+  const { data: researchers } = useApiResource<TeamMember[]>("/team");
+  const { data: publications } = useApiResource<Publication[]>("/publications");
 
   const [formModal, setFormModal] = useState<{ open: boolean; area: ResearchArea | null }>({ open: false, area: null });
   const [deleteTarget, setDeleteTarget] = useState<ResearchArea | null>(null);
@@ -45,6 +49,13 @@ export function ResearchPage() {
             onAction={() => setFormModal({ open: true, area: null })}
           />
         )}
+
+        <div className="stat-grid" aria-label={t("research.glanceAria")}>
+          <StatCard value={areas ? areas.length : null} label={t("home.statResearchAreas")} />
+          <StatCard value={projects ? projects.length : null} label={t("home.statProjects")} />
+          <StatCard value={researchers ? researchers.length : null} label={t("home.statResearchers")} />
+          <StatCard value={publications ? publications.length : null} label={t("home.statPublications")} />
+        </div>
 
         <nav aria-label={t("research.explore.aria")}>
           <ul className="research-explore">

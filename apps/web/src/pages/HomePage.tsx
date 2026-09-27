@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import type { LabEvent, NewsItem, ProjectSummary, Publication, ResearchArea, TeamMember } from "@scl/shared";
+import type { LabEvent, NewsItem, ProjectSummary, Publication, ResearchArea, ResourceListResponse, TeamMember } from "@scl/shared";
 import { useApiResource } from "../hooks/useApiResource";
+import { useSeo } from "../hooks/useSeo";
 import { HeroCircuit } from "../components/HeroCircuit";
 import { Icon } from "../components/Icon";
 import { SectionHeader } from "../components/SectionHeader";
@@ -13,12 +14,16 @@ import { ProjectCard } from "../components/ProjectCard";
 import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
+import { TeamCard } from "../components/TeamCard";
+import { ResourceCard } from "../components/ResourceCard";
 import { useT } from "../i18n/LocaleContext";
 
 const FEATURED_PROJECTS = 3;
 const RECENT_PUBLICATIONS = 4;
 const LATEST_NEWS = 3;
 const NEXT_EVENTS = 3;
+const FEATURED_RESEARCHERS = 4;
+const FEATURED_RESOURCES = 4;
 
 function ViewAll({ to, children }: { to: string; children: string }) {
   return (
@@ -37,6 +42,15 @@ export function HomePage() {
   const team = useApiResource<TeamMember[]>("/team");
   const news = useApiResource<NewsItem[]>("/news");
   const events = useApiResource<LabEvent[]>(`/events?scope=upcoming&limit=${NEXT_EVENTS}`);
+  const resources = useApiResource<ResourceListResponse>(`/resources?limit=${FEATURED_RESOURCES}`);
+
+  // Home has no <title>; index.html's static title is already correct, so leave document.title
+  // alone here and only add the meta description / Open Graph / Organization structured data.
+  useSeo({
+    title: null,
+    description: t("home.heroSubtitle"),
+    jsonLd: { "@context": "https://schema.org", "@type": "Organization", name: "Smart Computing Lab", url: window.location.origin },
+  });
 
   // Selected projects: the ones under way first, then the rest, in the API's own order.
   const featured = useMemo(() => {
@@ -234,6 +248,67 @@ export function HomePage() {
               ))}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* ===================== RESEARCHERS (who does the work) ===================== */}
+      <section className={network.length > 0 ? "section" : "band"} aria-labelledby="home-researchers">
+        <div className={network.length > 0 ? undefined : "band__inner"}>
+          <SectionHeader
+            id="home-researchers"
+            eyebrow={t("home.researchersEyebrow")}
+            title={t("home.researchersTitle")}
+            action={<ViewAll to="/team">{t("home.allResearchers")}</ViewAll>}
+          />
+          {team.loading && !team.data && <LoadingState label={t("home.loadingResearchers")} />}
+          {team.error && <ErrorState message={t("home.errorResearchers")} onRetry={team.reload} />}
+          {team.data && team.data.length === 0 && <EmptyState title={t("home.emptyResearchers")} compact />}
+          {team.data && team.data.length > 0 && (
+            <div className="grid grid--tight">
+              {team.data.slice(0, FEATURED_RESEARCHERS).map((member) => (
+                <TeamCard key={member.id} member={member} canEdit={false} canDelete={false} onEdit={() => {}} onDelete={() => {}} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ===================== RESOURCES & TECHNOLOGIES (what the work runs on; omitted entirely once loaded-but-empty) ===================== */}
+      {(resources.loading || (resources.data && resources.data.items.length > 0)) && (
+        <section className={network.length > 0 ? "band" : "section"} aria-labelledby="home-resources">
+          <div className={network.length > 0 ? "band__inner" : undefined}>
+            <SectionHeader
+              id="home-resources"
+              eyebrow={t("home.resourcesEyebrow")}
+              title={t("home.resourcesTitle")}
+              action={<ViewAll to="/resources">{t("home.allResources")}</ViewAll>}
+            />
+            {resources.loading && !resources.data && <LoadingState label={t("home.loadingResources")} />}
+            {resources.error && <ErrorState message={t("home.errorResources")} onRetry={resources.reload} />}
+            {resources.data && resources.data.items.length > 0 && (
+              <div className="grid">
+                {resources.data.items.map((r) => (
+                  <ResourceCard key={r.id} resource={r} />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ===================== CONTACT CTA ===================== */}
+      <section className="band band--flush" aria-labelledby="home-cta">
+        <div className="band__inner section--tight">
+          <div className="cta-band">
+            <div>
+              <p className="page-header__eyebrow">{t("home.ctaEyebrow")}</p>
+              <h2 id="home-cta">{t("home.ctaTitle")}</h2>
+              <p className="text-muted">{t("home.ctaDescription")}</p>
+            </div>
+            <Link to="/contact" className="btn btn--primary btn--lg">
+              {t("home.ctaAction")} <Icon name="arrow-right" size={16} />
+            </Link>
+          </div>
         </div>
       </section>
     </>

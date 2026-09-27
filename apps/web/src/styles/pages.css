@@ -102,6 +102,20 @@
   gap: var(--space-3);
 }
 
+/* Home page: closing contact call-to-action band */
+.cta-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5) var(--space-8);
+}
+
+.cta-band h2 {
+  font-size: var(--text-2xl);
+  margin: var(--space-1) 0 var(--space-2);
+}
+
 .area-tile .card__text {
   display: -webkit-box;
   -webkit-line-clamp: 3;

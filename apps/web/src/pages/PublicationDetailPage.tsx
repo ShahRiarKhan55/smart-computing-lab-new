@@ -94,7 +94,23 @@ export function PublicationDetailPage() {
 
   return (
     <>
-      <PageHeader crumbs={[...crumbsTo, { label: pub.title }]} title={pub.title} />
+      <PageHeader
+        crumbs={[...crumbsTo, { label: pub.title }]}
+        title={pub.title}
+        seoDescription={`${pub.authors} — ${pub.venue} (${pub.year})`}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "ScholarlyArticle",
+          headline: pub.title,
+          author: pub.authors
+            .split(",")
+            .map((name) => name.trim())
+            .filter(Boolean)
+            .map((name) => ({ "@type": "Person", name })),
+          datePublished: String(pub.year),
+          ...(pub.venue ? { publisher: { "@type": "Organization", name: pub.venue } } : {}),
+        }}
+      />
 
       <div className="container">
         {pub.canEdit && (

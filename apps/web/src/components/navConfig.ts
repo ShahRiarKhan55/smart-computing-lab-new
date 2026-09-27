@@ -49,7 +49,6 @@ export const MAIN_NAV: NavEntry[] = [
       { to: "/research", labelKey: "nav.researchAreas" },
       { to: "/projects", labelKey: "nav.projects" },
       { to: "/publications", labelKey: "nav.publications" },
-      { to: "/news", labelKey: "nav.news" },
       { to: "/knowledge", labelKey: "nav.knowledge" },
       { to: "/resources", labelKey: "nav.resources" },
     ],
@@ -67,6 +66,7 @@ export const MAIN_NAV: NavEntry[] = [
     labelKey: "nav.community",
     items: [
       { to: "/community/forum", labelKey: "nav.forum" },
+      { to: "/news", labelKey: "nav.news" },
       { to: "/events", labelKey: "nav.events" },
       { to: "/gallery", labelKey: "nav.gallery" },
     ],

@@ -1,0 +1,9 @@
+# Smart Computing Lab — public site.
+# Real access control is server-side (visibility rules on the API); nothing under this SPA's own
+# static routes is sensitive, so nothing is disallowed here.
+User-agent: *
+Allow: /
+
+# No Sitemap: line yet. A correct one needs the production domain/reverse-proxy topology (the web
+# app and API are separate origins in development; unknown in production), which is Phase 26
+# (deployment) territory — see docs/architecture/phase24-public-research-showcase.md.

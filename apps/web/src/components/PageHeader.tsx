@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { useSeo, type JsonLd } from "../hooks/useSeo";
 import { useT } from "../i18n/LocaleContext";
 
 export interface Crumb {
@@ -16,12 +16,21 @@ interface PageHeaderProps {
   crumbs?: Crumb[];
   description?: ReactNode;
   actions?: ReactNode;
+  /** Overrides the auto-derived <meta name="description"> (Phase 24). When omitted and `description`
+   * is a plain string, that string is used (truncated) instead — most pages need nothing extra. */
+  seoDescription?: string;
+  /** Optional JSON-LD structured data for this page (Phase 24), e.g. a Person or ScholarlyArticle. */
+  jsonLd?: JsonLd | JsonLd[];
 }
 
 /** The first thing on every inner page: one <h1>, where you are, and (optionally) what the page is for. */
-export function PageHeader({ title, eyebrow, crumbs, description, actions }: PageHeaderProps) {
+export function PageHeader({ title, eyebrow, crumbs, description, seoDescription, jsonLd, actions }: PageHeaderProps) {
   const t = useT();
-  useDocumentTitle(typeof title === "string" ? title : null);
+  useSeo({
+    title: typeof title === "string" ? title : null,
+    description: seoDescription ?? (typeof description === "string" ? description : undefined),
+    jsonLd,
+  });
 
   return (
     <header className="page-header">
