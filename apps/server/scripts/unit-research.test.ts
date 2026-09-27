@@ -75,7 +75,7 @@ t("canView: a mistyped or future value is hidden from everyone", !canView(A("ADM
 // ---- English base lookup ------------------------------------------------------------------------------
 {
   const calls: { entity: string; select: Record<string, boolean> }[] = [];
-  const row: Record<string, string> = { title: "T", description: "D", summary: "S", venue: "V", name: "N", bio: "B", body: "BODY", secret: "NOPE", passwordHash: "NOPE", id: "x" };
+  const row: Record<string, string> = { title: "T", description: "D", summary: "S", venue: "V", name: "N", bio: "B", body: "BODY", environment: "ENV", secret: "NOPE", passwordHash: "NOPE", id: "x" };
   const fakeDb = new Proxy(
     {},
     {

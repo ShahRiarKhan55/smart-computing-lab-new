@@ -59,7 +59,7 @@ t("content: owner must look like an id", !cq({ type: "event", owner: "../x" }).s
 t("content: from/to must be real days, in order", !cq({ type: "news", from: "2030-02-30" }).success && !cq({ type: "news", from: "2030-03-02", to: "2030-03-01" }).success && cq({ type: "news", from: "2030-03-01", to: "2030-03-01" }).success);
 t("content: page/limit bounds", !cq({ type: "news", page: "0" }).success && !cq({ type: "news", limit: "101" }).success && cq({ type: "news", limit: "100", page: "10000" }).success && !cq({ type: "news", page: "10001" }).success);
 t("content: non-string values (arrays, objects, numbers) are rejected", !cq({ type: ["news", "project"] }).success && !cq({ type: "news", q: ["a"] }).success && !cq({ type: "news", page: 1 }).success && !cq({ type: "news", visibility: { a: 1 } }).success);
-t("content: hasVisibility is true for seven types (Phase 22 added knowledge), false for team-member", ADMIN_CONTENT_TYPES.filter(hasVisibility).length === 7 && !hasVisibility("team-member"));
+t("content: hasVisibility is true for eight types (Phase 22 added knowledge, Phase 23 resource), false for team-member", ADMIN_CONTENT_TYPES.filter(hasVisibility).length === 8 && !hasVisibility("team-member"));
 
 // ---- bulk visibility ----------------------------------------------------------------------------------
 const bv = (o: unknown) => bulkVisibilitySchema.safeParse(o);

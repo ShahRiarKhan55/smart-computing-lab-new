@@ -62,6 +62,7 @@ model User {
   files              StoredFile[]
   eventsCreated      Event[]
   knowledgeDocs      KnowledgeDoc[]
+  labResources       LabResource[]
   forumPosts         ForumPost[]
   forumRevisions     ForumPostRevision[]
   forumComments      ForumComment[]
@@ -97,6 +98,7 @@ model TeamMember {
   projectLinks  ProjectMember[]
   groupLinks    GroupMember[]
   knowledgeDocs KnowledgeDoc[]
+  labResources  LabResource[]
 
   @@index([category, sortOrder])
 }
@@ -137,6 +139,7 @@ model Publication {
 
   authorLinks  PublicationAuthor[]
   projectLinks ProjectPublication[]
+  labResources LabResource[]
 
   @@index([year])
 }
@@ -177,6 +180,7 @@ model ResearchArea {
   projectLinks    ProjectArea[]
   researcherLinks ResearcherArea[]
   knowledgeDocs   KnowledgeDoc[]
+  labResources    LabResource[]
 
   @@index([sortOrder])
 }
@@ -229,6 +233,7 @@ model ResearchGroup {
   members       GroupMember[]
   projects      ResearchProject[]
   knowledgeDocs KnowledgeDoc[]
+  labResources  LabResource[]
 
   @@index([sortOrder])
 }
@@ -269,6 +274,7 @@ model ResearchProject {
   galleryItems  GalleryItem[]
   forumPosts    ForumPost[]
   knowledgeDocs KnowledgeDoc[]
+  resourceLinks ResourceProject[]
 
   @@index([groupId])
   @@index([visibility, sortOrder])
@@ -340,6 +346,7 @@ model Event {
   project      ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy    User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
   galleryItems GalleryItem[]
+  labResources LabResource[]
 
   @@index([startsAt])
   @@index([projectId])
@@ -372,6 +379,7 @@ model KnowledgeDoc {
   researchArea ResearchArea?    @relation(fields: [researchAreaId], references: [id], onDelete: SetNull)
   group        ResearchGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   teamMember   TeamMember?      @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
+  labResources LabResource[]
 
   @@index([visibility, updatedAt])
   @@index([projectId])
@@ -379,6 +387,68 @@ model KnowledgeDoc {
   @@index([groupId])
   @@index([teamMemberId])
   @@index([authorId])
+}
+
+// =====================================================================
+// Lab resources & reproducibility (Phase 23, new)
+//
+// A lab resource is a structured record of research infrastructure (dataset, hardware, software,
+// tool, ...) needed to reproduce work. Long-form documentation stays in KnowledgeDoc (knowledgeDocId).
+// Same cardinality rule as Phases 18-22: every link is one nullable FK (ON DELETE SET NULL). The ONE
+// genuine many-to-many (a tool or dataset serves many projects) is the ResourceProject join table.
+// English name/description/environment live here; Japanese overrides in Translation (LAB_RESOURCE).
+// =====================================================================
+model LabResource {
+  id             String   @id @default(cuid())
+  name           String
+  resourceType   String   @default("OTHER") // DATASET | HARDWARE | SOFTWARE | TOOL | FRAMEWORK | MODEL | FPGA | BOARD | SENSOR | MEASUREMENT_SETUP | EXPERIMENT_ENVIRONMENT | OTHER
+  description    String   @default("")
+  version        String   @default("")
+  vendor         String   @default("") // manufacturer / source
+  identifier     String   @default("") // model / serial / DOI
+  url            String   @default("")
+  environment    String   @default("") // reproducibility notes / configuration (plain text)
+  metadata       String? // small JSON; keys allow-listed per resourceType in packages/shared
+  visibility     String   @default("LAB_ONLY") // PUBLIC | LAB_ONLY
+  ownerId        String?
+  researchAreaId String?
+  groupId        String?
+  knowledgeDocId String?
+  publicationId  String?
+  eventId        String?
+  teamMemberId   String? // the responsible / contact researcher (optional)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  owner        User?             @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  researchArea ResearchArea?     @relation(fields: [researchAreaId], references: [id], onDelete: SetNull)
+  group        ResearchGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  knowledgeDoc KnowledgeDoc?     @relation(fields: [knowledgeDocId], references: [id], onDelete: SetNull)
+  publication  Publication?      @relation(fields: [publicationId], references: [id], onDelete: SetNull)
+  event        Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  teamMember   TeamMember?       @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
+  projectLinks ResourceProject[]
+
+  @@index([visibility, updatedAt])
+  @@index([resourceType])
+  @@index([ownerId])
+  @@index([researchAreaId])
+  @@index([groupId])
+  @@index([knowledgeDocId])
+  @@index([publicationId])
+  @@index([eventId])
+  @@index([teamMemberId])
+}
+
+model ResourceProject {
+  resourceId String
+  projectId  String
+
+  resource LabResource     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  project  ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([resourceId, projectId])
+  @@index([projectId])
 }
 
 // =====================================================================
@@ -679,7 +749,7 @@ model AuditLog {
 /// the code that hard-deletes an entity also deletes its Translation rows.
 model Translation {
   id         String   @id @default(cuid())
-  entityType String // RESEARCH_AREA | NEWS_ITEM | TEAM_MEMBER | RESEARCH_PROJECT | RESEARCH_GROUP | EVENT | FORUM_CATEGORY | KNOWLEDGE_DOC
+  entityType String // RESEARCH_AREA | NEWS_ITEM | TEAM_MEMBER | RESEARCH_PROJECT | RESEARCH_GROUP | EVENT | FORUM_CATEGORY | KNOWLEDGE_DOC | LAB_RESOURCE
   entityId   String
   locale     String // "ja" (base locale "en" is never stored here)
   field      String // e.g. "title", "description"

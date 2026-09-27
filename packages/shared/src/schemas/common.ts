@@ -8,6 +8,9 @@ export const idSchema = z
 
 const HTTP_URL_PATTERN = /^https?:\/\/[^\s/$.?#][^\s]*$/i;
 
+/** true for a non-empty http(s) URL (the same rule `optionalHttpUrl` enforces on write; used to re-check a stored value on read). */
+export const isHttpUrl = (v: string): boolean => v.length <= 2048 && HTTP_URL_PATTERN.test(v);
+
 /** Optional link field: "" is allowed (means "none"); otherwise it must be an http(s) URL. */
 export function optionalHttpUrl(label: string) {
   return z

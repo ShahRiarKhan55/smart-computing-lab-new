@@ -78,7 +78,7 @@ router.get(
     const group = <T extends { groupBy: (a: any) => Promise<any> }>(model: T, where?: object): Promise<Grouped> =>
       model.groupBy({ by: ["visibility"], where, _count: { _all: true } });
 
-    const [areas, projects, groups, publications, news, events, upcoming, knowledgeDocs, categories, galleryRows, topics, teamMembers, overrides] = await Promise.all([
+    const [areas, projects, groups, publications, news, events, upcoming, knowledgeDocs, labResources, categories, galleryRows, topics, teamMembers, overrides] = await Promise.all([
       group(prisma.researchArea),
       group(prisma.researchProject),
       group(prisma.researchGroup),
@@ -87,6 +87,7 @@ router.get(
       group(prisma.event),
       prisma.event.count({ where: eventScopeWhere("upcoming", new Date()) }),
       group(prisma.knowledgeDoc),
+      group(prisma.labResource),
       group(prisma.forumCategory),
       // A gallery item has no visibility of its own: its file's is the single source of truth.
       group(prisma.storedFile, { deletedAt: null, galleryItem: { isNot: null } }),
@@ -118,6 +119,7 @@ router.get(
       news: toCount(news),
       events: { ...toCount(events), upcoming },
       knowledgeDocs: toCount(knowledgeDocs),
+      labResources: toCount(labResources),
       forumCategories: toCount(categories),
       forumTopics: topics,
       galleryItems: toCount(galleryRows),
@@ -199,6 +201,7 @@ const PAGE_LABEL_FIELD: Record<TranslatableEntityType, string> = {
   NEWS_ITEM: "title",
   EVENT: "title",
   KNOWLEDGE_DOC: "title",
+  LAB_RESOURCE: "name",
   PUBLICATION: "title",
   TEAM_MEMBER: "name",
 };

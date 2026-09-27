@@ -13,7 +13,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { Icon } from "../../components/Icon";
 import { LoadingState } from "../../components/LoadingState";
 
-const ENTITY_TYPES: TranslatableEntityType[] = ["RESEARCH_AREA", "RESEARCH_PROJECT", "RESEARCH_GROUP", "NEWS_ITEM", "EVENT", "KNOWLEDGE_DOC", "PUBLICATION", "TEAM_MEMBER"];
+const ENTITY_TYPES: TranslatableEntityType[] = ["RESEARCH_AREA", "RESEARCH_PROJECT", "RESEARCH_GROUP", "NEWS_ITEM", "EVENT", "KNOWLEDGE_DOC", "LAB_RESOURCE", "PUBLICATION", "TEAM_MEMBER"];
 const STATE_KEY = { all: "adm.tr.stateAll", overridden: "adm.tr.stateOverridden", missing: "adm.tr.stateMissing" } as const;
 
 /**

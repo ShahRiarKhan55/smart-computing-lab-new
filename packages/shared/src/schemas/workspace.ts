@@ -6,9 +6,10 @@ import type { Publication } from "./publication.js";
 import type { NewsItem } from "./news.js";
 import type { LabEvent } from "./event.js";
 import type { KnowledgeSection } from "./knowledge.js";
+import type { ResourceSection } from "./resource.js";
 
 /** Phase 21: how many rows each workspace section carries. A section over its cap links to the full list page instead. */
-export const WORKSPACE_LIMITS = { areas: 12, projects: 12, groups: 12, publications: 6, events: 6, news: 5, knowledge: 5, collaborators: 24 } as const;
+export const WORKSPACE_LIMITS = { areas: 12, projects: 12, groups: 12, publications: 6, events: 6, news: 5, knowledge: 5, resources: 5, collaborators: 24 } as const;
 
 /** A public team profile reference (never an account id or e-mail). */
 export interface WorkspacePerson {
@@ -80,6 +81,8 @@ export interface WorkspaceResponse {
   news: WorkspaceSection<NewsItem>;
   /** Phase 22: documents the researcher wrote or that belong to their projects, groups and areas (same visibility as everywhere). */
   knowledge: KnowledgeSection;
+  /** Phase 23: resources the researcher owns, is named on, or that are linked to their projects, groups and areas. */
+  resources: ResourceSection;
   collaborators: WorkspaceSection<WorkspaceCollaborator>;
 }
 

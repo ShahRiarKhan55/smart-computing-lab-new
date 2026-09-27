@@ -19,6 +19,7 @@ import { eventInclude, eventOrderBy, eventScopeWhere, serializeEvents } from "./
 import { loadRefTranslations, localizedNews, localizedPublications, pick } from "./researchGraph.js";
 import { loadTranslations, localize } from "./translations.js";
 import { loadKnowledgeSection, researcherScope } from "./knowledge.js";
+import { loadResourceSection, resourceScope } from "./resources.js";
 
 /**
  * Phase 21: the research collaboration workspace is a READ model over relationships that already exist
@@ -51,6 +52,7 @@ export const emptyWorkspace = (): WorkspaceResponse => ({
   events: emptySection(),
   news: emptySection(),
   knowledge: emptySection(),
+  resources: emptySection(),
   collaborators: emptySection(),
 });
 
@@ -246,11 +248,13 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
   }));
 
   // Knowledge: documents this researcher wrote or that belong to their projects, groups and areas (bounded, same visibility).
-  const [publications, events, news, knowledge] = await Promise.all([
+  // Resources (Phase 23): the same bounded shape, the same visibility, the same relationship definitions.
+  const [publications, events, news, knowledge, resources] = await Promise.all([
     localizedPublications(pubRows, viewer, locale),
     serializeEvents(eventRows, viewer, locale),
     localizedNews(newsRows, viewer, locale),
     loadKnowledgeSection({ AND: [visible, { OR: researcherScope(viewer, me.id) }] }, viewer, locale, L.knowledge),
+    loadResourceSection({ AND: [visible, { OR: resourceScope(viewer, me.id) }] }, viewer, locale, L.resources),
   ]);
 
   // ---- collaborators: distinct people, with how many DISTINCT projects/groups/areas they share --------
@@ -279,6 +283,7 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
     events: { items: events, total: eventTotal },
     news: { items: news, total: newsTotal },
     knowledge,
+    resources,
     collaborators: { items: collaborators.slice(0, L.collaborators), total: collaborators.length },
   };
 }

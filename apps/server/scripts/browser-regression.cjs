@@ -10,6 +10,7 @@
 //   ONLY_DISCOVERY=1 runs just the Phase 20 discovery section (steps named "discovery ..."; P15_W / P15_USERS=disc-guest,disc-member narrow the sweeps).
 //   ONLY_WORKSPACE=1 runs just the Phase 21 workspace section (steps named "workspace ..."; P15_W / P15_USERS=ws-guest,ws-member,ws-lead,ws-manager,ws-admin,ws-noprofile,ws-empty narrow the sweeps).
 //   ONLY_KNOWLEDGE=1 runs just the Phase 22 knowledge-base section (steps named "knowledge ..."; P15_W / P15_USERS=k22-guest,k22-member,k22-lead,k22-manager,k22-admin narrow the sweeps).
+//   ONLY_RESOURCES=1 runs just the Phase 23 lab-resources section (steps named "resources ..."; P15_W / P15_USERS=r23-guest,r23-member,r23-lead,r23-manager,r23-admin narrow the sweeps).
 //   ONLY_PUBS=1 runs just the Phase 19 publications section (steps named "publications ..."; P15_W / P15_USERS=pubs-guest,pubs-member,pubs-manager narrow the sweeps).
 //   ONLY_RESEARCH=1 runs just the Phase 18 research-structure section (steps named "research ..."; P15_W / P15_USERS=research-guest,research-member,research-manager,research-admin narrow the sweeps).
 //   e.g.   API on :4001 (Vite proxies /api there) started with DATABASE_URL=file:<COPY of dev.db>,
@@ -54,6 +55,7 @@ const ONLY_PUBS = !!process.env.ONLY_PUBS;
 const ONLY_DISCOVERY = !!process.env.ONLY_DISCOVERY;
 const ONLY_WORKSPACE = !!process.env.ONLY_WORKSPACE;
 const ONLY_KNOWLEDGE = !!process.env.ONLY_KNOWLEDGE;
+const ONLY_RESOURCES = !!process.env.ONLY_RESOURCES;
 
 // ---------------------------------------------------------------- API seeding
 class Client {
@@ -225,7 +227,7 @@ async function connect() {
   };
 
   const step = async (name, fn) => {
-    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery ")) || (ONLY_WORKSPACE && !name.startsWith("workspace ")) || (ONLY_KNOWLEDGE && !name.startsWith("knowledge "))) return;
+    if ((ONLY_NAV && !name.startsWith("nav")) || (ONLY_UI && !name.startsWith("ui")) || (ONLY_FORUM && !name.startsWith("forum")) || (ONLY_I18N && !name.startsWith("i18n")) || (ONLY_EVENTS && !name.startsWith("events")) || (ONLY_ADMIN && !name.startsWith("admin ")) || (ONLY_RESEARCH && !name.startsWith("research ")) || (ONLY_PUBS && !name.startsWith("publications ")) || (ONLY_DISCOVERY && !name.startsWith("discovery ")) || (ONLY_WORKSPACE && !name.startsWith("workspace ")) || (ONLY_KNOWLEDGE && !name.startsWith("knowledge ")) || (ONLY_RESOURCES && !name.startsWith("resources "))) return;
     if (process.env.ONLY_STEPS && !new RegExp(process.env.ONLY_STEPS, "i").test(name)) return; // e.g. ONLY_STEPS="^(promoted|search guest)$"
     try {
       await fn();
@@ -712,7 +714,7 @@ async function connect() {
     check("keyboard: Tab from the box reaches the Search button", (await ev(`document.activeElement.innerText.trim()`)) === "Search");
     await key("Tab", "Tab", 9);
     check("keyboard: ...then the first filter chip (All)", (await ev(`document.activeElement.innerText.trim().startsWith('All')`)) === true);
-    for (let i = 0; i < 10; i++) await key("Tab", "Tab", 9); // the 9 other chips (Phase 16 added Events, Phase 22 Knowledge), then the first result
+    for (let i = 0; i < 11; i++) await key("Tab", "Tab", 9); // the 10 other chips (Phase 16 added Events, Phase 22 Knowledge, Phase 23 Resources), then the first result
     check("keyboard: ...then the first result's link, with a visible focus ring on its card", await ev(`(() => { const a = document.activeElement; return a.classList.contains('search-result__link') && getComputedStyle(a.closest('.search-result')).outlineStyle === 'solid'; })()`));
     check("labels: the /search box has a real <label>, the chips are a labelled group", await ev(`!!document.querySelector('label[for="search-page-input"]') && document.querySelector('.search-filters').getAttribute('aria-label') === 'Filter results by type' && document.querySelector('.search-filters').getAttribute('role') === 'group'`));
     check("semantic headings + list: h1, each result is an <article> with an h3 inside an ordered list", await ev(`document.querySelectorAll('h1').length === 1 && document.querySelectorAll('ol.search-results > li > article.search-result h3 a[href]').length > 0`));
@@ -721,9 +723,9 @@ async function connect() {
     await go("/search?q=FPGA");
     await statusIs("FPGA");
     const chips = await ev(`[...document.querySelectorAll('.search-filters a')].map(a => a.innerText.replace(/\\s+/g, ' ').trim())`);
-    check("chips: All + the nine types, each with a count", chips.length === 10 && chips[0].startsWith("All") && ["Research Areas", "Projects", "Groups", "Researchers", "Publications", "News", "Forum Topics", "Events", "Knowledge"].every((l) => chips.some((c) => c.startsWith(l) && /\d+$/.test(c))), chips.join(" | "));
+    check("chips: All + the ten types, each with a count", chips.length === 11 && chips[0].startsWith("All") && ["Research Areas", "Projects", "Groups", "Researchers", "Publications", "News", "Forum Topics", "Events", "Knowledge", "Resources"].every((l) => chips.some((c) => c.startsWith(l) && /\d+$/.test(c))), chips.join(" | "));
     const apiCounts = (await searchJson("q=FPGA")).counts;
-    check("chip counts equal the API counts (nothing is invented client-side)", chips.every((c) => { const m = c.match(/^(.*?)\s+(\d+)$/); const map = { All: "all", "Research Areas": "research-area", Projects: "project", Groups: "group", Researchers: "researcher", Publications: "publication", News: "news", "Forum Topics": "forum-topic", Events: "event", Knowledge: "knowledge" }; return m && apiCounts[map[m[1]]] === Number(m[2]); }));
+    check("chip counts equal the API counts (nothing is invented client-side)", chips.every((c) => { const m = c.match(/^(.*?)\s+(\d+)$/); const map = { All: "all", "Research Areas": "research-area", Projects: "project", Groups: "group", Researchers: "researcher", Publications: "publication", News: "news", "Forum Topics": "forum-topic", Events: "event", Knowledge: "knowledge", Resources: "resource" }; return m && apiCounts[map[m[1]]] === Number(m[2]); }));
     check("the active chip is marked (aria-current)", await ev(`document.querySelector('.search-filters a[aria-current]').innerText.startsWith('All')`));
     await clickText("Publications", ".search-filters a");
     check("7. Publications filter: URL gets type=publication, only publication cards", (await waitFor(`location.search === '?q=FPGA&type=publication'`)) && (await waitFor(`document.querySelectorAll('.search-result').length > 0 && [...document.querySelectorAll('.search-result')].every(c => c.classList.contains('search-result--publication'))`)) && (await statusText()).includes("in Publications"));
@@ -1008,7 +1010,7 @@ async function connect() {
   // "a MEMBER has no Admin link" therefore use D.plain, which stays a true MEMBER for the whole run.
   const TRUE_MEMBER = { email: D.plain.email, password: PW_NAV };
   const MANAGER = { email: D.mgr.email, password: PW_NAV };
-  const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/news", "/knowledge"]; // Phase 22 added Knowledge as the last Research link
+  const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/news", "/knowledge", "/resources"]; // Phase 22 added Knowledge, Phase 23 Resources as the last Research link
   const PEOPLE_HREFS = ["/team", "/groups"];
   const phone = (w) => send("Emulation.setDeviceMetricsOverride", { width: w, height: 844, deviceScaleFactor: 2, mobile: true });
   const desktopAt = (w, h = 800) => send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
@@ -1026,7 +1028,7 @@ async function connect() {
     check("N4. each trigger controls an existing panel labelled '<group> menu'", await ev(`[...document.querySelectorAll('.nav__trigger')].every(b => { const p = document.getElementById(b.getAttribute('aria-controls')); return p && p.getAttribute('aria-label') === b.textContent.trim() + ' menu'; })`));
     await shot("nav-guest-closed");
 
-    check("N5. clicking Research opens it: expanded, visible, five links in the documented order", (await clickEl(trig("research"))) && (await expanded("research")) === "true" && (await panelHidden("research")) === false && eqJson(await panelHrefs("research"), RESEARCH_HREFS));
+    check("N5. clicking Research opens it: expanded, visible, six links in the documented order", (await clickEl(trig("research"))) && (await expanded("research")) === "true" && (await panelHidden("research")) === false && eqJson(await panelHrefs("research"), RESEARCH_HREFS));
     check("N5b. the panel sits under its trigger, inside the viewport, not clipped", await inViewport("#nav-panel-research"));
     await shot("nav-guest-research-open");
     check("N6. opening People closes Research (one dropdown at a time) and lists Team + Groups", (await clickEl(trig("people"))) && (await expanded("people")) === "true" && (await expanded("research")) === "false" && eqJson(await panelHrefs("people"), PEOPLE_HREFS));
@@ -1077,9 +1079,9 @@ async function connect() {
     await press("down");
     check("K8. ArrowDown moves to the next link", (await focusDesc()) === "projects");
     await press("end");
-    check("K9. End goes to the last link", (await focusDesc()) === "knowledge");
+    check("K9. End goes to the last link", (await focusDesc()) === "resources");
     await press("down");
-    check("K9b. ArrowDown on the last link stays there (no wrap trap)", (await focusDesc()) === "knowledge");
+    check("K9b. ArrowDown on the last link stays there (no wrap trap)", (await focusDesc()) === "resources");
     await press("home");
     check("K10. Home goes to the first link", (await focusDesc()) === "research areas");
     await press("up");
@@ -1088,7 +1090,7 @@ async function connect() {
 
     // Tab through the whole panel and off the end: the dropdown closes itself.
     await press("down");
-    for (let i = 0; i < 5; i++) await tab(); // 4 more links to Knowledge, then off the group
+    for (let i = 0; i < 6; i++) await tab(); // 5 more links to Resources, then off the group
     check("K12. Tabbing out of the last link closes the dropdown and lands on the next header control", (await expanded("research")) === "false" && (await focusDesc()) === "people");
     await tab(true); // Shift+Tab from People back to the Research trigger
     await press("enter"); // Research reopened
@@ -3111,7 +3113,7 @@ async function connect() {
   await step("admin content: filters, search, deep links, pagination, hostile text (manager)", async () => {
     check("admin content: manager login", await login(D.mgr.email, PW));
     await admReady("/admin/content", "Research areas");
-    check("admin content: seven type chips (events have their own section; Phase 22 added knowledge documents) and one pressed", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 7 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1);
+    check("admin content: eight type chips (events have their own section; Phase 22 added knowledge documents, Phase 23 lab resources) and one pressed", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 8 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1);
     check("admin content: the results are a real list with a live count", (await exists("ul.admin-list")) && (await exists('[role="status"][aria-live="polite"]')));
     await admReady("/admin/content?type=news", "ZZ B9");
     check("admin content: the type in the URL is honoured (news)", (await admQ("type")) === "news" && (await ev(`document.querySelector('.admin-types .chip[aria-pressed="true"]').textContent.trim()`)) === "News");
@@ -3240,7 +3242,7 @@ async function connect() {
   await step("admin translations: view, edit, clear, long text, English base stays readable", async () => {
     check("admin tr: manager login", await login(D.mgr.email, PW));
     await admReady("/admin/translations", "English (base text)");
-    check("admin tr: eight type chips (Phase 19 added publications, Phase 22 knowledge documents), one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 8 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1 && (await exists("#at-q")) && (await exists("#at-state")));
+    check("admin tr: nine type chips (Phase 19 added publications, Phase 22 knowledge documents, Phase 23 lab resources), one pressed; a search and a state filter", (await ev(`document.querySelectorAll('.admin-types .chip').length`)) === 9 && (await ev(`document.querySelectorAll('.admin-types .chip[aria-pressed="true"]').length`)) === 1 && (await exists("#at-q")) && (await exists("#at-state")));
     await admReady(`/admin/translations?type=NEWS_ITEM&q=${encodeURIComponent("ZZ B9 Adm News Alpha")}`, "English (base text)");
     await waitFor(`document.querySelectorAll('.admin-tr').length === 1`);
     check("admin tr: the entry shows the English base text (read-only) beside an editable Japanese field", (await ev(`document.querySelector('.admin-tr__base').textContent`)).includes("ZZ B9 Adm News Alpha") && (await ev(`document.querySelector('.admin-tr__base').getAttribute('lang')`)) === "en" && (await ev(`document.querySelector('.admin-tr textarea').getAttribute('lang')`)) === "ja");
@@ -4643,8 +4645,8 @@ async function connect() {
     await wsReady();
     check("workspace member: one h1, one main, the page title", (await pCount("h1")) === 1 && (await pCount("main")) === 1 && (await ev(`document.querySelector('h1').textContent.trim()`)) === "My research workspace" && (await ev(`document.title`)).includes("My research workspace"));
     const heads = await ev(`[...document.querySelectorAll('main h2')].map((h) => h.textContent.trim())`);
-    check("workspace member: eight labelled sections (Phase 22 added 'Recent documentation') with real counts in their headings", heads.length === 8 && heads[0] === "My projects (2)" && heads[1] === "My groups (1)" && heads[2] === "My research areas (2)" && heads[3] === "My publications (0)" && heads[4].startsWith("Upcoming events (") && heads[5].startsWith("Recent research news (") && heads[6] === "Recent documentation" && heads[7].startsWith("Research network ("), JSON.stringify(heads));
-    check("workspace member: every section is a named region (aria-labelledby resolves)", await ev(`[...document.querySelectorAll('main section[aria-labelledby]')].every((s) => !!document.getElementById(s.getAttribute('aria-labelledby'))) && document.querySelectorAll('main section[aria-labelledby]').length === 8`));
+    check("workspace member: nine labelled sections (Phase 22 added 'Recent documentation', Phase 23 'My research resources') with real counts in their headings", heads.length === 9 && heads[0] === "My projects (2)" && heads[1] === "My groups (1)" && heads[2] === "My research areas (2)" && heads[3] === "My publications (0)" && heads[4].startsWith("Upcoming events (") && heads[5].startsWith("Recent research news (") && heads[6] === "Recent documentation" && heads[7] === "My research resources" && heads[8].startsWith("Research network ("), JSON.stringify(heads));
+    check("workspace member: every section is a named region (aria-labelledby resolves)", await ev(`[...document.querySelectorAll('main section[aria-labelledby]')].every((s) => !!document.getElementById(s.getAttribute('aria-labelledby'))) && document.querySelectorAll('main section[aria-labelledby]').length === 9`));
     const p1 = await wsCard("projects", "ZZ B9 W21 Project One");
     const p2 = await wsCard("projects", "ZZ B9 W21 Project Lab");
     check("workspace member: both projects, the LAB_ONLY one included (a signed-in member may see it)", !!p1 && !!p2);
@@ -5656,6 +5658,777 @@ async function connect() {
   });
   await step("knowledge restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
 
+  // ================================================================ PHASE 23: lab resources & reproducibility
+  // /resources (list, filters, paging), /resources/:id (details + reproducibility), the add/edit/delete dialogs with the Japanese fields,
+  // the "Resources & reproducibility" panel on project pages, the "Lab resources" sections on area / group / researcher / knowledge /
+  // publication pages, search, the workspace section and the admin views, in EN and JA, for guest / member / project lead / lab manager /
+  // admin, with hostile and very long text and the nine-width sweep.
+  // (Steps are named "resources ..."; ONLY_RESOURCES=1 runs just them; P15_W / P15_USERS=r23-guest,r23-member,r23-lead,r23-manager,
+  // r23-admin narrow the sweeps.)
+  section("phase 23: lab resources & reproducibility");
+  const R23 = {};
+  const r23X = (n) => `<img src=x onerror=window.__r23Xss=${n}>`;
+  const r23JaLong = "ZZ B9 R23 " + "超長い日本語のリソース名がカードと詳細ページの幅を壊さないことを確認するためのテスト".repeat(2);
+  const r23JaText = "これは非常に長い日本語の説明です。レイアウトが崩れないことを確認します。".repeat(60);
+  const r23Cards = () => ev(`[...document.querySelectorAll('.resource-card')].map((c) => ({ title: c.querySelector('.card__title')?.textContent.trim(), text: c.innerText, hrefs: [...c.querySelectorAll('a')].map((a) => a.getAttribute('href')), edit: !!c.querySelector('.card-edit-btn'), del: !!c.querySelector('.icon-btn--danger'), badges: [...c.querySelectorAll('.badge')].map((b) => b.textContent.trim().toLowerCase()) }))`);
+  const r23Titles = async () => (await r23Cards()).map((c) => c.title);
+  const r23Card = async (title) => (await r23Cards()).find((c) => c.title === title) || null;
+  const r23Ready = async (p, mustHave) => { await go(p); await navReady(); await waitFor(`!document.querySelector('[aria-busy="true"]') && (!!document.querySelector('.resource-card') || !!document.querySelector('.empty-state') || !!document.querySelector('[role="alert"]') || !!document.querySelector('.repro-details') || !!document.querySelector('.admin-row') || !!document.querySelector('.search-result') || !!document.querySelector('#ws-projects'))`, 9000); if (mustHave) await waitText(mustHave, 9000); await sleep(400); };
+  const r23Api = (locale, p) => ev(`fetch('/api${p}', { credentials: 'same-origin', headers: ${locale ? `{ 'X-Locale': '${locale}' }` : "{}"} }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }))`);
+  const r23Dlg = () => ev(`(() => { const d = document.querySelector('.modal[role="dialog"]'); if (!d) return null; const g = (id) => document.getElementById(id); return { title: (document.getElementById(d.getAttribute('aria-labelledby') || '__') || {}).textContent?.trim() || '', name: g('resource_name')?.value ?? null, type: g('resource_type')?.value ?? null, desc: g('resource_description')?.value ?? null, ver: g('resource_version')?.value ?? null, vendor: g('resource_vendor')?.value ?? null, ident: g('resource_identifier')?.value ?? null, url: g('resource_url')?.value ?? null, env: g('resource_environment')?.value ?? null, area: g('resource_area')?.value ?? null, grp: g('resource_group')?.value ?? null, doc: g('resource_doc')?.value ?? null, pub: g('resource_publication')?.value ?? null, ev: g('resource_event')?.value ?? null, res: g('resource_researcher')?.value ?? null, vis: g('resource_visibility')?.value ?? null, nja: g('resource_name_ja')?.value ?? null, dja: g('resource_description_ja')?.value ?? null, eja: g('resource_environment_ja')?.value ?? null, meta: Object.fromEntries([...d.querySelectorAll('[id^="resource_meta_"]')].map((x) => [x.id.replace('resource_meta_', ''), x.value])), projects: [...d.querySelectorAll('.resource-form__projects input[type=checkbox]')].filter((x) => x.checked).map((x) => x.parentElement.textContent.trim()), projectOpts: [...d.querySelectorAll('.resource-form__projects input[type=checkbox]')].map((x) => x.parentElement.textContent.trim()), alert: d.querySelector('[role="alert"]')?.innerText.trim() || '', focusId: document.activeElement?.id || '', submitDisabled: d.querySelector('button.form-submit')?.disabled ?? null }; })()`);
+  const r23DlgWait = async (pred, ms = 7000) => { const t0 = Date.now(); let d; while (Date.now() - t0 < ms) { d = await r23Dlg(); if (d && pred(d)) return d; await sleep(120); } return d; };
+  const r23Fill = async (o) => { for (const [id, v] of Object.entries(o)) await setVal(id, v); };
+  const r23Save = async () => { await ev(`document.querySelector('.modal button.form-submit')?.scrollIntoView({ block: 'center' })`); await p15Settle(); return clickEl(".modal button.form-submit"); };
+  const r23Close = async () => { await press("esc"); return waitFor(`!document.querySelector('.modal[role="dialog"]')`, 2500); };
+  const r23Add = async () => { await pClick(".admin-bar button", ""); return r23DlgWait((d) => d.name !== null && d.projectOpts.length > 0); };
+  const r23Op = async (title, danger) => { // real click on the edit / delete icon of the card with this title
+    const ok = await ev(`(() => { document.querySelectorAll('[data-r23-op]').forEach((e) => e.removeAttribute('data-r23-op')); const c = [...document.querySelectorAll('.resource-card')].find((x) => x.querySelector('.card__title')?.textContent.trim() === ${JSON.stringify(title)}); const b = c && c.querySelector(${danger ? "'.icon-btn--danger'" : "'.card-edit-btn .icon-btn:not(.icon-btn--danger)'"}); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.setAttribute('data-r23-op', '1'); return true; })()`);
+    if (!ok) return null;
+    await p15Settle();
+    await clickEl("[data-r23-op]");
+    return danger ? waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 3000) : r23DlgWait((d) => d.name !== null && d.desc !== null && d.projectOpts.length > 0 && d.submitDisabled === false);
+  };
+  const r23EditOn = (title) => r23Op(title, false);
+  const r23DelOn = (title) => r23Op(title, true);
+  const r23Mk = async (key, role, name) => {
+    const r = await R23.a.req("POST", "/users", { email: `b9-r23-${key}@example.test`, password: PW, role, name, initials: "R" + key.slice(0, 1).toUpperCase(), memberRole: "Researcher", category: "RESEARCH" });
+    const team = (await R23.a.req("GET", "/team")).json;
+    D.userIds.push(r.json.id);
+    return { email: `b9-r23-${key}@example.test`, userId: r.json.id, tmId: team.find((m) => m.name === name).id, name };
+  };
+  const r23Login = (u) => login(u.email, PW);
+  const r23Sql = (sql, ...params) => { if (!process.env.K22_DB) throw new Error("K22_DB is not set"); const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync(process.env.K22_DB); try { const st = db.prepare(sql); return /^\s*select/i.test(sql) ? st.all(...params) : st.run(...params); } finally { db.close(); } };
+  const r23Sec = (id) => ev(`(() => { const s = document.querySelector('section[aria-labelledby="${id}"]'); if (!s) return null; return { head: document.getElementById('${id}')?.textContent.trim(), cards: [...s.querySelectorAll('.resource-card .card__title')].map((x) => x.textContent.trim()), items: [...s.querySelectorAll('.repro-item')].map((x) => x.innerText.replace(/\\s+/g, ' ').trim()), groups: [...s.querySelectorAll('.repro-group__title')].map((x) => x.textContent.trim()), all: s.querySelector('a.section-header__link')?.getAttribute('href') || '', allText: s.querySelector('a.section-header__link')?.innerText.trim() || '', edit: !!s.querySelector('.card-edit-btn') }; })()`);
+
+  await step("resources seed: five roles, public / lab-only / leaky / hostile / long / many resources with Japanese overrides", async () => {
+    if (!P15.jsDialogs) { P15.jsDialogs = []; ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (m.method === "Page.javascriptDialogOpening") { P15.jsDialogs.push(m.params.message); send("Page.handleJavaScriptDialog", { accept: false }); } }); }
+    const a = new Client();
+    await a.req("POST", "/auth/login", ADMIN);
+    R23.a = a;
+    const J = (r) => r.json;
+    R23.lead = await r23Mk("lead", "MEMBER", "ZZ B9 R23 Lead");
+    R23.mem = await r23Mk("mem", "MEMBER", "ZZ B9 R23 Member");
+    R23.mgr = await r23Mk("mgr", "LAB_MANAGER", "ZZ B9 R23 Manager");
+    R23.none = await r23Mk("none", "MEMBER", "ZZ B9 R23 Nobody");
+    R23.aPub = J(await a.req("POST", "/research", { title: "ZZ B9 R23 Area Public", description: "r23 area", tag: "ZZR23", visibility: "PUBLIC" }));
+    R23.aHid = J(await a.req("POST", "/research", { title: "ZZ B9 R23 Area Lab", description: "r23 lab area", tag: "ZZR23", visibility: "LAB_ONLY" }));
+    R23.aX = J(await a.req("POST", "/research", { title: "ZZ B9 R23 Area " + r23X(2), description: "hostile", tag: "ZZR23", visibility: "PUBLIC" }));
+    R23.gPub = J(await a.req("POST", "/groups", { name: "ZZ B9 R23 Group Public", description: "g", visibility: "PUBLIC" }));
+    R23.gHid = J(await a.req("POST", "/groups", { name: "ZZ B9 R23 Group Lab", description: "g", visibility: "LAB_ONLY" }));
+    R23.gX = J(await a.req("POST", "/groups", { name: "ZZ B9 R23 Group <script>window.__r23Xss=7</script>", description: "gx", visibility: "PUBLIC" }));
+    const mkPrj = async (title, visibility, groupId, ja) => J(await a.req("POST", "/projects", { title, summary: "R23 summary", description: "d", status: "ACTIVE", visibility, ...(groupId ? { groupId } : {}), ...(ja ? { translations: { ja: { title: ja } } } : {}) }));
+    R23.p1 = await mkPrj("ZZ B9 R23 Project One", "PUBLIC", R23.gPub.id, "ZZ B9 R23 プロジェクト一");
+    R23.p2 = await mkPrj("ZZ B9 R23 Project Two", "PUBLIC", null);
+    R23.pHid = await mkPrj("ZZ B9 R23 Project Lab", "LAB_ONLY", null);
+    R23.pX = await mkPrj("ZZ B9 R23 Project " + r23X(4), "PUBLIC", R23.gX.id);
+    R23.pEmpty = await mkPrj("ZZ B9 R23 Project Without Resources", "PUBLIC", null);
+    await a.req("PUT", `/projects/${R23.p1.id}/members`, { members: [{ teamMemberId: R23.lead.tmId, role: "LEAD" }] });
+    await a.req("PUT", `/groups/${R23.gPub.id}/members`, { members: [{ teamMemberId: R23.lead.tmId, role: "MEMBER" }] });
+    await a.req("PUT", `/member/${R23.lead.tmId}/areas`, { areaIds: [R23.aPub.id] });
+    const iso = (days) => new Date(Date.now() + days * 864e5).toISOString();
+    R23.pubPub = J(await a.req("POST", "/publications", { year: 2031, title: "ZZ B9 R23 Paper Public", authors: "a", venue: "v", visibility: "PUBLIC" }));
+    R23.pubHid = J(await a.req("POST", "/publications", { year: 2031, title: "ZZ B9 R23 Paper Lab", authors: "a", venue: "v", visibility: "LAB_ONLY" }));
+    R23.evPub = J(await a.req("POST", "/events", { title: "ZZ B9 R23 Event Public", description: "e", location: "Hall", kind: "SEMINAR", startsAt: iso(5), visibility: "PUBLIC" }));
+    R23.evHid = J(await a.req("POST", "/events", { title: "ZZ B9 R23 Event Lab", description: "e", location: "Hall", kind: "MEETING", startsAt: iso(6), visibility: "LAB_ONLY" }));
+    const mgrC = new Client(); await mgrC.req("POST", "/auth/login", { email: R23.mgr.email, password: PW });
+    R23.mgrC = mgrC;
+    // An old document followed by 51 newer ones: it falls outside the form picklist's newest 50 (created BEFORE the fixtures below, which must stay inside it).
+    R23.docOld = J(await mgrC.req("POST", "/knowledge", { title: "ZZ B9 R23 Doc Old", body: "old doc", category: "REPRODUCIBILITY", visibility: "PUBLIC" }));
+    for (let i = 0; i < 51; i++) await mgrC.req("POST", "/knowledge", { title: `ZZ B9 R23 Doc Filler ${String(i).padStart(2, "0")}`, body: "filler", category: "RESEARCH_NOTE", visibility: "PUBLIC" });
+    R23.docPub = J(await mgrC.req("POST", "/knowledge", { title: "ZZ B9 R23 Doc Public", body: "How to reproduce ZZRDOC", category: "REPRODUCIBILITY", visibility: "PUBLIC" }));
+    R23.docHid = J(await mgrC.req("POST", "/knowledge", { title: "ZZ B9 R23 Doc Lab", body: "lab doc", category: "REPRODUCIBILITY", visibility: "LAB_ONLY" }));
+    const res = async (client, body) => J(await client.req("POST", "/resources", body));
+    R23.rDs = await res(mgrC, {
+      name: "ZZ B9 R23 Public Dataset",
+      resourceType: "DATASET",
+      description: "Frames from the test rig.\nSecond line ZZRPUB\n\n  Indented note",
+      version: "v3.2",
+      vendor: "Smart Lab",
+      identifier: "ZZR-DS-1",
+      url: "https://example.org/zz-b9-r23-dataset",
+      environment: "Python 3.11\nseed = 42\n  batch = 32",
+      metadata: { format: "CSV", size: "2 GB", license: "CC-BY 4.0", collectionMethod: "camera rig at 30 fps" },
+      visibility: "PUBLIC",
+      projectIds: [R23.p1.id, R23.p2.id],
+      researchAreaId: R23.aPub.id,
+      groupId: R23.gPub.id,
+      knowledgeDocId: R23.docPub.id,
+      publicationId: R23.pubPub.id,
+      eventId: R23.evPub.id,
+      teamMemberId: R23.lead.tmId,
+      translations: { ja: { name: "ZZ B9 R23 公開データセット", description: "テスト装置のフレーム ZZRJA", environment: "Python 3.11、シード 42" } },
+    });
+    R23.rFpga = await res(mgrC, { name: "ZZ B9 R23 FPGA Board", resourceType: "FPGA", description: "Dev board ZZRFPGA", version: "rev C", vendor: "Xilinx", identifier: "ZZR-FPGA-1", metadata: { hardwareRevision: "C", firmwareVersion: "1.4.2", toolchain: "Vivado 2024.1" }, visibility: "PUBLIC", projectIds: [R23.p1.id] });
+    R23.rTool = await res(mgrC, { name: "ZZ B9 R23 Vivado", resourceType: "TOOL", description: "Synthesis tool", version: "2024.1", vendor: "AMD", metadata: { platform: "Linux x86_64", configuration: "default strategy", requirements: "64 GB RAM" }, visibility: "PUBLIC", projectIds: [R23.p1.id] });
+    R23.rModel = await res(mgrC, { name: "ZZ B9 R23 Detector Model", resourceType: "MODEL", description: "Weights", version: "0.9", visibility: "PUBLIC", projectIds: [R23.p1.id] });
+    R23.rEnv = await res(mgrC, { name: "ZZ B9 R23 Test Bench", resourceType: "EXPERIMENT_ENVIRONMENT", description: "Bench", environment: "20 C, dark room", visibility: "PUBLIC", projectIds: [R23.p1.id] });
+    R23.rLab = await res(mgrC, { name: "ZZ B9 R23 Lab Only Scope", resourceType: "HARDWARE", description: "Internal ZZRLAB oscilloscope", visibility: "LAB_ONLY", projectIds: [R23.p1.id] });
+    R23.rLeak = await res(mgrC, { name: "ZZ B9 R23 Leaky Public Board", resourceType: "BOARD", description: "Public resource on lab-only things ZZRLEAK", visibility: "PUBLIC", projectIds: [R23.pHid.id], researchAreaId: R23.aHid.id, groupId: R23.gHid.id, knowledgeDocId: R23.docHid.id, publicationId: R23.pubHid.id, eventId: R23.evHid.id });
+    R23.rX = await res(mgrC, { name: "ZZ B9 R23 Hostile " + r23X(1), resourceType: "SOFTWARE", description: `<script>window.__r23Xss=3</script>\n<iframe src="javascript:window.__r23Xss=4"></iframe> javascript:alert(1) <a href="javascript:window.__r23Xss=8">x</a>`, version: r23X(5), vendor: "<b>v</b>", identifier: "<svg onload=window.__r23Xss=9>", environment: `<script>window.__r23Xss=10</script>`, metadata: { platform: r23X(11), configuration: "<script>window.__r23Xss=12</script>", requirements: "javascript:alert(2)" }, visibility: "PUBLIC", projectIds: [R23.pX.id], researchAreaId: R23.aX.id, groupId: R23.gX.id, translations: { ja: { name: "ZZ B9 R23 日本語 " + r23X(6), description: "日本語 <script>window.__r23Xss=6</script>", environment: r23X(13) } } });
+    R23.rLongJa = await res(mgrC, { name: r23JaLong.slice(0, 200), resourceType: "DATASET", description: r23JaText, environment: r23JaText, version: "v" + "9".repeat(60), vendor: "V".repeat(150), identifier: "I".repeat(150), visibility: "PUBLIC", projectIds: [R23.p1.id] });
+    R23.rLongTok = await res(mgrC, { name: "ZZ B9 R23 " + "T".repeat(150), resourceType: "TOOL", description: "U".repeat(3000) + " tail", environment: "W".repeat(3000), url: "https://example.org/" + "a".repeat(200), visibility: "PUBLIC" });
+    R23.many = [];
+    for (let i = 0; i < 14; i++) R23.many.push(await res(mgrC, { name: `ZZ B9 R23 Many ${String(i).padStart(2, "0")}`, resourceType: "SENSOR", description: `many ${i} ZZRMANY`, visibility: "PUBLIC", projectIds: [R23.p2.id] }));
+    const memC = new Client(); await memC.req("POST", "/auth/login", { email: R23.mem.email, password: PW });
+    const leadC = new Client(); await leadC.req("POST", "/auth/login", { email: R23.lead.email, password: PW });
+    R23.rMem = await res(memC, { name: "ZZ B9 R23 Member Own", resourceType: "SOFTWARE", description: "added by the member ZZRMEM" });
+    R23.rLead = await res(leadC, { name: "ZZ B9 R23 Lead Own", resourceType: "TOOL", description: "added by the lead ZZRLEAD", projectIds: [R23.p1.id] });
+    // more fixtures: a resource on five projects (a card names three), a busy area (more resources than a section shows), a PRIVATE-visibility area / group,
+
+    R23.pm = [];
+    for (let i = 1; i <= 4; i++) R23.pm.push(await mkPrj(`ZZ B9 R23 Project Multi ${i}`, "PUBLIC", null));
+    R23.rMulti = await res(mgrC, { name: "ZZ B9 R23 Multi Project Tool", resourceType: "TOOL", description: "on five projects ZZRMULTI", visibility: "PUBLIC", projectIds: [...R23.pm.map((p) => p.id), R23.pHid.id] });
+    R23.aBusy = J(await a.req("POST", "/research", { title: "ZZ B9 R23 Area Busy", description: "busy", tag: "ZZR23", visibility: "PUBLIC" }));
+    R23.busy = [];
+    for (let i = 0; i < 7; i++) R23.busy.push(await res(mgrC, { name: `ZZ B9 R23 Busy ${i}`, resourceType: "TOOL", description: "busy area resource", visibility: "PUBLIC", researchAreaId: R23.aBusy.id }));
+    R23.aPriv = J(await a.req("POST", "/research", { title: "ZZ B9 R23 Area Private", description: "p", tag: "ZZR23", visibility: "LAB_ONLY" }));
+    R23.gPriv = J(await a.req("POST", "/groups", { name: "ZZ B9 R23 Group Private", description: "p", visibility: "LAB_ONLY" }));
+    r23Sql("UPDATE ResearchArea SET visibility = 'PRIVATE' WHERE id = ?", R23.aPriv.id);
+    r23Sql("UPDATE ResearchGroup SET visibility = 'PRIVATE' WHERE id = ?", R23.gPriv.id);
+    // The one fixture the API cannot make: a project whose visibility is outside the allow-list (invisible to every signed-in viewer).
+    R23.pPriv = J(await a.req("POST", "/projects", { title: "ZZ B9 R23 Project Private", summary: "s", description: "d", status: "ACTIVE", visibility: "LAB_ONLY" }));
+    r23Sql("UPDATE ResearchProject SET visibility = 'PRIVATE' WHERE id = ?", R23.pPriv.id);
+    R23.rPriv = await res(mgrC, { name: "ZZ B9 R23 On Private Project", resourceType: "TOOL", description: "ZZRPRIV", visibility: "PUBLIC" });
+    r23Sql("INSERT INTO ResourceProject (resourceId, projectId) VALUES (?, ?)", R23.rPriv.id, R23.pPriv.id);
+    check("resources seed: the fixtures exist", [R23.lead.tmId, R23.mem.tmId, R23.mgr.tmId, R23.none.tmId, R23.aPub.id, R23.gPub.id, R23.p1.id, R23.rDs.id, R23.rFpga.id, R23.rLab.id, R23.rLeak.id, R23.rX.id, R23.rLongJa.id, R23.rLongTok.id, R23.many[13]?.id, R23.rMem.id, R23.rLead.id, R23.rPriv.id].every(Boolean), JSON.stringify([R23.rDs?.error, R23.rX?.error, R23.rLongJa?.error, R23.rLongTok?.error]));
+  });
+
+  await step("resources guest: navigation, PUBLIC list only, filters, paging, detail, hidden = not found, no leak", async () => {
+    await desktop(); await setLocale(null);
+    await r23Ready("/resources?q=ZZ%20B9%20R23");
+    check("resources guest: the header offers Resources under Research", (await exists('#nav-panel-research a[href="/resources"]')) && (await panelLabels("research")).includes("resources"));
+    check("resources guest: one h1 'Lab resources', one main, the tab title, a described page", (await pCount("h1")) === 1 && (await pCount("main")) === 1 && (await ev(`document.querySelector('h1').textContent.trim()`)) === "Lab resources" && (await ev(`document.title`)).includes("Lab resources"));
+    const t = await pMain();
+    check("resources guest: no '+ Add resource' bar, no edit/delete icons, no visibility or 'related to me' controls", !t.includes("Add resource") && !(await exists(".admin-bar")) && !(await exists(".card-edit-btn")) && !(await exists("#rf-visibility")) && !(await exists("#rf-mine")));
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Public");
+    const all = await r23Titles();
+    await r23Ready("/resources?q=ZZRFPGA");
+    const fpga = await r23Titles();
+    check("resources guest: a search of the list finds the PUBLIC resources", all.includes("ZZ B9 R23 Public Dataset") && all.includes("ZZ B9 R23 Leaky Public Board") && fpga.join("|") === "ZZ B9 R23 FPGA Board", JSON.stringify([all, fpga]));
+    const hiddenSeen = [];
+    for (const w of ["ZZRLAB", "ZZRMEM", "ZZRLEAD"]) { await r23Ready("/resources?q=" + w); hiddenSeen.push(...(await r23Titles())); }
+    check("resources guest: LAB_ONLY resources (the scope, the member's, the lead's) are absent from the list", hiddenSeen.length === 0, JSON.stringify(hiddenSeen));
+    check("resources guest: the filter form is a labelled search with the type, project, area, group, researcher, documentation and publication pickers", (await exists('form[role="search"].knowledge-filters')) && (await ev(`['rf-q','rf-type','rf-project','rf-area','rf-group','rf-researcher','rf-knowledge','rf-publication'].every((id) => !!document.getElementById(id) && !!document.querySelector('label[for="' + id + '"]'))`)));
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Public");
+    check("resources guest: the result count is a polite live region", (await exists('.knowledge-status[role="status"][aria-live="polite"]')) && /^\d+ resources?$/.test(await ev(`document.querySelector('.knowledge-status').innerText.trim()`)));
+    const ds = await r23Card("ZZ B9 R23 Public Dataset");
+    check("resources guest: a card shows the type, version and vendor, an excerpt, the related PUBLIC projects / area / group, the owner byline and the date, and links the title to /resources/:id", !!ds && ds.badges.includes("dataset") && ds.text.includes("v3.2 · Smart Lab") && ds.text.includes("Frames from the test rig.") && ["ZZ B9 R23 Project One", "ZZ B9 R23 Project Two", "ZZ B9 R23 Area Public", "ZZ B9 R23 Group Public"].every((s) => ds.text.includes(s)) && /Added by ZZ B9 R23 Manager/.test(ds.text) && /Updated [A-Z][a-z]{2} \d{1,2}, \d{4}/.test(ds.text) && ds.hrefs[0] === `/resources/${R23.rDs.id}` && ds.hrefs.includes(`/projects/${R23.p1.id}`) && ds.hrefs.includes(`/research/${R23.aPub.id}`) && ds.hrefs.includes(`/groups/${R23.gPub.id}`), JSON.stringify(ds));
+    await r23Ready("/resources?q=ZZRLEAK");
+    const leak = await r23Card("ZZ B9 R23 Leaky Public Board");
+    check("resources guest: a PUBLIC resource on LAB_ONLY project / area / group names none of them (card and page HTML)", !!leak && !/Project Lab|Area Lab|Group Lab/.test(leak.text) && !(await ev(`document.documentElement.outerHTML`)).includes(R23.pHid.id) && !(await ev(`document.documentElement.outerHTML`)).includes(R23.gHid.id) && leak.hrefs.length === 1, JSON.stringify(leak));
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Public");
+    await setVal("rf-type", "FPGA");
+    await ev(`document.querySelector('form.knowledge-filters').requestSubmit()`);
+    await waitFor(`location.search.includes('type=FPGA')`, 4000); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(400);
+    check("resources guest: the type filter writes ?type= to the URL and narrows the list to that type", (await ev(`location.search`)).includes("type=FPGA") && (await r23Cards()).every((c) => c.badges.includes("fpga")));
+    check("resources guest: after filtering, the form keeps the chosen value and 'Clear filters' returns to /resources", (await ev(`document.getElementById('rf-type').value`)) === "FPGA" && (await clickEl('a.btn--ghost[href="/resources"]')) && (await waitFor(`location.pathname === '/resources' && location.search === ''`, 4000)));
+    await r23Ready("/resources?q=nothingmatchesthiszzz");
+    check("resources guest: no match = a filtered empty state with a hint", (await pMain()).includes("No resources match these filters.") && (await pCount(".resource-card")) === 0);
+    await r23Ready(`/resources?project=${R23.pHid.id}`);
+    check("resources guest: filtering by a hidden project shows the SAME empty state as an unknown project", (await pMain()).includes("No resources match these filters.") && (await pCount(".resource-card")) === 0 && !(await ev(`document.querySelector('.empty-state')?.innerText || ''`)).includes("Leaky")); // the picklists hold OTHER phases' record names, so only the results region is inspected
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Many");
+    check("resources guest: 14 resources = page 1 of 2 with 12 cards, a Next link and 'Page 1 of 2'", (await pCount(".resource-card")) === 12 && (await exists('.search-pager a[rel="next"]')) && (await ev(`document.querySelector('.search-pager__pos').textContent.trim()`)) === "Page 1 of 2" && (await exists('.search-pager span.is-disabled')));
+    const p1t = await r23Titles();
+    await pClick('.search-pager a[rel="next"]');
+    await waitFor(`location.search.includes('page=2')`, 4000); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(400);
+    check("resources guest: Next opens page 2 (the remaining 2), 'Next' becomes a disabled non-link control and Previous is a link", (await pCount(".resource-card")) === 2 && !(await exists('.search-pager a[rel="next"]')) && (await exists('.search-pager span.is-disabled[aria-disabled="true"]')) && (await exists('.search-pager a[rel="prev"]')) && new Set([...p1t, ...(await r23Titles())]).size === 14);
+    await r23Ready("/resources?page=zzz&type=nope");
+    check("resources guest: a junk ?page= is page 1 and an unknown ?type= is an error state, not a crash", (await pCount("h1")) === 1 && (await exists('[role="alert"]')));
+    await r23Ready("/resources?page=3.5&q=ZZRPUB");
+    check("resources guest: a fractional ?page= is read as page 1 (never sent to the API): the result shows and there is no error", (await r23Titles()).includes("ZZ B9 R23 Public Dataset") && !(await exists('[role="alert"]')));
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Public%20Dataset&visibility=LAB_ONLY&mine=1");
+    check("resources guest: ?visibility= and ?mine=1 are ignored for a guest (no 403 / 401 error state, the PUBLIC result is shown)", (await r23Titles()).includes("ZZ B9 R23 Public Dataset") && !(await exists('[role="alert"]')) && !(await exists("#rf-visibility")) && !(await exists("#rf-mine")));
+    await r23Ready("/resources?q=ZZRFPGA");
+    check("resources guest: exactly one result reads '1 resource' (singular)", (await ev(`document.querySelector('.knowledge-status').innerText.trim()`)) === "1 resource");
+    await r23Ready("/resources?q=Multi%20Project");
+    const multi = await r23Card("ZZ B9 R23 Multi Project Tool");
+    check("resources guest: a resource on more projects than a card names lists three and says '+1 more' for the fourth PUBLIC one; the LAB_ONLY fifth is neither named nor counted", !!multi && multi.hrefs.filter((h) => h.startsWith("/projects/")).length === 3 && multi.text.includes("+1 more") && !multi.text.includes("+2 more") && !multi.text.includes("Project Lab"), JSON.stringify(multi));
+    // detail
+    await r23Ready(`/resources/${R23.rDs.id}`);
+    check("resources guest: the detail page: breadcrumbs (Home / Resources / name), one h1 = the name, type badge", (await ev(`[...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim())`)).join("|") === "Home|Resources|ZZ B9 R23 Public Dataset" && (await ev(`document.querySelector('h1').textContent.trim()`)) === "ZZ B9 R23 Public Dataset" && (await ev(`document.querySelector('.detail-meta').innerText.toLowerCase()`)).includes("dataset"));
+    const body = await ev(`(() => { const b = document.querySelector('.knowledge-body'); const cs = getComputedStyle(b); return { text: b.innerText, ws: cs.whiteSpace, wrap: cs.overflowWrap }; })()`);
+    check("resources guest: the description is TEXT with its line breaks and indentation kept (pre-wrap)", body.text.includes("Frames from the test rig.\nSecond line ZZRPUB") && body.text.includes("  Indented note") && body.ws === "pre-wrap", JSON.stringify(body));
+    const repro = await ev(`(() => { const s = document.querySelector('.repro-details'); return { head: s.querySelector('h2').textContent.trim(), facts: [...s.querySelectorAll('dl > div')].map((d) => [d.querySelector('dt').textContent.trim(), d.querySelector('dd').textContent.trim()]), notes: s.querySelector('.resource-repro__notes')?.innerText || '', ws: getComputedStyle(s.querySelector('.resource-repro__notes')).whiteSpace }; })()`);
+    check("resources guest: the Reproducibility section lists the dataset's format, size, license and collection method, and the environment notes as pre-wrapped text", repro.head === "Reproducibility" && ["Format|CSV", "Size|2 GB", "License / usage note|CC-BY 4.0", "Collection / generation method|camera rig at 30 fps"].every((p) => repro.facts.some((f) => f.join("|") === p)) && repro.notes.includes("Python 3.11\nseed = 42\n  batch = 32") && repro.ws === "pre-wrap", JSON.stringify(repro));
+    const facts = await ev(`[...document.querySelectorAll('.knowledge-facts > div')].map((d) => ({ k: d.querySelector('dt').textContent.trim(), v: d.querySelector('dd').textContent.trim(), hrefs: [...d.querySelectorAll('a')].map((a) => a.getAttribute('href')) }))`);
+    const has = (k, pred) => facts.some((f) => f.k === k && pred(f));
+    check("resources guest: the details panel lists type, version, vendor, identifier, dates and every related record with working links", has("Type", (f) => f.v === "Dataset") && has("Version", (f) => f.v === "v3.2") && has("Vendor / source", (f) => f.v === "Smart Lab") && has("Identifier", (f) => f.v === "ZZR-DS-1") && has("Projects", (f) => f.hrefs.includes(`/projects/${R23.p1.id}`) && f.hrefs.includes(`/projects/${R23.p2.id}`)) && has("Research area", (f) => f.hrefs[0] === `/research/${R23.aPub.id}`) && has("Group", (f) => f.hrefs[0] === `/groups/${R23.gPub.id}`) && has("Documentation", (f) => f.hrefs[0] === `/knowledge/${R23.docPub.id}`) && has("Publication", (f) => f.hrefs[0] === `/publications/${R23.pubPub.id}`) && has("Event", (f) => f.hrefs[0] === `/events/${R23.evPub.id}`) && has("Contact researcher", (f) => f.hrefs[0] === `/team/${R23.lead.tmId}`) && has("Last updated", () => true) && has("Created", () => true), JSON.stringify(facts));
+    const link = await ev(`(() => { const a = document.querySelector('a.resource-link'); return a ? { href: a.getAttribute('href'), rel: a.getAttribute('rel'), target: a.getAttribute('target') } : null; })()`);
+    check("resources guest: the link is an external http(s) anchor that opens in a new tab with rel=noopener noreferrer", !!link && link.href === "https://example.org/zz-b9-r23-dataset" && link.target === "_blank" && /noopener/.test(link.rel) && /noreferrer/.test(link.rel), JSON.stringify(link));
+    const dHtml = await ev(`document.documentElement.outerHTML`);
+    check("resources guest: no manage bar, and the page HTML holds no account id or 'userId'", !(await exists(".admin-bar")) && !D.userIds.some((u) => dHtml.includes(u)) && !dHtml.includes("userId") && !dHtml.includes("ownerId"));
+    await r23Ready(`/resources/${R23.rLeak.id}`);
+    const lf = await pMain();
+    check("resources guest: the leaky resource's detail names no hidden project / area / group / document / publication / event, and none of their ids are in the page", !/Project Lab|Area Lab|Group Lab|Doc Lab|Paper Lab|Event Lab/.test(lf) && ![R23.pHid.id, R23.aHid.id, R23.gHid.id, R23.docHid.id, R23.pubHid.id, R23.evHid.id].some((i) => (dHtml + lf).includes(i)) && !(await ev(`document.documentElement.outerHTML`)).includes(R23.pHid.id));
+    await r23Ready(`/resources/${R23.rLab.id}`);
+    check("resources guest: a LAB_ONLY resource by URL is the not-found state and leaks nothing", (await pMain()).includes("Resource not found") && !(await pMain()).includes("Lab Only Scope") && !(await pMain()).includes("ZZRLAB") && (await exists('a[href="/resources"]')));
+    const hiddenTxt = await pMain();
+    check("resources guest: the not-found state explains itself, offers no retry, and links back to the list", hiddenTxt.includes("This resource doesn't exist, or you don't have access to it.") && !(await exists('[role="alert"] button')) && (await exists('a.btn[href="/resources"]')));
+    await r23Ready("/resources/nonexistentid12345");
+    check("resources guest: an unknown id renders exactly the same not-found state as the hidden one", (await pMain()) === hiddenTxt);
+    await r23Ready("/resources/a%20b");
+    check("resources guest: a malformed id is a not-found/error state, not a crash", (await pCount("h1")) === 1 && (((await pMain()).includes("not found")) || (await exists('[role="alert"]'))));
+    await r23Ready(`/resources/${R23.rPriv.id}`);
+    check("resources guest: a resource on a PRIVATE-visibility project shows no project (no name, no id, no link)", !(await pMain()).includes("Project Private") && !(await ev(`document.documentElement.outerHTML`)).includes(R23.pPriv.id) && !(await exists('.knowledge-facts a[href^="/projects/"]')));
+    check("resources guest: the write APIs refuse a guest (401)", (await apiCall("POST", "/resources", { name: "x" })) === 401 && (await apiCall("PUT", `/resources/${R23.rDs.id}`, { name: "x" })) === 401 && (await apiCall("DELETE", `/resources/${R23.rDs.id}`)) === 401);
+  });
+
+  await step("resources integration: project panel, area / group / researcher / knowledge / publication sections with View all", async () => {
+    await desktop(); await setLocale(null);
+    await r23Ready(`/projects/${R23.p1.id}`);
+    const s = await r23Sec("project-repro");
+    check("resources project: the section 'Resources & reproducibility' groups the project's PUBLIC resources by kind (Hardware, Software & models, Data, Environment & other)", !!s && s.head === "Resources & reproducibility" && s.groups.join("|") === "Hardware|Software & models|Data|Environment & other", JSON.stringify(s));
+    check("resources project: every item shows its type, name, version and vendor, and hardware / software / data / environment land in the right group", !!s && s.items.some((i) => /^FPGA ZZ B9 R23 FPGA Board rev C · Xilinx$/i.test(i)) && s.items.some((i) => /^TOOL ZZ B9 R23 Vivado 2024\.1 · AMD$/i.test(i)) && s.items.some((i) => /^DATASET ZZ B9 R23 Public Dataset v3\.2 · Smart Lab$/i.test(i)) && s.items.some((i) => /^EXPERIMENT ENVIRONMENT ZZ B9 R23 Test Bench$/i.test(i)), JSON.stringify(s.items));
+    check("resources project: a guest sees no LAB_ONLY resource of the project, and the panel holds at most 12", !!s && !s.items.some((i) => /Lab Only Scope|Member Own|Lead Own/.test(i)) && s.items.length <= 12 && s.items.length >= 6);
+    check("resources project: 'View all resources (N)' shows the TRUE total (PUBLIC only) and links to /resources?project=<id>", !!s && /^View all resources \(\d+\)/.test(s.allText) && s.all === `/resources?project=${R23.p1.id}` && +s.allText.match(/\((\d+)\)/)[1] === (await r23Api(null, `/resources?project=${R23.p1.id}&limit=1`)).json.pagination.total);
+    check("resources project: an item links to its resource page", await ev(`!!document.querySelector('.repro-item a[href="/resources/${R23.rDs.id}"]')`));
+    await r23Ready(s.all);
+    const list = await r23Titles();
+    check("resources project: View all opens the list filtered to that project and the picker shows it selected", list.includes("ZZ B9 R23 Public Dataset") && (await ev(`document.getElementById('rf-project').selectedOptions[0]?.textContent.trim()`)) === "ZZ B9 R23 Project One");
+    await r23Ready(`/projects/${R23.pEmpty.id}`);
+    check("resources project: a project with no visible resources gets no section at all", (await r23Sec("project-repro")) === null);
+    await r23Ready(`/projects/${R23.p2.id}`);
+    const s2 = await r23Sec("project-repro");
+    check("resources project: 15 resources on a project = a panel capped at 12 with the true total", !!s2 && s2.items.length === 12 && +s2.allText.match(/\((\d+)\)/)[1] === 15, JSON.stringify(s2?.allText));
+    check("resources project: only the kinds that have resources get a group (15 sensors / dataset resources on this project show Hardware only, never empty Software / Data / Environment groups)", !!s2 && s2.groups.join("|") === "Hardware", JSON.stringify(s2?.groups));
+    check("resources project: within a group the items are A-Z by name (not in the API's newest-first order)", await (async () => { const names = (s2?.items || []).map((i) => i.match(/ZZ B9 R23 Many \d\d/)?.[0]).filter(Boolean); return names.length >= 10 && names.every((n, k) => k === 0 || names[k - 1] < n); })());
+    await r23Ready(`/research/${R23.aBusy.id}`);
+    const ab = await r23Sec("area-resources");
+    check("resources area: 7 resources = a section capped at 5 cards with the TRUE total in 'View all resources (7)'", !!ab && ab.cards.length === 5 && ab.allText.startsWith("View all resources (7)") && ab.all === `/resources?area=${R23.aBusy.id}`, JSON.stringify(ab));
+    await r23Ready(`/research/${R23.aPub.id}`);
+    let a = await r23Sec("area-resources");
+    check("resources area: the research area page lists the resources linked to it, with View all -> /resources?area=", !!a && a.head === "Lab resources" && a.cards.includes("ZZ B9 R23 Public Dataset") && a.all === `/resources?area=${R23.aPub.id}`, JSON.stringify(a));
+    check("resources area: a related card has no edit controls", !!a && !a.edit);
+    await r23Ready(`/groups/${R23.gPub.id}`);
+    a = await r23Sec("group-resources");
+    check("resources group: the group page lists its resources, with View all -> /resources?group=", !!a && a.cards.includes("ZZ B9 R23 Public Dataset") && a.all === `/resources?group=${R23.gPub.id}`, JSON.stringify(a));
+    await r23Ready(`/team/${R23.lead.tmId}`);
+    a = await r23Sec("member-resources");
+    check("resources researcher: the profile lists resources naming them as the contact researcher, with View all -> /resources?researcher=", !!a && a.cards.join("|") === "ZZ B9 R23 Public Dataset" && a.all === `/resources?researcher=${R23.lead.tmId}`, JSON.stringify(a));
+    await r23Ready(`/team/${R23.none.tmId}`);
+    check("resources researcher: a researcher no resource names gets no section", (await r23Sec("member-resources")) === null);
+    await r23Ready(`/knowledge/${R23.docPub.id}`);
+    a = await r23Sec("knowledge-resources");
+    check("resources knowledge: the documentation page lists the resources it documents, with View all -> /resources?knowledge=", !!a && a.cards.join("|") === "ZZ B9 R23 Public Dataset" && a.all === `/resources?knowledge=${R23.docPub.id}`, JSON.stringify(a));
+    await r23Ready(`/publications/${R23.pubPub.id}`);
+    a = await r23Sec("pub-resources");
+    check("resources publication: the publication page lists the resources it relies on, with View all -> /resources?publication=", !!a && a.cards.join("|") === "ZZ B9 R23 Public Dataset" && a.all === `/resources?publication=${R23.pubPub.id}`, JSON.stringify(a));
+    await r23Ready(`/resources?knowledge=${R23.docPub.id}`);
+    check("resources knowledge: the list filtered by documentation shows that document selected in the picker", (await r23Titles()).join("|") === "ZZ B9 R23 Public Dataset" && (await ev(`document.getElementById('rf-knowledge').selectedOptions[0]?.textContent.trim()`)) === "ZZ B9 R23 Doc Public");
+    await r23Ready(`/knowledge/${R23.docHid.id}`);
+    check("resources knowledge: a LAB_ONLY document is not-found for a guest, so its resources cannot be reached through it", (await pMain()).toLowerCase().includes("not found"));
+    await r23Ready(`/resources?knowledge=${R23.docHid.id}`);
+    check("resources knowledge: nor through the list filter (same empty state as an unknown document)", (await pCount(".resource-card")) === 0);
+    await r23Ready(`/projects/${R23.pX.id}`);
+    const hx = await r23Sec("project-repro");
+    check("resources hostile: a hostile-named project page lists the hostile resource as inert TEXT", !!hx && hx.items.some((c) => c.includes("<img src=x onerror=window.__r23Xss=")) && (await ev(`document.querySelectorAll('main img, main script, main iframe').length`)) === 0 && (await ev(`typeof window.__r23Xss`)) === "undefined");
+  });
+
+  await step("resources member: LAB_ONLY resources, create / validation / edit / delete, metadata, projects, Japanese fields, no visibility control", async () => {
+    check("resources member: login", await r23Login(R23.mem));
+    for (const [word, title] of [["ZZRLAB", "ZZ B9 R23 Lab Only Scope"], ["ZZRMEM", "ZZ B9 R23 Member Own"], ["ZZRLEAD", "ZZ B9 R23 Lead Own"]]) {
+      await r23Ready(`/resources?q=${word}`);
+      check(`resources member: sees the LAB_ONLY resource "${title}" (a signed-in member may)`, (await r23Titles()).join("|") === title);
+    }
+    check("resources member: the bar says what a member can do; there is NO visibility badge, NO visibility filter", (await ev(`document.querySelector('.admin-bar__text').innerText`)).includes("add resources and edit the ones you added") && !(await r23Cards()).some((c) => c.badges.includes("lab only")) && !(await exists("#rf-visibility"))); // cards only: the project picker lists other phases' "... Lab Only ..." projects
+    check("resources member: the 'related to me' filter is offered to a signed-in account", await exists("#rf-mine"));
+    const other = await r23Card("ZZ B9 R23 Lead Own");
+    await r23Ready("/resources?q=ZZRMEM");
+    const own = await r23Card("ZZ B9 R23 Member Own");
+    check("resources member: edit AND delete icons on their own resource only", !!own && own.edit && own.del && !!other && !other.edit && !other.del);
+    await r23Ready("/resources?mine=1");
+    check("resources member: the 'related to me' filter counts as an active filter ('Filters (1 active)') and its box is ticked", (await ev(`document.querySelector('.knowledge-filters-wrap__summary').textContent.trim()`)) === "Filters (1 active)" && (await ev(`document.getElementById('rf-mine').checked`)));
+    await r23Ready("/resources?q=Multi%20Project");
+    const multiM = await r23Card("ZZ B9 R23 Multi Project Tool");
+    check("resources member: the same resource shows '+2 more' (the LAB_ONLY fifth project is visible to a signed-in member)", !!multiM && multiM.text.includes("+2 more"), JSON.stringify(multiM?.text));
+    await r23Ready("/resources?mine=1");
+    let d = await r23Add();
+    check("resources member: '+ Add resource' opens a named dialog with empty fields, type Other, no visibility control, and the member note", !!d && d.title === "Add resource" && d.name === "" && d.desc === "" && d.type === "OTHER" && d.vis === null && (await ev(`document.querySelector('.modal').innerText`)).includes("visible to signed-in lab members until a lab manager makes them public"), JSON.stringify(d));
+    check("resources member: the project checklist lists the visible projects (LAB_ONLY ones too, never the PRIVATE one) and the pickers offer None first", await (async () => { const o = await ev(`['resource_area','resource_group','resource_doc','resource_publication','resource_event','resource_researcher'].map((id) => [...document.getElementById(id).options].map((x) => x.textContent.trim()))`); return d.projectOpts.includes("ZZ B9 R23 Project One") && d.projectOpts.includes("ZZ B9 R23 Project Lab") && !d.projectOpts.includes("ZZ B9 R23 Project Private") && o[0].includes("ZZ B9 R23 Area Public") && o[1].includes("ZZ B9 R23 Group Lab") && o[2].includes("ZZ B9 R23 Doc Public") && o[3].includes("ZZ B9 R23 Paper Public (2031)") && o[4].includes("ZZ B9 R23 Event Public") && o[5].includes("ZZ B9 R23 Lead") && o.every((x) => x[0] === "None"); })());
+    await r23Save();
+    d = await r23DlgWait((x) => !!x.alert);
+    check("resources member: saving an empty form shows 'Name is required.' in an alert and moves focus to the name", !!d && d.alert === "Name is required." && d.focusId === "resource_name" && (await ev(`document.getElementById('resource_name').getAttribute('aria-invalid')`)) === "true", JSON.stringify(d));
+    await r23Fill({ resource_name: "ZZ B9 R23 Created By Member", resource_url: "javascript:alert(1)" });
+    await r23Save();
+    d = await r23DlgWait((x) => /valid URL/.test(x.alert));
+    check("resources member: a javascript: link is refused with the URL message and focus on the link field", /valid URL starting with http/.test(d.alert) && d.focusId === "resource_url" && (await ev(`document.getElementById('resource_url').getAttribute('aria-invalid')`)) === "true", JSON.stringify(d));
+    await r23Fill({ resource_type: "DATASET" });
+    check("resources member: choosing Dataset shows exactly the dataset detail fields (format, size, license, collection method)", (await r23Dlg()) && Object.keys((await r23Dlg()).meta).join() === "format,size,license,collectionMethod");
+    await r23Fill({ resource_type: "FPGA" });
+    check("resources member: choosing FPGA swaps them for hardware revision, firmware version and toolchain", Object.keys((await r23Dlg()).meta).join() === "hardwareRevision,firmwareVersion,toolchain");
+    await r23Fill({ resource_type: "OTHER" });
+    check("resources member: choosing Other shows no detail fields at all", Object.keys((await r23Dlg()).meta).length === 0 && !(await ev(`!!document.querySelector('.modal fieldset legend') && [...document.querySelectorAll('.modal legend')].some((l) => l.textContent.trim() === 'Details for this type')`)));
+    await r23Fill({ resource_type: "DATASET", resource_url: "https://example.org/made", resource_description: "Made through the UI.\nSecond line ZZRNEW", resource_version: "1.0", resource_vendor: "UI", resource_identifier: "ZZR-UI-1", resource_meta_format: "Parquet", resource_meta_size: "1 GB", resource_environment: "seed 7" });
+    await ev(`(() => { const box = [...document.querySelectorAll('.resource-form__projects label')].find((l) => l.textContent.trim() === 'ZZ B9 R23 Project One'); box.querySelector('input').click(); })()`);
+    await r23Fill({ resource_area: R23.aPub.id, resource_doc: R23.docPub.id });
+    await r23Save();
+    check("resources member: a valid save closes the dialog and the new resource appears in the list", await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000) && (await waitFor(`[...document.querySelectorAll('.resource-card .card__title')].some((x) => x.textContent.trim() === 'ZZ B9 R23 Created By Member')`, 7000)));
+    const made = (await r23Api(null, `/resources?q=ZZRNEW`)).json.items[0];
+    R23.rMade = made;
+    check("resources member: the server has it LAB_ONLY, by the member, with the type, the project and the two links chosen", !!made && made.resourceType === "DATASET" && made.projects.map((p) => p.id).join() === R23.p1.id && made.researchArea?.id === R23.aPub.id && made.canEdit === true && (await R23.a.req("GET", `/resources/${made.id}`)).json.visibility === "LAB_ONLY" && (await r23Api(null, `/resources/${made.id}`)).json.metadata.format === "Parquet", JSON.stringify(made));
+    d = await r23EditOn("ZZ B9 R23 Created By Member");
+    check("resources member: Edit opens 'Edit resource' with the stored English name, DESCRIPTION (a list card has none), type, version, vendor, identifier, link, notes, detail fields, project and links", !!d && d.title === "Edit resource" && d.name === "ZZ B9 R23 Created By Member" && d.desc === "Made through the UI.\nSecond line ZZRNEW" && d.type === "DATASET" && d.ver === "1.0" && d.vendor === "UI" && d.ident === "ZZR-UI-1" && d.url === "https://example.org/made" && d.env === "seed 7" && d.meta.format === "Parquet" && d.meta.size === "1 GB" && d.projects.join() === "ZZ B9 R23 Project One" && d.area === R23.aPub.id && d.doc === R23.docPub.id && d.grp === "" && d.vis === null, JSON.stringify(d));
+    await r23Fill({ resource_name: "ZZ B9 R23 Created By Member (edited)", resource_name_ja: "ZZ B9 R23 メンバーが作成（編集）", resource_description_ja: "日本語の説明 ZZRJA", resource_environment_ja: "日本語の環境", resource_group: R23.gPub.id, resource_meta_license: "MIT" });
+    await ev(`(() => { const box = [...document.querySelectorAll('.resource-form__projects label')].find((l) => l.textContent.trim() === 'ZZ B9 R23 Project Two'); box.querySelector('input').click(); })()`);
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000);
+    await waitFor(`[...document.querySelectorAll('.resource-card .card__title')].some((x) => x.textContent.trim() === 'ZZ B9 R23 Created By Member (edited)')`, 7000);
+    const ed = (await r23Api(null, `/resources/${made.id}`)).json;
+    const edJa = (await r23Api("ja", `/resources/${made.id}`)).json;
+    check("resources member: an edit changes the English name, the group, the projects (both now) and a detail field, keeps the other links, and stores the Japanese name/description/notes as overrides (English description untouched)", ed.name === "ZZ B9 R23 Created By Member (edited)" && ed.description === "Made through the UI.\nSecond line ZZRNEW" && ed.group?.id === R23.gPub.id && ed.researchArea?.id === R23.aPub.id && ed.knowledgeDoc?.id === R23.docPub.id && ed.projects.map((p) => p.id).sort().join() === [R23.p1.id, R23.p2.id].sort().join() && ed.metadata.license === "MIT" && ed.metadata.format === "Parquet" && edJa.name === "ZZ B9 R23 メンバーが作成（編集）" && edJa.description === "日本語の説明 ZZRJA" && edJa.environment === "日本語の環境", JSON.stringify([ed.name, ed.group, ed.projects, edJa.name]));
+    d = await r23EditOn("ZZ B9 R23 Created By Member (edited)");
+    check("resources member: reopening Edit shows the saved Japanese fields, both projects checked and the English text (not the Japanese) in the main fields", !!d && d.nja === "ZZ B9 R23 メンバーが作成（編集）" && d.dja === "日本語の説明 ZZRJA" && d.eja === "日本語の環境" && d.projects.length === 2 && d.name === "ZZ B9 R23 Created By Member (edited)" && d.desc === "Made through the UI.\nSecond line ZZRNEW", JSON.stringify(d));
+    await r23Fill({ resource_name_ja: "", resource_description_ja: "", resource_environment_ja: "" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000);
+    check("resources member: clearing the Japanese fields removes the overrides (Japanese falls back to English)", await (async () => { await sleep(400); const j = (await r23Api("ja", `/resources/${made.id}`)).json; return j.name === "ZZ B9 R23 Created By Member (edited)" && j.description === "Made through the UI.\nSecond line ZZRNEW"; })());
+    d = await r23EditOn("ZZ B9 R23 Created By Member (edited)");
+    await r23Fill({ resource_name: "ZZ B9 R23 SHOULD NOT SAVE" });
+    await r23Close();
+    check("resources member: Cancel / Escape saves nothing", (await r23Api(null, `/resources/${made.id}`)).json.name === "ZZ B9 R23 Created By Member (edited)" && (await pCount(".resource-card")) > 0);
+    d = await r23EditOn("ZZ B9 R23 Created By Member (edited)");
+    await r23Fill({ resource_type: "SOFTWARE" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(400);
+    const retyped = (await r23Api(null, `/resources/${made.id}`)).json;
+    check("resources member: changing the type sends metadata that fits it (a dataset's format/size are dropped, never a 400)", retyped.resourceType === "SOFTWARE" && Object.keys(retyped.metadata).length === 0, JSON.stringify(retyped.metadata));
+    // delete
+    check("resources member: the delete icon opens a confirmation naming the resource", !!(await r23DelOn("ZZ B9 R23 Created By Member (edited)")) && (await ev(`document.querySelector('.modal').innerText`)).includes('Delete "ZZ B9 R23 Created By Member (edited)"? This can\'t be undone.'));
+    await r23Close();
+    check("resources member: Escape cancels the delete (the resource is still there)", (await r23Api(null, `/resources/${made.id}`)).status === 200);
+    await r23DelOn("ZZ B9 R23 Created By Member (edited)");
+    await pClick(".modal .btn--danger", "");
+    check("resources member: confirming deletes it (server 404, gone from the list)", await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 6000) && (await waitFor(`![...document.querySelectorAll('.resource-card .card__title')].some((x) => x.textContent.trim() === 'ZZ B9 R23 Created By Member (edited)')`, 6000)) && (await r23Api(null, `/resources/${made.id}`)).status === 404);
+    // the detail page of an own / a foreign resource
+    await r23Ready(`/resources/${R23.rMem.id}`);
+    check("resources member: their own resource's detail page has Edit and Delete", (await pBar()).join("|") === "Edit|Delete" && (await ev(`document.querySelector('.admin-bar__text').innerText`)).includes("manage this resource"));
+    const del = await ev(`fetch('/api/resources', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'ZZ B9 R23 Delete From Detail', description: 'to be removed ZZRDEL' }) }).then((r) => r.json())`);
+    await r23Ready(`/resources/${del.id}`);
+    await pClick(".admin-bar .btn--danger", "");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 4000);
+    await pClick(".modal .btn--danger", "");
+    check("resources member: deleting from the detail page returns to the list and the resource is gone", (await waitFor(`location.pathname === '/resources'`, 8000)) && (await r23Api(null, `/resources/${del.id}`)).status === 404);
+    await r23Ready(`/resources/${R23.rDs.id}`);
+    check("resources member: someone else's resource's detail has no manage bar", !(await exists(".admin-bar")));
+    check("resources member: the API refuses them on someone else's resource (403) and on setting visibility (403)", (await apiCall("PUT", `/resources/${R23.rDs.id}`, { name: "hax" })) === 403 && (await apiCall("DELETE", `/resources/${R23.rDs.id}`)) === 403 && (await apiCall("PUT", `/resources/${R23.rMem.id}`, { visibility: "PUBLIC" })) === 403);
+    await logout();
+  });
+
+  await step("resources form guards: an edit never saves a guess (base / detail failed to load), and a link the editor cannot see survives", async () => {
+    await desktop(); await setLocale(null);
+    check("resources guards: member login", await r23Login(R23.mem));
+    const openRaw = async (title) => { // real click on the edit icon WITHOUT waiting for the form to be ready
+      await ev(`(() => { document.querySelectorAll('[data-r23-op]').forEach((e) => e.removeAttribute('data-r23-op')); const c = [...document.querySelectorAll('.resource-card')].find((x) => x.querySelector('.card__title')?.textContent.trim() === ${JSON.stringify(title)}); const b = c && c.querySelector('.card-edit-btn .icon-btn:not(.icon-btn--danger)'); if (b) { b.scrollIntoView({ block: 'center' }); b.setAttribute('data-r23-op', '1'); } })()`);
+      await p15Settle();
+      await clickEl("[data-r23-op]");
+      return r23DlgWait((d) => !!d.alert, 5000);
+    };
+    // 1. the English base (translations read) fails
+    await r23Ready("/resources?q=ZZRMEM");
+    await fake("*/api/translations/LAB_RESOURCE/*", 500, JSON.stringify({ error: "Internal server error" }));
+    const noBase = await openRaw("ZZ B9 R23 Member Own");
+    await unfake();
+    check("resources guards: if the English base cannot be loaded the edit form says 'Could not load this resource.', has no description text, and Save is DISABLED", !!noBase && noBase.alert.includes("Could not load this resource.") && noBase.submitDisabled === true && noBase.desc === "", JSON.stringify(noBase));
+    await r23Close();
+    // 2. the full record (detail read) fails
+    await r23Ready("/resources?q=ZZRMEM");
+    await fake(`*/api/resources/${R23.rMem.id}*`, 500, JSON.stringify({ error: "Internal server error" }));
+    const noDetail = await openRaw("ZZ B9 R23 Member Own");
+    await unfake();
+    check("resources guards: if the full record cannot be loaded the edit form says so and Save is DISABLED (it must never save a guess about links or projects)", !!noDetail && noDetail.alert.includes("Could not load this resource.") && noDetail.submitDisabled === true, JSON.stringify(noDetail));
+    await r23Close();
+    check("resources guards: neither failed attempt changed the resource", (await r23Api(null, `/resources/${R23.rMem.id}`)).json.description === "added by the member ZZRMEM");
+    // 3. a project link the editor cannot see (a stored visibility outside the allow-list) survives an edit that leaves projects alone
+    r23Sql("INSERT OR IGNORE INTO ResourceProject (resourceId, projectId) VALUES (?, ?)", R23.rMem.id, R23.pPriv.id);
+    await r23Ready("/resources?q=ZZRMEM");
+    await r23EditOn("ZZ B9 R23 Member Own");
+    const hd = await r23DlgWait((x) => x.projectOpts.length > 1);
+    check("resources guards: an invisible project is not offered and not shown as checked in the form (never named)", !!hd && !hd.projectOpts.includes("ZZ B9 R23 Project Private") && !hd.projects.includes("ZZ B9 R23 Project Private"), JSON.stringify({ opts: (hd?.projectOpts || []).slice(0, 4), checked: hd?.projects }));
+    await r23Fill({ resource_description: "added by the member ZZRMEM (revised)" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(500);
+    const kept = r23Sql("SELECT projectId FROM ResourceProject WHERE resourceId = ?", R23.rMem.id).map((r) => r.projectId);
+    check("resources guards: saving without touching projects keeps the invisible project link (and the edit itself is saved)", kept.includes(R23.pPriv.id) && (await r23Api(null, `/resources/${R23.rMem.id}`)).json.description === "added by the member ZZRMEM (revised)", JSON.stringify(kept));
+    // 3b. an area / group the editor cannot see, and a document beyond the picklist's newest 50, survive an edit that does not touch links
+    r23Sql("UPDATE LabResource SET researchAreaId = ?, groupId = ?, knowledgeDocId = ? WHERE id = ?", R23.aPriv.id, R23.gPriv.id, R23.docOld.id, R23.rMem.id);
+    await r23Ready("/resources?q=ZZRMEM");
+    await r23EditOn("ZZ B9 R23 Member Own");
+    const ol = await r23DlgWait((x) => x.projectOpts.length > 1);
+    check("resources guards: an invisible area / group is shown as None (never named), and a linked document beyond the picklist's newest 50 stays selected", !!ol && ol.area === "" && ol.grp === "" && ol.doc === R23.docOld.id, JSON.stringify({ area: ol?.area, grp: ol?.grp, doc: ol?.doc }));
+    await r23Fill({ resource_description: "added by the member ZZRMEM (revised again)" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(500);
+    const keptLinks = r23Sql("SELECT researchAreaId, groupId, knowledgeDocId FROM LabResource WHERE id = ?", R23.rMem.id)[0];
+    check("resources guards: saving without touching links keeps the invisible area / group and the old document", keptLinks.researchAreaId === R23.aPriv.id && keptLinks.groupId === R23.gPriv.id && keptLinks.knowledgeDocId === R23.docOld.id, JSON.stringify(keptLinks));
+    r23Sql("UPDATE LabResource SET researchAreaId = NULL, groupId = NULL, knowledgeDocId = NULL WHERE id = ?", R23.rMem.id);
+    // 4. ticking / unticking a visible project through the form changes only that project
+    await r23Ready("/resources?q=ZZRMEM");
+    await r23EditOn("ZZ B9 R23 Member Own");
+    await r23DlgWait((x) => x.projectOpts.length > 1);
+    await ev(`(() => { const box = [...document.querySelectorAll('.resource-form__projects label')].find((l) => l.textContent.trim() === 'ZZ B9 R23 Project Two'); box.querySelector('input').click(); })()`);
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(500);
+    const after = r23Sql("SELECT projectId FROM ResourceProject WHERE resourceId = ?", R23.rMem.id).map((r) => r.projectId);
+    check("resources guards: adding a visible project through the form keeps the invisible one and adds exactly that project", after.length === 2 && after.includes(R23.pPriv.id) && after.includes(R23.p2.id), JSON.stringify(after));
+    await r23Ready("/resources?q=ZZRMEM");
+    await r23EditOn("ZZ B9 R23 Member Own");
+    await r23DlgWait((x) => x.projects.length === 1);
+    await ev(`(() => { const box = [...document.querySelectorAll('.resource-form__projects label')].find((l) => l.textContent.trim() === 'ZZ B9 R23 Project Two'); box.querySelector('input').click(); })()`);
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(500);
+    const removed = r23Sql("SELECT projectId FROM ResourceProject WHERE resourceId = ?", R23.rMem.id).map((r) => r.projectId);
+    check("resources guards: unticking it removes only that project (the invisible link still survives)", removed.length === 1 && removed[0] === R23.pPriv.id, JSON.stringify(removed));
+    r23Sql("DELETE FROM ResourceProject WHERE resourceId = ? AND projectId = ?", R23.rMem.id, R23.pPriv.id);
+    await logout();
+  });
+
+  await step("resources lead: a project lead has no special power over resources; create from a project's View all presets the link", async () => {
+    check("resources lead: login", await r23Login(R23.lead));
+    await r23Ready(`/resources?project=${R23.p1.id}&limit=50`);
+    const cards = await r23Cards();
+    check("resources lead: the project's list shows the lead's own resource editable and everyone else's read-only (a LEAD is only a member for resources)", cards.length > 0 && cards.filter((c) => c.edit).map((c) => c.title).join("|") === "ZZ B9 R23 Lead Own");
+    const d = await r23Add();
+    check("resources lead: '+ Add resource' from ?project= preselects that project (and nothing else)", !!d && d.projects.join() === "ZZ B9 R23 Project One" && d.area === "" && d.grp === "" && d.res === "", JSON.stringify(d));
+    await r23Close();
+    await r23Ready("/resources");
+    const d2 = await r23Add();
+    check("resources lead: from the unfiltered list nothing is preselected", !!d2 && d2.projects.length === 0 && d2.area === "");
+    await r23Close();
+    check("resources lead: the API refuses the lead on someone else's resource (403)", (await apiCall("PUT", `/resources/${R23.rDs.id}`, { name: "hax" })) === 403 && (await apiCall("DELETE", `/resources/${R23.rDs.id}`)) === 403);
+    await logout();
+  });
+
+  await step("resources manager: visibility badge and filter, edit anything, publish, delete", async () => {
+    check("resources manager: login", await r23Login(R23.mgr));
+    await r23Ready("/resources?q=ZZRLAB");
+    const lab = await r23Card("ZZ B9 R23 Lab Only Scope");
+    await r23Ready("/resources?q=ZZRPUB");
+    const pub = await r23Card("ZZ B9 R23 Public Dataset");
+    check("resources manager: the bar says managers edit any resource; LAB_ONLY resources carry a 'Lab only' badge, PUBLIC ones none", (await ev(`document.querySelector('.admin-bar__text').innerText`)).includes("edit any resource") && !!lab && lab.badges.includes("lab only") && !!pub && !pub.badges.includes("lab only"), JSON.stringify(lab?.badges));
+    await r23Ready("/resources");
+    check("resources manager: edit and delete icons on EVERY card", (await r23Cards()).length === 12 && (await r23Cards()).every((c) => c.edit && c.del));
+    check("resources manager: the visibility filter is offered and narrows to Lab only", (await exists("#rf-visibility")) && await (async () => { await setVal("rf-visibility", "LAB_ONLY"); await ev(`document.querySelector('form.knowledge-filters').requestSubmit()`); await waitFor(`location.search.includes('visibility=LAB_ONLY')`, 4000); await waitFor(`!document.querySelector('[aria-busy="true"]')`, 6000); await sleep(400); const c = await r23Cards(); return c.length > 0 && c.every((x) => x.badges.includes("lab only")); })());
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Lab%20Only");
+    const d = await r23EditOn("ZZ B9 R23 Lab Only Scope");
+    check("resources manager: the edit dialog has the Visibility control set to Lab only, and the Japanese fields", !!d && d.vis === "LAB_ONLY" && d.nja === "" && d.dja === "" && d.desc === "Internal ZZRLAB oscilloscope", JSON.stringify(d));
+    await r23Fill({ resource_visibility: "PUBLIC" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000);
+    await sleep(600);
+    check("resources manager: publishing changes visibility (server) and the card loses its 'Lab only' badge", (await R23.a.req("GET", `/resources/${R23.rLab.id}`)).json.visibility === "PUBLIC" && !(await r23Card("ZZ B9 R23 Lab Only Scope")).badges.includes("lab only"));
+    await logout();
+    await r23Ready(`/resources/${R23.rLab.id}`);
+    check("resources manager: once published, a guest can read it", (await pMain()).includes("Internal ZZRLAB oscilloscope"));
+    await r23Login(R23.mgr);
+    await R23.a.req("PUT", `/resources/${R23.rLab.id}`, { visibility: "LAB_ONLY" });
+    await r23Ready(`/resources/${R23.rMem.id}`);
+    check("resources manager: someone else's resource's detail page has Edit and Delete and the Lab only badge", (await pBar()).join("|") === "Edit|Delete" && (await ev(`document.querySelector('.detail-meta').innerText.toLowerCase()`)).includes("lab only"));
+    await logout();
+  });
+
+  await step("resources admin: the admin Content view lists resources with filters, inspect, deep links, the overview count and translations", async () => {
+    check("resources admin: login", await login(ADMIN.email, ADMIN.password));
+    await r23Ready("/admin");
+    check("resources admin: the overview has a 'Lab resources' count card linking to the filtered admin list", (await exists('a.admin-count[href="/admin/content?type=resource"]')) && (await ev(`document.querySelector('a.admin-count[href="/admin/content?type=resource"]').innerText`)).includes("Lab resources") && /public/i.test(await ev(`document.querySelector('a.admin-count[href="/admin/content?type=resource"]').innerText`)));
+    await r23Ready("/admin/content?type=resource");
+    await waitFor(`!!document.querySelector('.admin-row')`, 8000);
+    check("resources admin: 'Lab resources' is a content type chip and the list shows resource rows with Public / Lab only, the type and the owner", (await ev(`[...document.querySelectorAll('.admin-types .chip')].map((c) => c.textContent.trim())`)).includes("Lab resources") && (await ev(`document.querySelector('.admin-row').innerText`)).match(/Public|Lab only/) !== null && (await ev(`document.querySelector('.admin-row').innerText`)).match(/By |No owner/) !== null);
+    check("resources admin: the filter form offers resource type, project, research area, group, visibility and 'Created by' (and no knowledge category)", await ev(`['af-resourceType','af-project','af-area','af-group','af-visibility','af-owner'].every((id) => !!document.getElementById(id)) && !document.getElementById('af-category')`));
+    await waitFor(`document.getElementById('af-project').options.length > 1`, 6000);
+    await setVal("af-resourceType", "FPGA");
+    await ev(`document.querySelector('form.admin-filters').requestSubmit()`);
+    await waitFor(`location.search.includes('resourceType=FPGA')`, 4000); await sleep(700);
+    check("resources admin: the type filter narrows the rows (URL is the source of truth) and the type is shown as its LOCALIZED label", (await ev(`document.querySelectorAll('.admin-row').length`)) >= 1 && (await ev(`[...document.querySelectorAll('.admin-row')].every((r) => /FPGA/.test(r.innerText))`)));
+    await r23Ready("/admin/content?type=resource&q=ZZRLAB");
+    await waitFor(`!!document.querySelector('.admin-row')`, 6000);
+    check("resources admin: the type is a badge with the localized label ('Hardware', not HARDWARE)", await ev(`(() => { const b = [...document.querySelectorAll('.admin-row .badge')].map((x) => x.textContent.trim()); return b.includes('Hardware') && !b.includes('HARDWARE'); })()`));
+    await setLocale("ja");
+    await r23Ready("/admin/content?type=resource&q=ZZRLAB");
+    await waitFor(`!!document.querySelector('.admin-row')`, 6000);
+    check("resources admin ja: the same badge is Japanese ('ハードウェア')", await ev(`[...document.querySelectorAll('.admin-row .badge')].some((x) => x.textContent.trim() === 'ハードウェア')`));
+    await setLocale(null);
+    await r23Ready(`/admin/content?type=resource&project=${R23.p2.id}`);
+    await sleep(500);
+    check("resources admin: the project filter (deep link, through the join table) keeps only that project's 15 resources", (await ev(`document.querySelectorAll('.admin-row').length`)) === 15 && await ev(`document.getElementById('af-project').value === ${JSON.stringify(R23.p2.id)}`));
+    await r23Ready("/admin/content?type=resource&q=Public%20Dataset");
+    await waitFor(`!!document.querySelector('.admin-row')`, 6000);
+    const link = await ev(`[...document.querySelectorAll('.admin-row')].map((r) => r.querySelector('a.btn--ghost')?.getAttribute('href'))`);
+    check("resources admin: each row has a deep link 'Open' to /resources/:id", link.includes(`/resources/${R23.rDs.id}`));
+    await pClick(".admin-row__actions button", "");
+    await waitFor(`!!document.querySelector('.modal[role="dialog"]')`, 4000);
+    const modal = await ev(`document.querySelector('.modal').innerText`);
+    check("resources admin: 'Details' opens the inspect dialog with the relationship counts (Projects 2, Documents 1, Publications 1, Events 1, Researchers 1) and the translation state", /Projects\s*2/.test(modal) && /Documents\s*1/.test(modal) && /Publications\s*1/.test(modal) && /Events\s*1/.test(modal) && /Researchers\s*1/.test(modal), modal.slice(0, 300));
+    await r23Close();
+    await r23Ready("/admin/translations?type=LAB_RESOURCE");
+    await waitFor(`!!document.querySelector('.admin-row, .admin-tr, .panel, [role="alert"]')`, 6000);
+    check("resources admin: 'Lab resources' is a translations type with name, description and environment fields", (await ev(`[...document.querySelectorAll('.admin-types .chip')].map((c) => c.textContent.trim())`)).includes("Lab resources") && (await pMain()).includes("ZZ B9 R23"));
+    check("resources admin: a bulk visibility change works for resources (all-or-nothing, audited) and is undone", await (async () => { const r = await apiCall("POST", "/admin/content/visibility", { type: "resource", ids: [R23.rLab.id], visibility: "PUBLIC" }); const back = await apiCall("POST", "/admin/content/visibility", { type: "resource", ids: [R23.rLab.id], visibility: "LAB_ONLY" }); return r === 200 && back === 200; })());
+    await logout();
+  });
+
+  await step("resources search: the Resources type, counts, links, Japanese names, related links, no hidden resource", async () => {
+    await desktop(); await setLocale(null);
+    await r23Ready("/search?q=ZZRMANY");
+    check("resources search: a description word finds the 14 resources and the 'Resources' chip carries the API's count (14)", (await ev(`[...document.querySelectorAll('.search-filters .chip')].map((c) => c.textContent.trim())`)).includes("Resources14") && (await pCount(".search-result")) === 14 && (await r23Api(null, "/search?q=ZZRMANY")).json.counts.resource === 14);
+    check("resources search: the type badge carries the 'layers' glyph", ((await ev(`document.querySelector('.search-result__type svg path')?.getAttribute('d') || ''`)) || "").startsWith("m12 3 9 5"));
+    await r23Ready("/search?q=Public%20Dataset&type=resource");
+    const r = await ev(`[...document.querySelectorAll('.search-result')].map((c) => ({ badge: c.querySelector('.search-result__type').textContent.trim().toLowerCase(), title: c.querySelector('.search-result__title').textContent.trim(), href: c.querySelector('.search-result__link').getAttribute('href'), rel: [...c.querySelectorAll('.search-result__related a')].map((a) => a.textContent.trim()), cta: c.querySelector('.search-result__cta').textContent.trim(), meta: c.querySelector('.search-result__meta')?.textContent.trim() || '' }))`);
+    const one = r.find((x) => x.title === "ZZ B9 R23 Public Dataset");
+    check("resources search: the result is badged Resource, links to /resources/:id, says 'View resource', shows version · vendor and lists its related project, area and group (the Phase 20 cap of three)", !!one && one.badge === "resource" && one.href === `/resources/${R23.rDs.id}` && one.cta === "View resource →" && one.meta.includes("v3.2 · Smart Lab") && ["ZZ B9 R23 Project One", "ZZ B9 R23 Area Public", "ZZ B9 R23 Group Public"].every((x) => one.rel.includes(x)), JSON.stringify(one));
+    await r23Ready("/search?q=ZZRLEAK&type=resource");
+    const leak = await ev(`[...document.querySelectorAll('.search-result')].map((c) => c.innerText).join('\\n')`);
+    check("resources search: a PUBLIC resource on hidden things is found but shows no related links to them", leak.includes("Leaky Public Board") && !/Project Lab|Area Lab|Group Lab/.test(leak) && (await pCount(".search-result__related")) === 0);
+    await r23Ready("/search?q=ZZRLAB");
+    check("resources search: a guest never finds a LAB_ONLY resource", (await pCount(".search-result")) === 0 && (await r23Api(null, "/search?q=ZZRLAB")).json.counts.resource === 0);
+    await r23Ready("/search?q=ZZRFPGA&type=resource");
+    check("resources search: the type word is searched too ('FPGA' finds the FPGA board)", (await ev(`[...document.querySelectorAll('.search-result__title')].map((x) => x.textContent.trim())`)).includes("ZZ B9 R23 FPGA Board"));
+    await setLocale("ja");
+    await r23Ready("/search?q=" + encodeURIComponent("公開データセット") + "&type=resource");
+    check("resources search ja: a Japanese name is found, shown in Japanese, and the badge, CTA and chip are Japanese", (await ev(`[...document.querySelectorAll('.search-result__title')].map((x) => x.textContent.trim())`)).includes("ZZ B9 R23 公開データセット") && /リソース/.test(await ev(`document.querySelector('.search-result__type').textContent`)) && /リソースを見る/.test(await ev(`document.querySelector('.search-result__cta').textContent`)));
+    check("resources search ja: the related project is shown by its Japanese title", (await ev(`[...document.querySelectorAll('.search-result__related a')].map((a) => a.textContent.trim())`)).includes("ZZ B9 R23 プロジェクト一"));
+    await setLocale(null);
+    await r23Ready("/search?q=" + encodeURIComponent("公開データセット") + "&type=resource");
+    check("resources search: the same Japanese word finds nothing in an English request (Phase 14 convention)", (await pCount(".search-result")) === 0);
+    check("resources search: the API's counts object has the resource key and `all` is still the sum", await (async () => { const c = (await r23Api(null, "/search?q=ZZ")).json.counts; return typeof c.resource === "number" && c.all === Object.entries(c).filter(([k]) => k !== "all").reduce((x, [, v]) => x + v, 0); })());
+  });
+
+  await step("resources workspace: 'My research resources' is bounded, private and links to the related list", async () => {
+    check("resources workspace: lead login", await r23Login(R23.lead));
+    await wsReady();
+    const sec = await ev(`(() => { const s = document.querySelector('section[aria-labelledby="ws-resources"]'); return s ? { head: document.getElementById('ws-resources').textContent.trim(), cards: [...s.querySelectorAll('.resource-card .card__title')].map((x) => x.textContent.trim()), link: s.querySelector('a.btn')?.getAttribute('href'), linkText: s.querySelector('a.btn')?.innerText.trim(), more: s.querySelector('.ws-more')?.innerText || '', edit: !!s.querySelector('.card-edit-btn') } : null; })()`);
+    check("resources workspace: the section lists at most 5 resources the lead added, that name them, or that belong to their project / group / area", !!sec && sec.head === "My research resources" && sec.cards.length === 5 && sec.cards.includes("ZZ B9 R23 Lead Own") && sec.cards.every((c) => c.startsWith("ZZ B9 R23")) && !sec.edit, JSON.stringify(sec));
+    check("resources workspace: 'View all my resources (N)' has the true total and links to /resources?mine=1; the 'Showing 5 of N' note is there", !!sec && sec.link === "/resources?mine=1" && /^View all my resources \(\d+\)/.test(sec.linkText) && /Showing 5 of \d+/.test(sec.more), JSON.stringify(sec));
+    check("resources workspace: the workspace section and the page it links to report the SAME total", await (async () => { const n = +sec.linkText.match(/\((\d+)\)/)[1]; const api = (await r23Api(null, "/resources?mine=1&limit=1")).json.pagination.total; return n === api; })());
+    check("resources workspace: another member's private (LAB_ONLY) resource is not in it", !sec.cards.includes("ZZ B9 R23 Member Own"));
+    check("resources workspace: the workspace never accepts someone else's id (an extra ?userId= changes nothing)", JSON.stringify((await r23Api(null, `/workspace?userId=${R23.mem.userId}&teamMemberId=${R23.mem.tmId}`)).json.resources) === JSON.stringify((await r23Api(null, "/workspace")).json.resources));
+    await r23Ready("/resources?mine=1&limit=50");
+    check("resources workspace: 'View all' shows the researcher's own list (their own resource included, a PRIVATE-project one never)", (await r23Titles()).includes("ZZ B9 R23 Lead Own") && !(await r23Titles()).includes("ZZ B9 R23 On Private Project"));
+    await logout();
+    check("resources workspace: none login", await r23Login(R23.none));
+    await wsReady();
+    check("resources workspace: a researcher with no relationships gets an empty state, not an empty box", (await ev(`(() => { const s = document.querySelector('section[aria-labelledby="ws-resources"]'); return s ? { empty: !!s.querySelector('.empty-state'), cards: s.querySelectorAll('.resource-card').length, link: !!s.querySelector('a.btn') } : null; })()`)) && (await ev(`document.querySelector('section[aria-labelledby="ws-resources"] .empty-state')?.innerText || ''`)).includes("No resources yet."));
+    await logout();
+  });
+
+  await step("resources ja: Japanese chrome, type labels, overrides, form, errors and empty states; identical authorization", async () => {
+    await setLocale("ja");
+    await r23Ready("/resources?q=ZZ%20B9%20R23%20Public");
+    check("resources ja: the page title, description, nav link and filter labels are Japanese", (await ev(`document.querySelector('h1').textContent.trim()`)) === "研究室リソース" && (await ev(`document.title`)).includes("研究室リソース") && (await panelLabels("research")).includes("リソース") && (await ev(`['rf-q','rf-type','rf-project','rf-area','rf-group','rf-researcher','rf-knowledge','rf-publication'].map((id) => document.querySelector('label[for="' + id + '"]').textContent.trim())`)).join("|") === "リソースを検索|種類|プロジェクト|研究分野|グループ|研究者|ドキュメント（ナレッジベース）|論文");
+    check("resources ja: the type options and the result count are Japanese", (await ev(`[...document.getElementById('rf-type').options].map((o) => o.textContent.trim())`)).join("|") === "指定なし|データセット|ハードウェア|ソフトウェア|ツール|フレームワーク|モデル|FPGA|ボード|センサー|計測セットアップ|実験環境|その他" && /^\d+件のリソース$/.test(await ev(`document.querySelector('.knowledge-status').innerText.trim()`)));
+    const ds = await r23Card("ZZ B9 R23 公開データセット");
+    check("resources ja: the card shows the Japanese name and excerpt, the Japanese type badge, the Japanese project title and the Japanese byline", !!ds && ds.badges.includes("データセット") && ds.text.includes("テスト装置のフレーム ZZRJA") && ds.text.includes("ZZ B9 R23 プロジェクト一") && /追加者：ZZ B9 R23 Manager/.test(ds.text) && /に更新/.test(ds.text), JSON.stringify(ds));
+    await r23Ready(`/resources/${R23.rDs.id}`);
+    const ja = await ev(`(() => ({ h1: document.querySelector('h1').textContent.trim(), crumbs: [...document.querySelectorAll('.breadcrumbs li')].map((l) => l.textContent.trim()), body: document.querySelector('.knowledge-body').innerText, repro: document.querySelector('.repro-details h2').textContent.trim(), keys: [...document.querySelectorAll('.repro-details dt, .knowledge-facts dt')].map((x) => x.textContent.trim()), notes: document.querySelector('.resource-repro__notes')?.innerText || '' }))()`);
+    check("resources ja: the detail page shows the Japanese name/description/notes, the localized breadcrumb, headings and fact labels", ja.h1 === "ZZ B9 R23 公開データセット" && ja.crumbs.join("|") === "ホーム|リソース|ZZ B9 R23 公開データセット" && ja.body.includes("テスト装置のフレーム ZZRJA") && ja.repro === "再現性" && ["形式", "サイズ", "ライセンス・利用上の注意", "収集・生成方法", "種類", "バージョン", "提供元・ベンダー", "識別子", "プロジェクト"].every((k) => ja.keys.includes(k)) && ja.notes.includes("Python 3.11、シード 42"), JSON.stringify(ja));
+    await r23Ready(`/projects/${R23.p1.id}`);
+    const s = await r23Sec("project-repro");
+    check("resources ja: the project panel is Japanese: heading, group headings, View all", !!s && s.head === "リソースと再現性" && s.groups.join("|") === "ハードウェア|ソフトウェア・モデル|データ|環境・その他" && /^すべてのリソースを見る（\d+）/.test(s.allText), JSON.stringify(s));
+    await r23Ready("/resources?q=nothingmatchesthiszzz");
+    check("resources ja: the filtered empty state is Japanese", (await pMain()).includes("条件に一致するリソースがありません。"));
+    await r23Ready(`/resources/${R23.rLab.id}`);
+    check("resources ja: the not-found state is Japanese, and identical for a hidden and an unknown resource", (await pMain()).includes("リソースが見つかりません") && (await pMain()).includes("このリソースは存在しないか、アクセス権がありません。") && await (async () => { const a = await pMain(); await r23Ready("/resources/nonexistentid12345"); return a === (await pMain()); })());
+    check("resources ja: authorization is identical in Japanese (guest writes are 401, a hidden resource is 404)", (await apiCall("POST", "/resources", { name: "x" })) === 401 && (await r23Api("ja", `/resources/${R23.rLab.id}`)).status === 404 && (await r23Api("ja", `/resources?visibility=PUBLIC`)).status === 403);
+    check("resources ja: member login", await r23Login(R23.mem));
+    await r23Ready("/resources?mine=1");
+    let d = await r23Add();
+    check("resources ja: the add dialog is Japanese: title, labels, the type options, the member note, the Japanese-field labels", !!d && d.title === "リソースを追加" && (await ev(`[...document.querySelectorAll('.modal label')].map((l) => l.textContent.trim())`)).some((l) => l === "名前") && (await ev(`[...document.getElementById('resource_type').options].map((o) => o.textContent.trim())`)).includes("データセット") && (await ev(`document.querySelector('.modal').innerText`)).includes("研究室マネージャーが公開するまで") && (await ev(`document.querySelector('label[for="resource_name_ja"]').textContent`)).includes("名前（日本語）"), JSON.stringify(d?.title));
+    await r23Save();
+    d = await r23DlgWait((x) => !!x.alert);
+    check("resources ja: an empty save shows 'Name is required.' in Japanese with focus on the name", d.alert === "名前は必須です。" && d.focusId === "resource_name", JSON.stringify(d));
+    await r23Fill({ resource_name: "ZZ B9 R23 JA UI", resource_url: "javascript:alert(1)" });
+    await r23Save();
+    d = await r23DlgWait((x) => !!x.alert && x.alert !== "名前は必須です。");
+    check("resources ja: a javascript: link is refused with the Japanese URL message", /http:\/\/|https:\/\//.test(d.alert) && /有効|正しい|URL/.test(d.alert) && d.focusId === "resource_url", JSON.stringify(d));
+    await r23Fill({ resource_url: "", resource_type: "SENSOR", resource_description: "日本語UIから ZZRJAUI", resource_name_ja: "ZZ B9 R23 日本語UI" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(500);
+    const made = (await r23Api(null, "/resources?q=ZZRJAUI")).json.items[0];
+    R23.rJaMade = made;
+    const madeJa = (await r23Api("ja", `/resources/${made?.id}`)).json;
+    check("resources ja: creating while the UI is Japanese writes the typed name/description to the ENGLISH columns and the Japanese name as an override (never Japanese into English)", !!made && made.name === "ZZ B9 R23 JA UI" && made.resourceType === "SENSOR" && madeJa.name === "ZZ B9 R23 日本語UI", JSON.stringify([made?.name, madeJa.name]));
+    const e = await r23EditOn("ZZ B9 R23 日本語UI");
+    check("resources ja: editing while the UI is Japanese shows the ENGLISH base text in the main fields (name, description) and the Japanese override in the Japanese fields", !!e && e.name === "ZZ B9 R23 JA UI" && e.desc === "日本語UIから ZZRJAUI" && e.nja === "ZZ B9 R23 日本語UI", JSON.stringify(e));
+    await r23Fill({ resource_version: "9.9" });
+    await r23Save();
+    await waitFor(`!document.querySelector('.modal[role="dialog"]')`, 7000); await sleep(400);
+    check("resources ja: saving an edit from the Japanese UI does not overwrite the English name with the Japanese one", (await r23Api(null, `/resources/${made.id}`)).json.name === "ZZ B9 R23 JA UI" && (await r23Api(null, `/resources/${made.id}`)).json.version === "9.9");
+    await r23DelOn("ZZ B9 R23 日本語UI");
+    check("resources ja: the delete confirmation is Japanese", (await ev(`document.querySelector('.modal').innerText`)).includes("「ZZ B9 R23 日本語UI」を削除しますか？この操作は元に戻せません。"));
+    await r23Close();
+    await R23.a.req("DELETE", `/resources/${made.id}`);
+    await logout();
+    await setLocale(null);
+  });
+
+  await step("resources loading / error: skeleton, an error state with Try again, and a failing panel never leaves an empty box", async () => {
+    await desktop(); await setLocale(null);
+    await go("/"); await navReady();
+    await fake("*/api/resources?*", 500, JSON.stringify({ error: "Internal server error" }));
+    await go("/resources"); await waitFor(`!!document.querySelector('[role="alert"]')`, 6000);
+    check("resources error: a 500 on the list renders the localized error with Try again, plus the header (no blank page)", (await ev(`document.querySelector('[role="alert"]').innerText`)).includes("Could not load resources.") && (await exists('[role="alert"] button')) && (await pCount("h1")) === 1 && (await pCount(".resource-card")) === 0);
+    await unfake();
+    await clickEl('[role="alert"] button');
+    check("resources error: Try again loads the list", await waitFor(`!!document.querySelector('.resource-card')`, 8000));
+    await go("/"); await navReady();
+    await fake(`*/api/resources/${R23.rDs.id}*`, 500, JSON.stringify({ error: "Internal server error" }));
+    await go(`/resources/${R23.rDs.id}`); await waitFor(`!!document.querySelector('[role="alert"]')`, 6000);
+    check("resources error: a 500 on a resource shows 'Could not load this resource.' with Try again, not the not-found state", (await ev(`document.querySelector('[role="alert"]').innerText`)).includes("Could not load this resource.") && !(await pMain()).includes("Resource not found") && (await exists('[role="alert"] button')));
+    await unfake();
+    await go("/"); await navReady();
+    await fake("*/api/resources?*", 500, JSON.stringify({ error: "Internal server error" }));
+    await go(`/projects/${R23.p1.id}`); await waitFor(`!!document.querySelector('h1') && !document.querySelector('[aria-busy="true"]')`, 8000); await sleep(800);
+    check("resources error: a failing resources request leaves the project page without the panel and without an error box (the page is unchanged)", (await r23Sec("project-repro")) === null && (await pCount("h1")) === 1 && !(await exists('main [role="alert"]')));
+    await unfake();
+    await go("/"); await navReady();
+    await fake("*/api/resources?*", 200, JSON.stringify({ items: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 0 } }));
+    await go("/resources"); await waitFor(`!!document.querySelector('.empty-state')`, 6000);
+    check("resources empty: an empty catalogue says 'No resources yet.' with a hint", (await pMain()).includes("No resources yet.") && (await pMain()).includes("Datasets, hardware, software and experiment environments will appear here.") && (await ev(`document.querySelector('.knowledge-status').innerText.trim()`)) === "0 resources");
+    await unfake();
+    await go("/"); await navReady();
+    await send("Network.emulateNetworkConditions", { offline: false, latency: 1500, downloadThroughput: -1, uploadThroughput: -1 });
+    await ev(`history.pushState({}, '', '/resources'); window.dispatchEvent(new PopStateEvent('popstate'))`);
+    const busy = await waitFor(`!!document.querySelector('[role="status"][aria-busy="true"] .sr-only') && document.querySelector('[role="status"][aria-busy="true"] .sr-only').textContent === 'Loading resources…' && document.querySelectorAll('.skeleton-block').length > 0`, 3000);
+    await send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    check("resources loading: while the list loads there is a labelled skeleton ('Loading resources…', aria-busy) and no cards", busy);
+    check("resources loading: the skeleton is replaced by the cards when the data arrives", await waitFor(`!!document.querySelector('.resource-card') && !document.querySelector('.skeleton-block')`, 10000));
+  });
+
+  await step("resources hostile text: markup in names, descriptions, notes, details, Japanese overrides and related names is inert everywhere (EN + JA, guest + admin)", async () => {
+    const dialogsBefore = P15.jsDialogs.length;
+    for (const loc of [null, "ja"]) {
+      await setLocale(loc);
+      for (const who of ["guest", "admin"]) {
+        if (who === "admin") await login(ADMIN.email, ADMIN.password);
+        const pages = [["list", "/resources?q=Hostile"], ["detail", `/resources/${R23.rX.id}`], ["project page", `/projects/${R23.pX.id}`], ["area page", `/research/${R23.aX.id}`], ["group page", `/groups/${R23.gX.id}`], ["search", "/search?q=Hostile&type=resource"], ...(who === "admin" ? [["admin list", "/admin/content?type=resource&q=Hostile"]] : [])];
+        for (const [lbl, p] of pages) {
+          await r23Ready(p);
+          await sleep(200);
+          const f = await ev(`(() => { const m = document.querySelector('main'); return { bad: m.querySelectorAll('img, script, iframe, svg[onload], a[href^="javascript"]').length, xss: typeof window.__r23Xss }; })()`);
+          check(`resources hostile ${loc || "en"} ${who} ${lbl}: no element is created from any hostile text and no script ran`, f.bad === 0 && f.xss === "undefined", JSON.stringify(f));
+        }
+        await r23Ready(`/resources/${R23.rX.id}`);
+        const t = await ev(`document.querySelector('.knowledge-body').innerText`);
+        check(`resources hostile ${loc || "en"} ${who}: the hostile description is visible as TEXT (script tag, iframe, javascript: link, anchor)`, loc ? t.includes("日本語 <script>window.__r23Xss=6</script>") : t.includes("<script>window.__r23Xss=3</script>") && t.includes('<iframe src="javascript:window.__r23Xss=4"></iframe>') && t.includes('<a href="javascript:window.__r23Xss=8">x</a>'), t.slice(0, 200));
+        const facts = await ev(`document.querySelector('.repro-details').innerText + '\\n' + document.querySelector('.knowledge-facts').innerText`);
+        check(`resources hostile ${loc || "en"} ${who}: the hostile detail fields, notes, version, vendor and identifier are TEXT`, facts.includes("<img src=x onerror=window.__r23Xss=11>") && facts.includes("<script>window.__r23Xss=12</script>") && facts.includes("javascript:alert(2)") && facts.includes("<b>v</b>") && facts.includes("<svg onload=window.__r23Xss=9>") && (loc ? facts.includes("<img src=x onerror=window.__r23Xss=13>") : facts.includes("<script>window.__r23Xss=10</script>")), facts.slice(0, 300));
+        check(`resources hostile ${loc || "en"} ${who}: the hostile name is text in the heading, breadcrumb and tab title`, (await ev(`document.querySelector('h1').textContent`)).includes("<img src=x onerror=window.__r23Xss=") && (await ev(`document.title`)).includes("<img"));
+        if (who === "admin") await logout();
+      }
+    }
+    await setLocale(null);
+    await login(ADMIN.email, ADMIN.password);
+    await r23Ready("/resources?q=Hostile");
+    const d = await r23EditOn("ZZ B9 R23 Hostile " + r23X(1));
+    check("resources hostile: the edit form holds the hostile text as plain values (name, description, version, vendor, identifier, notes, detail fields)", !!d && d.name === "ZZ B9 R23 Hostile " + r23X(1) && d.desc.includes("<script>window.__r23Xss=3</script>") && d.ver === r23X(5) && d.vendor === "<b>v</b>" && d.ident === "<svg onload=window.__r23Xss=9>" && d.env === "<script>window.__r23Xss=10</script>" && d.meta.configuration === "<script>window.__r23Xss=12</script>", JSON.stringify(d).slice(0, 300));
+    await r23Close();
+    // Defence in depth: even if a response carried a non-http(s) link (a tampered row), the page never renders it as a link.
+    const real = (await r23Api(null, `/resources/${R23.rDs.id}`)).json;
+    await go("/"); await navReady();
+    await fake(`*/api/resources/${R23.rDs.id}*`, 200, JSON.stringify({ ...real, url: "javascript:window.__r23Xss=14", metadata: { ...real.metadata, firmwareVersion: "LEAKED-FW" } }));
+    await go(`/resources/${R23.rDs.id}`); await waitFor(`!!document.querySelector('.repro-details')`, 8000);
+    check("resources hostile: a javascript: link in a response is never rendered as a link (no anchor, nothing clickable), and a detail field of another type is never shown", !(await exists("a.resource-link")) && !(await exists('main a[href^="javascript"]')) && (await ev(`typeof window.__r23Xss`)) === "undefined" && !(await pMain()).includes("LEAKED-FW"));
+    await unfake();
+    check("resources hostile: no script ran and no JS dialog opened during the whole step", (await ev(`typeof window.__r23Xss`)) === "undefined" && P15.jsDialogs.length === dialogsBefore, P15.jsDialogs.slice(dialogsBefore).join("|"));
+    await logout();
+  });
+
+  await step("resources long text: a 190-character unbroken name, a 3000-character token and long Japanese stay inside cards, detail and dialogs at 390px", async () => {
+    await desktopAt(390, 844);
+    check("resources long: login", await r23Login(R23.mgr));
+    await desktopAt(390, 844);
+    for (const [lbl, p] of [["list", "/resources?q=ZZ%20B9%20R23&limit=50"], ["long token detail", `/resources/${R23.rLongTok.id}`], ["long Japanese detail", `/resources/${R23.rLongJa.id}`], ["project page", `/projects/${R23.p1.id}`]]) {
+      await r23Ready(p);
+      check(`resources long ${lbl}: no horizontal overflow at 390px`, (await overflowPx()) <= 1);
+      const au = await p15Audit(null, false);
+      check(`resources long ${lbl}: no clipped/spilling text, overlapping or unnamed controls`, au.resp.length === 0 && au.a11y.length === 0, [...au.resp, ...au.a11y].slice(0, 3).join(" | "));
+    }
+    await r23Ready("/resources?q=" + encodeURIComponent("超長い日本語"));
+    const d = await r23EditOn(r23JaLong.slice(0, 200));
+    const m = await ev(`(() => { const dd = document.querySelector('.modal[role="dialog"]'); if (!dd) return null; const b = dd.getBoundingClientRect(); return { fitsX: b.left >= -0.5 && b.right <= innerWidth + 0.5, inner: dd.scrollWidth - dd.clientWidth }; })()`);
+    check("resources long: the edit dialog holding a long Japanese name and a 60-line Japanese description fits 390px (no internal horizontal scroll)", !!d && !!m && m.fitsX && m.inner <= 1, JSON.stringify(m));
+    const aud = await p15Audit(".modal", false);
+    check("resources long: the dialog's contents have no clipped/overlapping text and every control is named", aud.resp.length === 0 && aud.a11y.length === 0, [...aud.resp, ...aud.a11y].slice(0, 3).join(" | "));
+    await r23Close();
+    await logout();
+    await desktop();
+  });
+
+  const r23DialogChecks = async (loc, w, tag) => {
+    // The add dialog on the list page (real click, semantics, fit, trap, Escape, focus return) and the edit / delete dialogs of a card.
+    await p15Ready("/resources?q=ZZ%20B9%20R23%20Public");
+    await p15Dialog(`resources ${loc} ${w}px ${tag} add`, ".admin-bar button", 0, loc === "ja");
+    if (await exists(".resource-card .card-edit-btn")) {
+      await p15Dialog(`resources ${loc} ${w}px ${tag} edit`, ".resource-card .card-edit-btn .icon-btn:not(.icon-btn--danger)", 0, loc === "ja");
+      await p15Dialog(`resources ${loc} ${w}px ${tag} delete`, ".resource-card .icon-btn--danger", 0, loc === "ja");
+    }
+  };
+  const R23_PAGES = () => [
+    ["resources list", "/resources"],
+    ["resources filtered", "/resources?type=DATASET&project=" + R23.p1.id],
+    ["resources page 2", "/resources?q=ZZ%20B9%20R23%20Many&page=2"],
+    ["resources empty filter", "/resources?q=nothingmatchesthiszzz"],
+    ["resource detail", `/resources/${R23.rDs.id}`],
+    ["resource detail hardware", `/resources/${R23.rFpga.id}`],
+    ["resource long Japanese", `/resources/${R23.rLongJa.id}`],
+    ["resource long token", `/resources/${R23.rLongTok.id}`],
+    ["resource hostile", `/resources/${R23.rX.id}`],
+    ["resource not found", `/resources/${R23.rLab.id}`],
+    ["project with resources", `/projects/${R23.p1.id}`],
+    ["project with many resources", `/projects/${R23.p2.id}`],
+    ["research area with resources", `/research/${R23.aPub.id}`],
+    ["group with resources", `/groups/${R23.gPub.id}`],
+    ["researcher with resources", `/team/${R23.lead.tmId}`],
+    ["knowledge with resources", `/knowledge/${R23.docPub.id}`],
+    ["publication with resources", `/publications/${R23.pubPub.id}`],
+    ["search resources", "/search?q=ZZRMANY&type=resource"],
+  ];
+  await step("resources sweep: guest -- 390..1920, EN + JA, keyboard", async () => {
+    await p15Loop("r23-guest", null, R23_PAGES(), async (loc, w) => { if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`resources ${loc} ${w}px guest`, [["list", "/resources"], ["detail", `/resources/${R23.rDs.id}`], ["project panel", `/projects/${R23.p1.id}`]]); });
+  });
+  await step("resources sweep: member -- 390..1920, EN + JA, add / edit / delete dialogs", async () => {
+    await p15Loop("r23-member", () => r23Login(R23.mem), R23_PAGES(), async (loc, w) => { await r23DialogChecks(loc, w, "member"); if (P15_TAB_WIDTHS.includes(w)) await p19Walk(`resources ${loc} ${w}px member`, [["list", "/resources"], ["detail", `/resources/${R23.rDs.id}`]]); });
+  });
+  await step("resources sweep: project lead -- 390..1920, EN + JA, workspace section and dialogs", async () => {
+    await p15Loop("r23-lead", () => r23Login(R23.lead), [...R23_PAGES().slice(0, 5), ["workspace", "/workspace"]], async (loc, w) => { await r23DialogChecks(loc, w, "lead"); });
+    check("resources sweep lead: no script from hostile text ever ran", (await ev(`typeof window.__r23Xss`)) === "undefined");
+  });
+  await step("resources sweep: lab manager -- 390..1920, EN + JA, dialogs and the admin list", async () => {
+    await p15Loop("r23-manager", () => r23Login(R23.mgr), [...R23_PAGES().slice(0, 5), ["admin resources", "/admin/content?type=resource"], ["admin resources filtered", `/admin/content?type=resource&resourceType=DATASET&project=${R23.p1.id}`]], async (loc, w) => { await r23DialogChecks(loc, w, "manager"); });
+  });
+  await step("resources sweep: admin -- 390..1920, EN + JA, dialogs, admin list, translations and overview", async () => {
+    await p15Loop("r23-admin", () => login(ADMIN.email, ADMIN.password), [...R23_PAGES().slice(0, 5), ["admin overview", "/admin"], ["admin resources", "/admin/content?type=resource"], ["admin translations resources", "/admin/translations?type=LAB_RESOURCE"]], async (loc, w) => { await r23DialogChecks(loc, w, "admin"); });
+  });
+
+  await step("resources filters: folded behind a 'Filters' summary on a phone; open on wider screens and whenever a filter is active; keyboard and JA", async () => {
+    await setLocale(null);
+    await p15Vp(390);
+    await r23Ready("/resources");
+    const st = () => ev(`(() => { const d = document.querySelector('details.knowledge-filters-wrap'); const s = d.querySelector('summary'); const q = document.getElementById('rf-q'); return { open: d.open, summary: s.textContent.trim(), h: Math.round(s.getBoundingClientRect().height), qShown: q.checkVisibility(), formLabel: d.querySelector('form').getAttribute('aria-label') }; })()`);
+    let s = await st();
+    check("resources filters: on a phone the form is folded (closed) behind a 'Filters' summary at least 44px tall, so results start near the top", !s.open && s.summary === "Filters" && s.h >= 44 && !s.qShown, JSON.stringify(s));
+    check("resources filters: the first result card starts within the first screen on a phone", (await ev(`document.querySelector('.resource-card')?.getBoundingClientRect().top ?? 9999`)) < 844);
+    await clickEl("details.knowledge-filters-wrap > summary");
+    await sleep(300);
+    s = await st();
+    check("resources filters: a real click opens it and the fields become visible with the accessible form name", s.open && s.qShown && s.formLabel === "Filter resources", JSON.stringify(s));
+    await r23Ready("/resources?type=DATASET");
+    s = await st();
+    check("resources filters: with a filter active it is open and the summary counts it ('Filters (1 active)')", s.open && s.summary === "Filters (1 active)", JSON.stringify(s));
+    await p15Vp(1280);
+    await r23Ready("/resources");
+    s = await st();
+    check("resources filters: on a wide screen it is open by default", s.open && s.qShown && s.summary === "Filters", JSON.stringify(s));
+    await setLocale("ja");
+    await p15Vp(390);
+    await r23Ready("/resources");
+    s = await st();
+    check("resources filters ja: the summary and the form name are Japanese", s.summary === "絞り込み" && s.formLabel === "リソースを絞り込む", JSON.stringify(s));
+    await setLocale(null);
+    await desktop();
+  });
+
+  await step("resources restore (locale, viewport)", async () => { await setLocale(null); await desktop(); });
+
   section("phase 10.5: design system hygiene (static scan of the web source)");
   {
     const webSrc = path.join(__dirname, "..", "..", "web", "src");
@@ -5775,6 +6548,13 @@ async function connect() {
     /^40[13] (POST|PUT|DELETE) .*\/api\/knowledge(\/[\w-]+)?$/,
     // ...and the faked 500 of the translations read that proves the edit form refuses to save without the English base.
     /^500 GET .*\/api\/translations\/KNOWLEDGE_DOC\/[\w-]+$/,
+    // Phase 23: a hidden / missing / malformed resource id opened directly (400/404) and the faked 500s that prove the error states and
+    // the edit form's refusal to save without its base text; the deliberate unknown-type list query (400) and manager-only visibility
+    // filter (403); the write API probed on purpose by guests, members and leads (401/403).
+    /^(400|404|500) GET .*\/api\/resources\/[^/]+$/,
+    /^(400|403|500) GET .*\/api\/resources(\?.*)?$/,
+    /^40[13] (POST|PUT|DELETE) .*\/api\/resources(\/[\w-]+)?$/,
+    /^500 GET .*\/api\/translations\/LAB_RESOURCE\/[\w-]+$/,
   ];
   const unexpected = badResponses.filter((r) => !expected.some((re) => re.test(r)));
   check("no unexpected failed API requests", unexpected.length === 0, unexpected.slice(0, 5).join(" | "));

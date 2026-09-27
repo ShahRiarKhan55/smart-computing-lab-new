@@ -2,7 +2,7 @@ import { z } from "zod";
 import { visibilitySchema } from "./enums.js";
 
 // ---- what can be searched -----------------------------------------------------
-export const SEARCH_TYPES = ["research-area", "project", "group", "researcher", "publication", "news", "forum-topic", "event", "knowledge"] as const;
+export const SEARCH_TYPES = ["research-area", "project", "group", "researcher", "publication", "news", "forum-topic", "event", "knowledge", "resource"] as const;
 export type SearchType = (typeof SEARCH_TYPES)[number];
 
 /** The `type` query parameter: one entity type, or "all" (also the default). */
@@ -19,6 +19,7 @@ export const SEARCH_TYPE_LABELS: Record<SearchType, string> = {
   "forum-topic": "Forum Topic",
   event: "Event",
   knowledge: "Knowledge",
+  resource: "Resource",
 };
 export const SEARCH_FILTER_LABELS: Record<SearchFilter, string> = {
   all: "All",
@@ -31,6 +32,7 @@ export const SEARCH_FILTER_LABELS: Record<SearchFilter, string> = {
   "forum-topic": "Forum Topics",
   event: "Events",
   knowledge: "Knowledge",
+  resource: "Resources",
 };
 
 // ---- limits -------------------------------------------------------------------
@@ -176,6 +178,7 @@ export const searchResponseSchema = z.object({
     "forum-topic": z.number(),
     event: z.number(),
     knowledge: z.number(),
+    resource: z.number(),
   }),
 });
 export type SearchResponse = z.infer<typeof searchResponseSchema>;

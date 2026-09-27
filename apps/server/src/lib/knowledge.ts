@@ -91,11 +91,20 @@ export async function serializeKnowledge(rows: KnowledgeRow[], viewer: Viewer, l
  * workspace uses for its events and news, so "my documentation" and "my workspace" agree.
  */
 export function researcherScope(viewer: NonNullable<Viewer>, teamMemberId: string | null): Prisma.KnowledgeDocWhereInput[] {
-  const visible = visibleTo(viewer);
   const own: Prisma.KnowledgeDocWhereInput[] = [{ authorId: viewer.id }];
   if (!teamMemberId) return own;
+  const s = researcherRelations(viewer, teamMemberId);
+  return [...own, { teamMemberId }, { project: s.projects }, { group: s.groups }, { researchArea: s.areas }];
+}
+
+/**
+ * The projects / groups / areas that "belong" to a researcher (each itself visible to the viewer), as
+ * where-fragments over those models. Shared by every "mine" scope (knowledge, resources) so they agree with the workspace.
+ */
+export function researcherRelations(viewer: NonNullable<Viewer>, teamMemberId: string) {
+  const visible = visibleTo(viewer);
   const mine = { teamMemberId };
-  const relatedProjects: Prisma.ResearchProjectWhereInput = {
+  const projects: Prisma.ResearchProjectWhereInput = {
     ...visible,
     OR: [
       { members: { some: mine } },
@@ -103,13 +112,12 @@ export function researcherScope(viewer: NonNullable<Viewer>, teamMemberId: strin
       { areaLinks: { some: { researchArea: { ...visible, researcherLinks: { some: mine } } } } },
     ],
   };
-  return [
-    ...own,
-    { teamMemberId },
-    { project: relatedProjects },
-    { group: { ...visible, members: { some: mine } } },
-    { researchArea: { ...visible, OR: [{ researcherLinks: { some: mine } }, { projectLinks: { some: { project: { ...visible, members: { some: mine } } } } }] } },
-  ];
+  const groups: Prisma.ResearchGroupWhereInput = { ...visible, members: { some: mine } };
+  const areas: Prisma.ResearchAreaWhereInput = {
+    ...visible,
+    OR: [{ researcherLinks: { some: mine } }, { projectLinks: { some: { project: { ...visible, members: { some: mine } } } } }],
+  };
+  return { projects, groups, areas };
 }
 
 /** WHERE for `GET /api/knowledge` (visibility + every filter). The caller has already authorised `visibility` / `mine`. */

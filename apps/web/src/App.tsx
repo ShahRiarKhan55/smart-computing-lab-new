@@ -24,6 +24,8 @@ import { EventsPage } from "./pages/EventsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { KnowledgeDetailPage } from "./pages/KnowledgeDetailPage";
+import { ResourcesPage } from "./pages/ResourcesPage";
+import { ResourceDetailPage } from "./pages/ResourceDetailPage";
 import { SearchPage } from "./pages/SearchPage";
 import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -70,6 +72,8 @@ export default function App() {
         <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/knowledge/:id" element={<KnowledgeDetailPage />} />
+        <Route path="/resources" element={<ResourcesPage />} />
+        <Route path="/resources/:id" element={<ResourceDetailPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
         <Route path="/publications" element={<PublicationsPage />} />

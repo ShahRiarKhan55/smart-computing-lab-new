@@ -7,6 +7,7 @@ import { apiFetch } from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { AdminBar } from "../components/AdminBar";
 import { Badge } from "../components/Badge";
+import { RelatedResources } from "../components/RelatedResources";
 import { KnowledgeFormModal, type KnowledgeFormPayload } from "../components/KnowledgeFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LoadingState } from "../components/LoadingState";
@@ -124,6 +125,8 @@ export function KnowledgeDetailPage() {
               </h2>
               <div className="knowledge-body">{doc.body}</div>
             </section>
+
+            <RelatedResources relation="knowledge" id={doc.id} idPrefix="knowledge" />
           </div>
 
           <aside className="detail-layout__aside" aria-labelledby="knowledge-details">

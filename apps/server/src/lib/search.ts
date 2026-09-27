@@ -468,6 +468,37 @@ const sources = [
       ...visibilityField(viewer, r.visibility),
     }),
   }),
+
+  // Lab resources (Phase 23): own `visibility` column, so the SAME visibleTo() as news/events/knowledge. Searched columns are the
+  // name, description, type code, vendor, identifier, version and environment notes (plain `contains`; the Japanese name/description/
+  // environment overrides match through the same translationMatchIds()). Linked projects/areas/groups/documents are never
+  // searched or returned as columns (only as Phase 20 `related` links, read through visibleTo), so a hidden project can't surface
+  // from a resource. `meta` is language-neutral (version and vendor as typed, no English label) so a Japanese result has no English words.
+  defineSource<Prisma.LabResourceWhereInput, { id: string; name: string; description: string; version: string; vendor: string; visibility: string }>({
+    type: "resource",
+    title: "name",
+    fields: ["description", "resourceType", "vendor", "identifier", "version", "environment"],
+    translatable: "LAB_RESOURCE",
+    base: visibleTo,
+    count: (where) => prisma.labResource.count({ where }),
+    find: (where, skip, take) =>
+      prisma.labResource.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+        select: { id: true, name: true, description: true, version: true, vendor: true, visibility: true },
+      }),
+    toResult: (r, viewer, terms) => ({
+      type: "resource",
+      id: r.id,
+      title: r.name,
+      description: describe([r.description], terms),
+      meta: joinMeta(r.version, r.vendor),
+      href: `/resources/${r.id}`,
+      ...visibilityField(viewer, r.visibility),
+    }),
+  }),
 ];
 
 // Sources are listed in SEARCH_TYPES order: that order IS the "type" step of the sort above.

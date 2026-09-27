@@ -1,4 +1,4 @@
-import { KNOWLEDGE_CATEGORIES, type TranslationKey } from "@scl/shared";
+import { KNOWLEDGE_CATEGORIES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -50,6 +50,16 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "Group not found.": "knowledge.err.groupNotFound",
   "Researcher not found.": "knowledge.err.researcherNotFound",
   "Only lab managers and admins can filter by visibility.": "knowledge.err.visibilityFilterForbidden",
+  // Lab resources (Phase 23): the fixed messages the resources API and schemas produce.
+  "Name is required.": "resource.err.nameRequired",
+  "Name must be at most 200 characters.": "resource.err.nameMax",
+  "Environment notes must be at most 5000 characters.": "resource.err.environmentMax",
+  [`Type must be one of: ${RESOURCE_TYPES.join(", ")}.`]: "resource.err.typeInvalid",
+  "Document not found.": "resource.err.documentNotFound",
+  "Publication not found.": "resource.err.publicationNotFound",
+  "Event not found.": "resource.err.eventNotFound",
+  "Japanese name must be at most 200 characters.": "resource.err.jaNameMax",
+  "Japanese environment must be at most 5000 characters.": "resource.err.jaEnvironmentMax",
   // Admin / CMS (Phase 17): account link/unlink.
   "That account is already linked to a team profile. Unlink it first.": "adm.err.alreadyLinked",
   "That account isn't linked to a team profile.": "adm.err.notLinked",

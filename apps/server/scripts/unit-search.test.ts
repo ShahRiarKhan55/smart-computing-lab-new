@@ -51,7 +51,7 @@ t("defaults: type all, page 1, limit 20", good.success && good.data.type === "al
 t("q is trimmed; phrase and terms are attached", good.success && good.data.q === "FPGA  aging" && good.data.phrase === "FPGA aging" && good.data.terms.length === 2);
 t("page/limit strings become numbers", (() => { const r = s({ q: "a", page: "3", limit: "50" }); return r.success && r.data.page === 3 && r.data.limit === 50; })());
 t("every documented type is accepted", SEARCH_FILTERS.every((f) => s({ q: "a", type: f }).success));
-t("SEARCH_FILTERS is 'all' + the nine types (Phase 16 added 'event', Phase 22 'knowledge')", SEARCH_FILTERS.length === SEARCH_TYPES.length + 1 && SEARCH_TYPES.length === 9 && SEARCH_TYPES[SEARCH_TYPES.length - 1] === "knowledge");
+t("SEARCH_FILTERS is 'all' + the ten types (Phase 16 added 'event', Phase 22 'knowledge', Phase 23 'resource')", SEARCH_FILTERS.length === SEARCH_TYPES.length + 1 && SEARCH_TYPES.length === 10 && SEARCH_TYPES[SEARCH_TYPES.length - 1] === "resource");
 t("missing q", msg({}) === "Search text is required.");
 t("empty and blank q", msg({ q: "" }) === "Search text is required." && msg({ q: "   " }) === "Search text is required.");
 t("q must be text (array / object / number)", msg({ q: ["a"] }) === "Search text must be text." && msg({ q: { a: 1 } }) === "Search text must be text." && msg({ q: 5 }) === "Search text must be text.");

@@ -190,3 +190,15 @@ export const canCreateKnowledge = isMember;
 export const canEditKnowledge = (a: MaybeActor, isOwner: boolean): boolean => isManager(a) || (isMember(a) && isOwner);
 export const canDeleteKnowledge = canEditKnowledge;
 export const canFilterKnowledgeByVisibility = canChangeVisibility;
+
+// ---- lab resources & reproducibility (Phase 23) ---------------------------------------------------
+// Resources are OWNED content with exactly the Knowledge / Events model: any signed-in account may create
+// one, only its owner (LabResource.ownerId, looked up by the server) or a manager may edit/delete it, and
+// visibility is manager-only, so a member's resource stays LAB_ONLY until a manager publishes it. A project
+// or group LEAD gains nothing here beyond what the project/group policies already give them: the resource
+// is not theirs. An owner-less resource (its creator's account was deleted) can only be changed by managers.
+// See docs/architecture/phase23-lab-resources-reproducibility.md.
+export const canCreateResource = isMember;
+export const canEditResource = (a: MaybeActor, isOwner: boolean): boolean => isManager(a) || (isMember(a) && isOwner);
+export const canDeleteResource = canEditResource;
+export const canFilterResourcesByVisibility = canChangeVisibility;

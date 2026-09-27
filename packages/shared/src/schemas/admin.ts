@@ -6,6 +6,7 @@ import { GROUP_TRANSLATION_MAX } from "./group.js";
 import { KNOWLEDGE_CATEGORIES, KNOWLEDGE_TRANSLATION_MAX } from "./knowledge.js";
 import { NEWS_TRANSLATION_MAX, NEWS_TYPES } from "./news.js";
 import { PUBLICATION_TRANSLATION_MAX } from "./publication.js";
+import { RESOURCE_TRANSLATION_MAX, RESOURCE_TYPES } from "./resource.js";
 import { PROJECT_STATUSES, PROJECT_TRANSLATION_MAX } from "./project.js";
 import { RESEARCH_AREA_TRANSLATION_MAX } from "./research.js";
 import { parseSearchText, SEARCH_MAX_TERMS, SEARCH_QUERY_MAX_LENGTH } from "./search.js";
@@ -18,10 +19,10 @@ import { isTranslatableEntityType, TRANSLATABLE_FIELDS, type TranslatableEntityT
  */
 
 // ---- content types ------------------------------------------------------------
-export const ADMIN_CONTENT_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge", "team-member"] as const;
+export const ADMIN_CONTENT_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge", "resource", "team-member"] as const;
 export type AdminContentType = (typeof ADMIN_CONTENT_TYPES)[number];
 /** The types whose table has a `visibility` column (a team profile has none: it is always public). */
-export const ADMIN_VISIBILITY_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge"] as const;
+export const ADMIN_VISIBILITY_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge", "resource"] as const;
 export type AdminVisibilityType = (typeof ADMIN_VISIBILITY_TYPES)[number];
 export const hasVisibility = (t: AdminContentType): t is AdminVisibilityType => (ADMIN_VISIBILITY_TYPES as readonly string[]).includes(t);
 
@@ -33,6 +34,7 @@ export const ADMIN_TRANSLATION_ENTITY: Partial<Record<AdminContentType, Translat
   news: "NEWS_ITEM",
   event: "EVENT",
   knowledge: "KNOWLEDGE_DOC",
+  resource: "LAB_RESOURCE",
   publication: "PUBLICATION",
   "team-member": "TEAM_MEMBER",
 };
@@ -126,6 +128,7 @@ const rawContentQuery = z.object({
   newsType: optionalEnum(NEWS_TYPES, "News type"),
   translation: optionalEnum(CONTENT_TRANSLATION_STATES, "Translation"),
   category: optionalEnum(KNOWLEDGE_CATEGORIES, "Category"),
+  resourceType: optionalEnum(RESOURCE_TYPES, "Resource type"),
   project: z.string({ invalid_type_error: "Project must be an id." }).optional(),
   area: z.string({ invalid_type_error: "Research area must be an id." }).optional(),
   group: z.string({ invalid_type_error: "Group must be an id." }).optional(),
@@ -139,16 +142,17 @@ const rawContentQuery = z.object({
 /** Which optional filters mean something for which content type; sending one that does not apply is a 400 (never silently ignored). */
 const FILTER_APPLIES: Record<string, (t: AdminContentType) => boolean> = {
   visibility: hasVisibility,
-  owner: (t) => t === "event" || t === "knowledge",
+  owner: (t) => t === "event" || t === "knowledge" || t === "resource",
   scope: (t) => t === "event",
   kind: (t) => t === "event",
   status: (t) => t === "project",
   newsType: (t) => t === "news",
   translation: (t) => ADMIN_TRANSLATION_ENTITY[t] !== undefined,
   category: (t) => t === "knowledge",
-  project: (t) => t === "knowledge",
-  area: (t) => t === "knowledge",
-  group: (t) => t === "knowledge",
+  resourceType: (t) => t === "resource",
+  project: (t) => t === "knowledge" || t === "resource",
+  area: (t) => t === "knowledge" || t === "resource",
+  group: (t) => t === "knowledge" || t === "resource",
 };
 
 export const adminContentQuerySchema = rawContentQuery.superRefine((v, ctx) => {
@@ -180,7 +184,7 @@ export interface AdminContentRow {
   status: string | null;
   /** The record's own date where it has one (event start, news date), ISO. */
   date: string | null;
-  /** Public team profile of the creator (events and knowledge documents). Never an account id or email. */
+  /** Public team profile of the creator (events, knowledge documents and lab resources). Never an account id or email. */
   owner: { id: string; name: string } | null;
   /** Japanese overrides present / translatable fields; null when the type has none. */
   translation: { done: number; total: number } | null;
@@ -249,6 +253,7 @@ export const ADMIN_TRANSLATION_MAX: Record<TranslatableEntityType, Record<string
   NEWS_ITEM: NEWS_TRANSLATION_MAX,
   EVENT: EVENT_TRANSLATION_MAX,
   KNOWLEDGE_DOC: KNOWLEDGE_TRANSLATION_MAX,
+  LAB_RESOURCE: RESOURCE_TRANSLATION_MAX,
   PUBLICATION: PUBLICATION_TRANSLATION_MAX,
   TEAM_MEMBER: TEAM_MEMBER_TRANSLATION_MAX,
 };
@@ -333,6 +338,7 @@ export interface AdminOverview {
   news: AdminCount;
   events: AdminCount & { upcoming: number };
   knowledgeDocs: AdminCount;
+  labResources: AdminCount;
   forumCategories: AdminCount;
   forumTopics: number;
   galleryItems: AdminCount;

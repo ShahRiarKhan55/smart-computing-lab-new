@@ -18,7 +18,7 @@ t("related accepts area, project and group only", ["research-area", "project", "
 t("related rejects other entity types (researcher, forum-topic, message)", ["researcher", "forum-topic", "message", "publication"].every((type) => !searchResultSchema.safeParse({ ...base, related: [{ ...rel, type }] }).success));
 t("related rejects a missing href", !searchResultSchema.safeParse({ ...base, related: [{ type: "project", id: "x", title: "P" }] }).success);
 t("the response schema embeds the same result shape", searchResponseSchema.safeParse({ query: "q", type: "all", results: [{ ...base, related: [rel] }], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 }, counts: Object.fromEntries(SEARCH_FILTERS.map((f) => [f, 0])) }).success);
-t("search types are the nine documented ones (Phase 22 added knowledge), no private ones", SEARCH_TYPES.length === 9 && !SEARCH_TYPES.some((s) => /message|notification/.test(s)));
+t("search types are the ten documented ones (Phase 22 added knowledge, Phase 23 resource), no private ones", SEARCH_TYPES.length === 10 && !SEARCH_TYPES.some((s) => /message|notification/.test(s)));
 
 const keys = Object.keys(en).filter((k) => /^(explore\.|search\.related|search\.other|projects\.filter\.|research\.explore\.)/.test(k));
 t("the Phase 20 keys exist", keys.length >= 30);

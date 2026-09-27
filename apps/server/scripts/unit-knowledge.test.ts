@@ -187,7 +187,7 @@ async function main() {
   t("researcherScope: every related project/group/area must itself be visible to the viewer", JSON.stringify(scope).split('"visibility":{"in":["PUBLIC","LAB_ONLY"]}').length - 1 >= 6);
 
   // ---- registrations ----------------------------------------------------------------------------------
-  t("search: 'knowledge' is the last search type (source order = type order)", SEARCH_TYPES[SEARCH_TYPES.length - 1] === "knowledge");
+  t("search: 'knowledge' is the type before 'resource' (source order = type order)", SEARCH_TYPES[SEARCH_TYPES.length - 2] === "knowledge");
   t("translations: KNOWLEDGE_DOC translates title and body only", TRANSLATABLE_FIELDS.KNOWLEDGE_DOC.join() === "title,body");
   t("admin: knowledge is a content type with visibility and translations", (ADMIN_CONTENT_TYPES as readonly string[]).includes("knowledge") && hasVisibility("knowledge") && ADMIN_TRANSLATION_ENTITY.knowledge === "KNOWLEDGE_DOC" && ADMIN_TRANSLATION_MAX.KNOWLEDGE_DOC.body === 20000);
   const a = (o: Record<string, unknown>) => adminContentQuerySchema.safeParse({ type: "knowledge", ...o });

@@ -173,6 +173,37 @@ const DEFS: Record<AdminContentType, Def> = {
         ["researchers", prisma.knowledgeDoc.count({ where: { id, teamMemberId: { not: null } } })],
       ]),
   },
+  resource: {
+    entity: "LAB_RESOURCE",
+    titleField: "name",
+    textFields: ["name", "description", "resourceType", "vendor", "identifier", "version", "environment"],
+    count: (where) => prisma.labResource.count({ where }),
+    // Managers see every project link (no `visibleTo`): the admin list is a manager view, and only counts are shown.
+    find: (where, orderBy, skip, take) =>
+      prisma.labResource.findMany({ where, orderBy: orderBy as Prisma.LabResourceOrderByWithRelationInput[], skip, take, include: { owner: { select: { teamMember: { select: { id: true, name: true } } } } } }),
+    base: (r) => {
+      const profile = r.owner?.teamMember ?? null;
+      return {
+        title: r.name,
+        subtitle: [r.version, r.vendor].filter(Boolean).join(" · "),
+        visibility: vis(r),
+        status: r.resourceType,
+        date: null,
+        owner: profile ? { id: profile.id, name: profile.name } : null,
+        href: `/resources/${r.id}`,
+      };
+    },
+    relations: (id) =>
+      rel([
+        ["projects", prisma.resourceProject.count({ where: { resourceId: id } })],
+        ["areas", prisma.labResource.count({ where: { id, researchAreaId: { not: null } } })],
+        ["groups", prisma.labResource.count({ where: { id, groupId: { not: null } } })],
+        ["docs", prisma.labResource.count({ where: { id, knowledgeDocId: { not: null } } })],
+        ["publications", prisma.labResource.count({ where: { id, publicationId: { not: null } } })],
+        ["events", prisma.labResource.count({ where: { id, eventId: { not: null } } })],
+        ["researchers", prisma.labResource.count({ where: { id, teamMemberId: { not: null } } })],
+      ]),
+  },
   "team-member": {
     entity: "TEAM_MEMBER",
     titleField: "name",
@@ -232,9 +263,15 @@ async function buildWhere(query: AdminContentQuery, def: Def, now: Date): Promis
   if (query.status) and.push({ status: query.status });
   if (query.newsType) and.push({ type: query.newsType });
   if (query.kind) and.push({ kind: query.kind });
-  if (query.owner) and.push(query.type === "knowledge" ? { author: { teamMember: { id: query.owner } } } : { createdBy: { teamMember: { id: query.owner } } });
+  if (query.owner) {
+    and.push(
+      query.type === "knowledge" ? { author: { teamMember: { id: query.owner } } } : query.type === "resource" ? { owner: { teamMember: { id: query.owner } } } : { createdBy: { teamMember: { id: query.owner } } },
+    );
+  }
   if (query.category) and.push({ category: query.category });
-  if (query.project) and.push({ projectId: query.project });
+  if (query.resourceType) and.push({ resourceType: query.resourceType });
+  // A resource is linked to projects through the join table; a document by its single foreign key.
+  if (query.project) and.push(query.type === "resource" ? { projectLinks: { some: { projectId: query.project } } } : { projectId: query.project });
   if (query.area) and.push({ researchAreaId: query.area });
   if (query.group) and.push({ groupId: query.group });
   if (query.scope) and.push(eventScopeWhere(query.scope, now) as Where);
@@ -341,4 +378,5 @@ export const VISIBILITY_TARGETS: Record<
   news: { delegate: (tx) => tx.newsItem as unknown as VisDelegate, action: "NEWS_UPDATED", entityType: "NEWS_ITEM", titleField: "title" },
   event: { delegate: (tx) => tx.event as unknown as VisDelegate, action: "EVENT_UPDATED", entityType: "EVENT", titleField: "title" },
   knowledge: { delegate: (tx) => tx.knowledgeDoc as unknown as VisDelegate, action: "KNOWLEDGE_UPDATED", entityType: "KNOWLEDGE_DOC", titleField: "title" },
+  resource: { delegate: (tx) => tx.labResource as unknown as VisDelegate, action: "RESOURCE_UPDATED", entityType: "LAB_RESOURCE", titleField: "name" },
 };

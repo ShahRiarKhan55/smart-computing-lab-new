@@ -15,6 +15,7 @@ import { NewsCard } from "../components/NewsCard";
 import { PersonLink } from "../components/PersonLink";
 import { SectionHeader } from "../components/SectionHeader";
 import { RelatedResearch } from "../components/RelatedResearch";
+import { RelatedResources } from "../components/RelatedResources";
 import { PublicationFormModal } from "../components/PublicationFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
@@ -243,6 +244,8 @@ export function PublicationDetailPage() {
                 </div>
               )}
             </section>
+
+            <RelatedResources relation="publication" id={pub.id} idPrefix="pub" />
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   KNOWLEDGE_CATEGORIES,
   NEWS_TYPES,
   PROJECT_STATUSES,
+  RESOURCE_TYPES,
   hasVisibility,
   type AdminContentResponse,
   type AdminContentRow,
@@ -14,6 +15,7 @@ import {
   type EventKind,
   type KnowledgeCategory,
   type ProjectStatus,
+  type ResourceType,
   type TeamMember,
   type Visibility,
 } from "@scl/shared";
@@ -22,7 +24,7 @@ import { apiFetch } from "../../lib/api";
 import { useApiResource } from "../../hooks/useApiResource";
 import { useKnowledgeOptions } from "../../hooks/useKnowledgeOptions";
 import { useLocale, useT } from "../../i18n/LocaleContext";
-import { CATEGORY_LABEL_KEY, EVENT_KIND_LABEL_KEY, KNOWLEDGE_CATEGORY_LABEL_KEY, PROJECT_STATUS_LABEL_KEY, dictLabel } from "../../i18n/labels";
+import { CATEGORY_LABEL_KEY, EVENT_KIND_LABEL_KEY, KNOWLEDGE_CATEGORY_LABEL_KEY, PROJECT_STATUS_LABEL_KEY, RESOURCE_TYPE_LABEL_KEY, dictLabel } from "../../i18n/labels";
 import { formatDate, formatDateTime, formatNumber } from "../../lib/format";
 import { Badge } from "../Badge";
 import { EmptyState } from "../EmptyState";
@@ -34,7 +36,7 @@ import { AdminPager } from "./AdminPager";
 import { AdminContentDetailModal } from "./AdminContentDetailModal";
 
 /** The URL is the single source of truth for filters, so a filtered view can be linked, reloaded and stepped back through. */
-const PARAMS = ["q", "visibility", "status", "newsType", "translation", "from", "to", "sort", "scope", "kind", "owner", "category", "project", "area", "group"] as const;
+const PARAMS = ["q", "visibility", "status", "newsType", "translation", "from", "to", "sort", "scope", "kind", "owner", "category", "resourceType", "project", "area", "group"] as const;
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABEL_KEY);
 
 /** Which filters exist for which type (the API rejects the rest with a 400, so the UI never sends them). */
@@ -44,9 +46,11 @@ const applies = {
   newsType: (type: AdminContentType) => type === "news",
   translation: (type: AdminContentType) => type !== "publication",
   event: (type: AdminContentType) => type === "event",
-  /** Owner (the creator / author) exists for events and knowledge documents. */
-  owner: (type: AdminContentType) => type === "event" || type === "knowledge",
+  /** Owner (the creator / author) exists for events, knowledge documents and lab resources. */
+  owner: (type: AdminContentType) => type === "event" || type === "knowledge" || type === "resource",
   knowledge: (type: AdminContentType) => type === "knowledge",
+  /** Knowledge documents and lab resources are both linked to a project / research area / group. */
+  linked: (type: AdminContentType) => type === "knowledge" || type === "resource",
 };
 
 /** The event creator filter: the public team list (names only), fetched only when the events view is showing. */
@@ -69,8 +73,8 @@ function OwnerFilter({ value }: { value: string }) {
   );
 }
 
-/** Knowledge-only filters: the category and the project / research area / group it is linked to (picklists from the ordinary list endpoints). */
-function KnowledgeFilters({ values }: { values: Record<"category" | "project" | "area" | "group", string> }) {
+/** Knowledge and resource filters: the category (documents) or type (resources), and the project / research area / group it is linked to (picklists from the ordinary list endpoints). */
+function LinkedFilters({ kind, values }: { kind: "knowledge" | "resource"; values: Record<"category" | "resourceType" | "project" | "area" | "group", string> }) {
   const t = useT();
   const options = useKnowledgeOptions(true);
   const picker = (name: "project" | "area" | "group", label: string, list: { id: string; label: string }[] | undefined) => (
@@ -89,17 +93,31 @@ function KnowledgeFilters({ values }: { values: Record<"category" | "project" | 
   );
   return (
     <>
-      <div className="form-group">
-        <label htmlFor="af-category">{t("adm.f.category")}</label>
-        <select id="af-category" name="category" defaultValue={values.category}>
-          <option value="">{t("adm.f.any")}</option>
-          {KNOWLEDGE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {t(KNOWLEDGE_CATEGORY_LABEL_KEY[c])}
-            </option>
-          ))}
-        </select>
-      </div>
+      {kind === "knowledge" ? (
+        <div className="form-group">
+          <label htmlFor="af-category">{t("adm.f.category")}</label>
+          <select id="af-category" name="category" defaultValue={values.category}>
+            <option value="">{t("adm.f.any")}</option>
+            {KNOWLEDGE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {t(KNOWLEDGE_CATEGORY_LABEL_KEY[c])}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="form-group">
+          <label htmlFor="af-resourceType">{t("adm.f.resourceType")}</label>
+          <select id="af-resourceType" name="resourceType" defaultValue={values.resourceType}>
+            <option value="">{t("adm.f.any")}</option>
+            {RESOURCE_TYPES.map((r) => (
+              <option key={r} value={r}>
+                {t(RESOURCE_TYPE_LABEL_KEY[r])}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {picker("project", t("adm.f.project"), options?.projects)}
       {picker("area", t("adm.f.area"), options?.areas)}
       {picker("group", t("adm.f.group"), options?.groups)}
@@ -128,7 +146,9 @@ export function AdminContentBrowser({ types }: { types: AdminContentType[] }) {
       if (key === "translation" && !applies.translation(type)) continue;
       if ((key === "scope" || key === "kind") && !applies.event(type)) continue;
       if (key === "owner" && !applies.owner(type)) continue;
-      if ((key === "category" || key === "project" || key === "area" || key === "group") && !applies.knowledge(type)) continue;
+      if (key === "category" && !applies.knowledge(type)) continue;
+      if (key === "resourceType" && type !== "resource") continue;
+      if ((key === "project" || key === "area" || key === "group") && !applies.linked(type)) continue;
       p.set(key, v);
     }
     if (page > 1) p.set("page", String(page));
@@ -206,6 +226,7 @@ export function AdminContentBrowser({ types }: { types: AdminContentType[] }) {
     if (row.type === "project") return PROJECT_STATUSES.includes(row.status as ProjectStatus) ? t(PROJECT_STATUS_LABEL_KEY[row.status as ProjectStatus]) : row.status;
     if (row.type === "event") return (EVENT_KINDS as readonly string[]).includes(row.status) ? t(EVENT_KIND_LABEL_KEY[row.status as EventKind]) : row.status;
     if (row.type === "knowledge") return (KNOWLEDGE_CATEGORIES as readonly string[]).includes(row.status) ? t(KNOWLEDGE_CATEGORY_LABEL_KEY[row.status as KnowledgeCategory]) : row.status;
+    if (row.type === "resource") return (RESOURCE_TYPES as readonly string[]).includes(row.status) ? t(RESOURCE_TYPE_LABEL_KEY[row.status as ResourceType]) : row.status;
     if (row.type === "team-member") return CATEGORY_KEYS.includes(row.status) ? t(CATEGORY_LABEL_KEY[row.status as keyof typeof CATEGORY_LABEL_KEY]) : row.status;
     return row.status; // news type: the stored word (Paper, Award, ...)
   };
@@ -294,7 +315,7 @@ export function AdminContentBrowser({ types }: { types: AdminContentType[] }) {
             </div>
           </>
         )}
-        {applies.knowledge(type) && <KnowledgeFilters values={{ category: val("category"), project: val("project"), area: val("area"), group: val("group") }} />}
+        {applies.linked(type) && <LinkedFilters kind={type === "resource" ? "resource" : "knowledge"} values={{ category: val("category"), resourceType: val("resourceType"), project: val("project"), area: val("area"), group: val("group") }} />}
         {applies.owner(type) && <OwnerFilter value={val("owner")} />}
         {applies.translation(type) && (
           <div className="form-group">
@@ -399,7 +420,7 @@ export function AdminContentBrowser({ types }: { types: AdminContentType[] }) {
                   )}
                   {row.hasAccount !== null && <Badge variant={row.hasAccount ? "info" : "neutral"}>{row.hasAccount ? t("adm.row.hasLogin") : t("adm.row.noLogin")}</Badge>}
                   {row.date && <span>{formatDateTime(row.date, locale)}</span>}
-                  {(row.type === "event" || row.type === "knowledge") && <span>{row.owner ? t("adm.row.owner", { name: row.owner.name }) : t("adm.row.noOwner")}</span>}
+                  {(row.type === "event" || row.type === "knowledge" || row.type === "resource") && <span>{row.owner ? t("adm.row.owner", { name: row.owner.name }) : t("adm.row.noOwner")}</span>}
                   <span>{t("adm.row.updated", { date: formatDate(row.updatedAt, locale) })}</span>
                 </div>
               </div>

@@ -61,6 +61,7 @@ export function AdminOverviewPage() {
           <CountCard to="/admin/content?type=publication" label={plain("adm.ov.publications")} count={data.publications} />
           <CountCard to="/admin/content?type=news" label={plain("adm.ov.news")} count={data.news} />
           <CountCard to="/admin/content?type=knowledge" label={plain("adm.ov.knowledge")} count={data.knowledgeDocs} />
+          <CountCard to="/admin/content?type=resource" label={plain("adm.ov.resource")} count={data.labResources} />
         </div>
       </section>
 

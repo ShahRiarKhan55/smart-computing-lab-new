@@ -14,6 +14,7 @@ export const TRANSLATABLE_FIELDS = {
   NEWS_ITEM: ["title", "description"],
   EVENT: ["title", "description"],
   KNOWLEDGE_DOC: ["title", "body"],
+  LAB_RESOURCE: ["name", "description", "environment"],
   PUBLICATION: ["title", "venue"],
   TEAM_MEMBER: ["bio"],
 } as const;

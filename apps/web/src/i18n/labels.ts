@@ -1,5 +1,17 @@
 import { en } from "@scl/shared";
-import type { Category, EventKind, GalleryCategory, KnowledgeCategory, ProjectStatus, SearchFilter, SearchType, TranslationKey } from "@scl/shared";
+import type {
+  Category,
+  EventKind,
+  GalleryCategory,
+  KnowledgeCategory,
+  ProjectStatus,
+  ResourceFamily,
+  ResourceMetadataKey,
+  ResourceType,
+  SearchFilter,
+  SearchType,
+  TranslationKey,
+} from "@scl/shared";
 
 /** Localized label for a team member's category — same `Record<value, TranslationKey>`
  * convention as `ROLE_LABEL_KEY` in `auth/usePolicy.ts`. The stored value is unchanged in every
@@ -39,6 +51,7 @@ export const SEARCH_TYPE_LABEL_KEY: Record<SearchType, TranslationKey> = {
   "forum-topic": "search.type.forum-topic",
   event: "search.type.event",
   knowledge: "search.type.knowledge",
+  resource: "search.type.resource",
 };
 
 /** Localized label for a search type filter chip. */
@@ -53,6 +66,7 @@ export const SEARCH_FILTER_LABEL_KEY: Record<SearchFilter, TranslationKey> = {
   "forum-topic": "search.filter.forum-topic",
   event: "search.filter.event",
   knowledge: "search.filter.knowledge",
+  resource: "search.filter.resource",
 };
 
 /** Localized call-to-action text on a search result card. */
@@ -66,6 +80,7 @@ export const SEARCH_CTA_LABEL_KEY: Record<SearchType, TranslationKey> = {
   "forum-topic": "search.cta.forum-topic",
   event: "search.cta.event",
   knowledge: "search.cta.knowledge",
+  resource: "search.cta.resource",
 };
 
 /** Localized label for an event's type. The stored `kind` value is unchanged in every locale. */
@@ -89,6 +104,45 @@ export const KNOWLEDGE_CATEGORY_LABEL_KEY: Record<KnowledgeCategory, Translation
   REPRODUCIBILITY: "knowledge.category.REPRODUCIBILITY",
   LAB_PROCEDURE: "knowledge.category.LAB_PROCEDURE",
   RESOURCE: "knowledge.category.RESOURCE",
+};
+
+/** Localized label for a lab resource's type. The stored value is unchanged in every locale. */
+export const RESOURCE_TYPE_LABEL_KEY: Record<ResourceType, TranslationKey> = {
+  DATASET: "resource.type.DATASET",
+  HARDWARE: "resource.type.HARDWARE",
+  SOFTWARE: "resource.type.SOFTWARE",
+  TOOL: "resource.type.TOOL",
+  FRAMEWORK: "resource.type.FRAMEWORK",
+  MODEL: "resource.type.MODEL",
+  FPGA: "resource.type.FPGA",
+  BOARD: "resource.type.BOARD",
+  SENSOR: "resource.type.SENSOR",
+  MEASUREMENT_SETUP: "resource.type.MEASUREMENT_SETUP",
+  EXPERIMENT_ENVIRONMENT: "resource.type.EXPERIMENT_ENVIRONMENT",
+  OTHER: "resource.type.OTHER",
+};
+
+/** Localized heading for a group of resource types in the reproducibility panel. */
+export const RESOURCE_FAMILY_LABEL_KEY: Record<ResourceFamily, TranslationKey> = {
+  HARDWARE: "resource.family.HARDWARE",
+  SOFTWARE: "resource.family.SOFTWARE",
+  DATA: "resource.family.DATA",
+  ENVIRONMENT: "resource.family.ENVIRONMENT",
+};
+
+/** Localized label for a structured reproducibility field (a resource's `metadata` key). */
+export const RESOURCE_METADATA_LABEL_KEY: Record<ResourceMetadataKey, TranslationKey> = {
+  format: "resource.meta.format",
+  size: "resource.meta.size",
+  license: "resource.meta.license",
+  collectionMethod: "resource.meta.collectionMethod",
+  hardwareRevision: "resource.meta.hardwareRevision",
+  firmwareVersion: "resource.meta.firmwareVersion",
+  toolchain: "resource.meta.toolchain",
+  platform: "resource.meta.platform",
+  configuration: "resource.meta.configuration",
+  requirements: "resource.meta.requirements",
+  measurementConditions: "resource.meta.measurementConditions",
 };
 
 /**

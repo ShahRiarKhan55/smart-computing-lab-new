@@ -24,6 +24,7 @@ import { PublicationItem } from "../components/PublicationItem";
 import { EventCard } from "../components/EventCard";
 import { NewsCard } from "../components/NewsCard";
 import { KnowledgeCard } from "../components/KnowledgeCard";
+import { ResourceCard } from "../components/ResourceCard";
 import { ManageMembersModal, type MembershipKind } from "../components/ManageMembersModal";
 import { formatNumber } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
@@ -194,6 +195,19 @@ export function WorkspacePage() {
             ))}
           </div>,
           link("/knowledge?mine=1", t("knowledge.workspace.viewAll", { count: n(data.knowledge.total) })),
+        )}
+
+        {section(
+          "resources",
+          t("resource.workspace.heading"),
+          data.resources,
+          t("resource.workspace.empty"),
+          <div className="grid">
+            {data.resources.items.map((r) => (
+              <ResourceCard key={r.id} resource={r} />
+            ))}
+          </div>,
+          link("/resources?mine=1", t("resource.workspace.viewAll", { count: n(data.resources.total) })),
         )}
 
         <section className="detail-section ws-section" aria-labelledby="ws-network">

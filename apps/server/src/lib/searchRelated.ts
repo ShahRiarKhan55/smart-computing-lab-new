@@ -101,6 +101,24 @@ async function loadRefs(type: SearchType, ids: string[], viewer: Viewer): Promis
       }
       break;
     }
+    case "resource": {
+      const rows = await prisma.labResource.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          projectLinks: { where: { project: visible }, select: { project } },
+          researchArea: { select: { id: true, title: true, sortOrder: true, visibility: true } },
+          group: { select: { id: true, name: true, sortOrder: true, visibility: true } },
+        },
+      });
+      for (const r of rows) {
+        const refs: Ref[] = r.projectLinks.map((l) => asProject(l.project));
+        if (r.researchArea && canView(viewer, r.researchArea.visibility)) refs.push(asArea(r.researchArea));
+        if (r.group && canView(viewer, r.group.visibility)) refs.push({ type: "group", id: r.group.id, title: r.group.name, sortOrder: r.group.sortOrder });
+        out.set(r.id, refs);
+      }
+      break;
+    }
     default:
       break; // forum topics already show their category/project in `meta`
   }

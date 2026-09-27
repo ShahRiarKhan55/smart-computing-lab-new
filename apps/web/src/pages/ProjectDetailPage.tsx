@@ -27,6 +27,7 @@ import { SectionHeader } from "../components/SectionHeader";
 import { PublicationItem } from "../components/PublicationItem";
 import { RelatedResearch } from "../components/RelatedResearch";
 import { RelatedKnowledge } from "../components/RelatedKnowledge";
+import { ReproducibilityPanel } from "../components/ReproducibilityPanel";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
 import { ProjectFormModal } from "../components/ProjectFormModal";
@@ -284,6 +285,8 @@ export function ProjectDetailPage() {
                 </div>
               )}
             </section>
+
+            <ReproducibilityPanel projectId={project.id} />
 
             <RelatedKnowledge relation="project" id={project.id} idPrefix="project" />
 

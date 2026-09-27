@@ -16,6 +16,7 @@ import { SectionHeader } from "../components/SectionHeader";
 import { RelatedOutputs } from "../components/RelatedOutputs";
 import { RelatedResearch } from "../components/RelatedResearch";
 import { RelatedKnowledge } from "../components/RelatedKnowledge";
+import { RelatedResources } from "../components/RelatedResources";
 import { GroupFormModal } from "../components/GroupFormModal";
 import { MembersModal } from "../components/MembersModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
@@ -163,6 +164,8 @@ export function GroupDetailPage() {
         <RelatedOutputs idPrefix="group" publications={group.publications} news={group.news} events={group.events} note={t("rs.group.outputsNote")} />
 
         <RelatedKnowledge relation="group" id={group.id} idPrefix="group" />
+
+        <RelatedResources relation="group" id={group.id} idPrefix="group" />
       </div>
 
       <GroupFormModal

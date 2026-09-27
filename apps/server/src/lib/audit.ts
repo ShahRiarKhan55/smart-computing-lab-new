@@ -84,6 +84,10 @@ export type AuditAction =
   | "KNOWLEDGE_CREATED"
   | "KNOWLEDGE_UPDATED"
   | "KNOWLEDGE_DELETED"
+  // lab resources & reproducibility (Phase 23); visibility and Japanese overrides reuse the generic actions
+  | "RESOURCE_CREATED"
+  | "RESOURCE_UPDATED"
+  | "RESOURCE_DELETED"
   // admin / CMS (Phase 17): a Japanese override edited from the admin translations view (events keep EVENT_TRANSLATIONS_CHANGED)
   | "TRANSLATIONS_CHANGED";
 
@@ -101,7 +105,8 @@ export type AuditEntityType =
   | "STORED_FILE"
   | "GALLERY_ITEM"
   | "EVENT"
-  | "KNOWLEDGE_DOC";
+  | "KNOWLEDGE_DOC"
+  | "LAB_RESOURCE";
 
 type AuditDb = Prisma.TransactionClient | PrismaClient;
 type AuditDetails = Record<string, string | number | boolean | null>;

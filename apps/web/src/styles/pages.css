@@ -2064,3 +2064,128 @@ a.tag:hover {
   min-height: 12rem;
   font-family: inherit;
 }
+
+/* ------------------------------------------------------------
+   Lab resources & reproducibility (Phase 23). Reuses .card / .tag / .badge / .grid / .detail-layout / .panel /
+   .event-facts and the knowledge filter/list styles above; only the resource-specific pieces live here.
+   Names, versions, vendors, identifiers, links and notes wrap (long Japanese and unbroken tokens included)
+   instead of overflowing, and every free-text value is TEXT (white-space: pre-wrap), never markup.
+   ------------------------------------------------------------ */
+.resource-card {
+  min-width: 0;
+}
+
+.resource-card__title,
+.resource-card__version,
+.resource-card__excerpt,
+.resource-card__byline {
+  overflow-wrap: anywhere;
+}
+
+.resource-card__excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.resource-detail .detail-layout__a,
+.resource-detail .detail-layout__aside,
+.resource-link,
+.resource-repro__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resource-repro__value,
+.resource-repro__notes {
+  white-space: pre-wrap;
+}
+
+.resource-facts__list {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.repro-details > .text-muted {
+  margin: 0 0 var(--space-3);
+}
+
+.repro-group__title {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  color: var(--green-800);
+}
+
+.repro-panel__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+}
+
+.repro-group {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.repro-group .repro-group__title {
+  margin-top: 0;
+}
+
+.repro-group__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repro-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.repro-item__name,
+.repro-item__meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resource-form__text {
+  min-height: 7rem;
+  font-family: inherit;
+}
+
+.resource-form__meta {
+  min-height: 4rem;
+  font-family: inherit;
+}
+
+/* Many projects: a bounded, scrollable checklist so the form never becomes a wall of checkboxes. */
+.resource-form__projects {
+  display: grid;
+  gap: var(--space-1);
+  max-height: 11rem;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.resource-form__projects .check-row {
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+}
+
+/* A project title with a very long unbroken word must wrap inside the checklist, not widen the dialog. */
+.resource-form__projects .check-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
