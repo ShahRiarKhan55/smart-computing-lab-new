@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { isSafeRedirectPath } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorState } from "../components/ErrorState";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -18,7 +19,13 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? "/profile";
+  const requestedFrom = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
+  // Phase 25 open-redirect guard: `requestedFrom` traces back to ProtectedRoute's `location.pathname`,
+  // which an attacker can influence via a crafted link (e.g. "/\evil.example.com", which some browsers
+  // treat as protocol-relative — the shape behind react-router's own open-redirect advisories in
+  // `<Link>`/`useNavigate`). Only a genuine same-app path is ever passed to `navigate()` after login;
+  // anything else falls back to the ordinary default, exactly as if no redirect had been requested.
+  const from = isSafeRedirectPath(requestedFrom) ? requestedFrom : "/profile";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

@@ -97,6 +97,72 @@ async function main() {
   check("login wrong password 401", (await guest.login(ADMIN.email, "wrong-password")).status === 401);
   check("login unknown email 401", (await guest.login("nobody@example.test", "whatever123")).status === 401);
   check("login missing fields 400", (await guest.post("/auth/login", {})).status === 400);
+
+  // Phase 25: brute-force guard on login, keyed by (client, email) — see lib/loginRateLimit.ts.
+  // Uses its own throwaway email so it never shares a bucket with ADMIN's own login checks above/below.
+  {
+    const brute = new Client();
+    const target = "p8test-bruteforce@example.test";
+    let statuses = [];
+    for (let i = 0; i < 10; i++) statuses.push((await brute.login(target, "wrong-password")).status);
+    check("10 failed logins against one (client, email) all read 401", statuses.every((s) => s === 401), JSON.stringify(statuses));
+    check("11th failed login against the same (client, email) is rate-limited 429", (await brute.login(target, "wrong-password")).status === 429);
+    check(
+      "a DIFFERENT email from the same client is unaffected (keyed per-email, not just per-client)",
+      (await brute.login("p8test-bruteforce-other@example.test", "wrong-password")).status === 401,
+    );
+    check(
+      "the SAME email from a fresh client (different cookie jar, same process) is still limited (keyed by IP, not the session cookie)",
+      (await new Client().login(target, "wrong-password")).status === 429,
+    );
+  }
+
+  // Phase 25 mutation-testing follow-up: a raw-fetch helper that can set X-Forwarded-For, so this
+  // single test process can exercise the (ip, email) keying's IP half the same way the checks above
+  // exercise its email half. This reads back through the app's own `trust proxy: 1` (app.ts, pre-dates
+  // Phase 25) exactly as a real reverse proxy's header would in production — it is NOT a claim that
+  // `X-Forwarded-For` is trustworthy input from an untrusted network today: this repo has no reverse
+  // proxy in front yet (see docs/architecture/phase25-...md §3), so in the CURRENT topology a hostile
+  // client can send any value here too. That is a real, disclosed limitation of the guard as it stands,
+  // not something this test claims to close.
+  async function loginAs(email, password, xForwardedFor) {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Forwarded-For": xForwardedFor },
+      body: JSON.stringify({ email, password }),
+    });
+    return res.status;
+  }
+
+  // The rate limit is keyed by (ip, email), not just email: a second claimed IP for the SAME email
+  // gets its own, unrelated bucket.
+  {
+    const email = "p8test-bruteforce-ip@example.test";
+    const statuses = [];
+    for (let i = 0; i < 10; i++) statuses.push(await loginAs(email, "wrong-password", "203.0.113.10"));
+    check("10 failed logins from one claimed IP all read 401", statuses.every((s) => s === 401), JSON.stringify(statuses));
+    check("11th failed login from that SAME claimed IP is rate-limited 429", (await loginAs(email, "wrong-password", "203.0.113.10")) === 429);
+    check(
+      "the SAME email from a DIFFERENT claimed IP is unaffected (keyed per-IP, not just per-email)",
+      (await loginAs(email, "wrong-password", "203.0.113.20")) === 401,
+    );
+  }
+
+  // A successful login clears the (ip, email) bucket, so a later mistake by the SAME legitimate user
+  // is not blocked by attempts that happened before they got their password right.
+  {
+    const ip = "203.0.113.30";
+    const statuses = [];
+    for (let i = 0; i < 9; i++) statuses.push(await loginAs(ADMIN.email, "wrong-password", ip));
+    check("9 failed logins (below the 10-attempt threshold) all read 401", statuses.every((s) => s === 401), JSON.stringify(statuses));
+    check("a correct login in between succeeds", (await loginAs(ADMIN.email, ADMIN.password, ip)) === 200);
+    check("first failed attempt after the successful login still reads 401", (await loginAs(ADMIN.email, "wrong-password", ip)) === 401);
+    check(
+      "second failed attempt after the successful login STILL reads 401 (the counter was reset, not carried over from before the success)",
+      (await loginAs(ADMIN.email, "wrong-password", ip)) === 401,
+    );
+  }
+
   const admin = new Client();
   r = await admin.login(ADMIN.email, ADMIN.password);
   check("admin login 200 role ADMIN", r.status === 200 && r.json?.user?.role === "ADMIN");

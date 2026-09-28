@@ -301,7 +301,11 @@ export function HomePage() {
         <div className="band__inner section--tight">
           <div className="cta-band">
             <div>
-              <p className="page-header__eyebrow">{t("home.ctaEyebrow")}</p>
+              {/* `.eyebrow` (not `.page-header__eyebrow`): that class's light-green text is styled for
+                  the dark `.page-header` banner. This band sits on the light `--surface-alt` background
+                  like every other in-page section, so it uses the same eyebrow style `SectionHeader`/
+                  `NotFoundPage` already use there (Phase 25: fixes a 1.83:1 WCAG AA contrast failure). */}
+              <p className="eyebrow">{t("home.ctaEyebrow")}</p>
               <h2 id="home-cta">{t("home.ctaTitle")}</h2>
               <p className="text-muted">{t("home.ctaDescription")}</p>
             </div>
