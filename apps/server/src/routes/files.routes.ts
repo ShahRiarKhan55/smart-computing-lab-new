@@ -98,7 +98,7 @@ router.get(
     res.setHeader("Content-Disposition", `${isImage ? "inline" : "attachment"}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(file.originalName)}`);
     res.setHeader("Cache-Control", file.visibility === "PUBLIC" ? "public, max-age=3600" : "private, no-store");
 
-    const stream = openReadStream(file.storageKey);
+    const stream = await openReadStream(file.storageKey);
     stream.on("error", () => {
       if (!res.headersSent) res.status(404).json({ error: "Not found" });
     });
