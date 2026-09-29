@@ -5,6 +5,30 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Smart Computing Lab</title>
+    <!--
+      Content-Security-Policy (Phase 26 hardening). This SPA is built and deployed as static
+      files, separately from the API server (see docs/architecture/phase26-…), so there is no
+      server here to send a CSP response header — a <meta> tag is this document's own policy,
+      travelling with the build regardless of which static host serves it.
+        - script-src/style-src 'self': every script and stylesheet this app ships is its own
+          Vite-built bundle; style-src also needs 'unsafe-inline' for the one dynamic inline
+          `style={{ width: ... }}` bar-chart fill in HomePage.tsx (a known, deliberate trade-off —
+          documented rather than silently accepted).
+        - fonts.googleapis.com / fonts.gstatic.com: the Google Fonts stylesheet + font files
+          loaded above.
+        - frame-src https://calendar.google.com: the embedded lab calendar on /schedule
+          (SchedulePage.tsx) — the one legitimate third-party iframe in this app.
+        - connect-src 'self': every API call is same-origin (see the reverse-proxy topology note
+          in apps/server/src/lib/trustProxy.ts) — this app never calls a third-party API directly.
+        - img-src 'self' data:: every image is served by this app's own /api/files/:id; no
+          external image host is used anywhere.
+        - object-src 'none', base-uri 'self', form-action 'self': no plugin content, no injected
+          <base> tag, no form ever submits to a foreign origin.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-src https://calendar.google.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

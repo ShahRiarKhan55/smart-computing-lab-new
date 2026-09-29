@@ -4,7 +4,11 @@
  * section, the database directly.
  *
  *   # terminal 1 (use a COPY of the database for anything write-heavy):
- *   DATABASE_URL=file:/abs/path/to/copy.db PORT=4011 tsx src/index.ts
+ *   DATABASE_URL=file:/abs/path/to/copy.db PORT=4011 TRUST_PROXY=1 tsx src/index.ts
+ *   # TRUST_PROXY=1 (Phase 26): this suite's X-Forwarded-For brute-force section (below) tests the
+ *   # "exactly one trusted reverse-proxy hop" topology specifically — see lib/trustProxy.ts and
+ *   # scripts/trust-proxy-regression.mjs (which covers the complementary TRUST_PROXY=0 topology,
+ *   # self-contained, no manual server startup needed).
  *   # terminal 2:
  *   DATABASE_URL=file:/abs/path/to/copy.db API=http://localhost:4011 node scripts/api-regression.mjs
  *   SKIP_PHASE8=1 ...   # skip the Phase 8 + 9 + 9.1 sections (pre-Phase-8 schema)
@@ -117,14 +121,14 @@ async function main() {
     );
   }
 
-  // Phase 25 mutation-testing follow-up: a raw-fetch helper that can set X-Forwarded-For, so this
-  // single test process can exercise the (ip, email) keying's IP half the same way the checks above
-  // exercise its email half. This reads back through the app's own `trust proxy: 1` (app.ts, pre-dates
-  // Phase 25) exactly as a real reverse proxy's header would in production — it is NOT a claim that
-  // `X-Forwarded-For` is trustworthy input from an untrusted network today: this repo has no reverse
-  // proxy in front yet (see docs/architecture/phase25-...md §3), so in the CURRENT topology a hostile
-  // client can send any value here too. That is a real, disclosed limitation of the guard as it stands,
-  // not something this test claims to close.
+  // Phase 25 mutation-testing follow-up, updated for Phase 26: a raw-fetch helper that can set
+  // X-Forwarded-For, so this single test process can exercise the (ip, email) keying's IP half the
+  // same way the checks above exercise its email half. This section requires the disposable server
+  // under test to have been started with TRUST_PROXY=1 (see this file's header and
+  // lib/trustProxy.ts) — i.e. it deliberately tests the "exactly one trusted reverse-proxy hop"
+  // topology, where trusting the right-most X-Forwarded-For entry is correct by design. The
+  // complementary "no reverse proxy, a spoofed header must be ignored" topology (TRUST_PROXY=0) is
+  // covered separately by scripts/trust-proxy-regression.mjs, not here.
   async function loginAs(email, password, xForwardedFor) {
     const res = await fetch(`${API}/api/auth/login`, {
       method: "POST",

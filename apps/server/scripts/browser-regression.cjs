@@ -29,7 +29,14 @@ const API = process.argv[3] || "http://localhost:4001";
 const SHOTS = process.argv[4] || path.join(os.tmpdir(), "shots");
 fs.mkdirSync(SHOTS, { recursive: true });
 const PORT = 9334;
-const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+// BROWSER_PATH (Phase 26): this script drives a real browser directly over CDP, spawned as a raw
+// child process — it always hard-coded a Windows-only Edge path, so it could never run anywhere
+// else (this container, any Linux CI runner, ...) without editing the script by hand. The Windows
+// default is unchanged for whoever already runs it there; BROWSER_PATH overrides it for any other
+// platform/executable (e.g. the pre-installed Linux Chromium at /opt/pw-browsers/chromium in this
+// container — any recent Chromium/Edge build works, since this only needs `--headless=new` +
+// `--remote-debugging-port` CDP support, nothing Edge-specific).
+const EDGE = process.env.BROWSER_PATH || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const PW = "Str0ngPassw0rd!";
 const ADMIN = { email: "admin@smartcomputinglab.org", password: "ChangeMe123!" };
 
@@ -129,7 +136,12 @@ async function seed() {
 
 // ---------------------------------------------------------------- CDP plumbing
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), "edge-p91-"));
-const edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, "--no-first-run", "--disable-gpu", "about:blank"], { stdio: "ignore" });
+// --no-sandbox (Phase 26, BROWSER_PATH override only): Chromium refuses to start as root without
+// it (see https://crbug.com/638180) — the containers this override targets commonly run as root.
+// Never added for the default Windows/Edge path, which never runs as root.
+const edgeArgs = ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, "--no-first-run", "--disable-gpu", "about:blank"];
+if (process.env.BROWSER_PATH) edgeArgs.splice(4, 0, "--no-sandbox");
+const edge = spawn(EDGE, edgeArgs, { stdio: "ignore" });
 
 async function connect() {
   for (let i = 0; i < 60; i++) {

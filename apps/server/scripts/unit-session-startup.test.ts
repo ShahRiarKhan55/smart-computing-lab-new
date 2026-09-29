@@ -83,14 +83,18 @@ const DB = "file:./unused-session-startup-test.db";
 const main = async () => {
   // ---- the defect this phase's hardening actually fixes: must refuse to start ---------------------
   // SESSION_SECRET: "" (present, empty) — not omitted — so tsx's own .env auto-load can't refill it.
-  const failCase = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: "", PORT: String(randomPort()), DATABASE_URL: DB }, 15000);
+  // TRUST_PROXY=0 is set explicitly so this case isolates SESSION_SECRET specifically (Phase 26
+  // made TRUST_PROXY itself a separate required-in-production value — see
+  // unit-trust-proxy-startup.test.ts — and an unset TRUST_PROXY would otherwise be the FIRST thing
+  // to fail here, never reaching the SESSION_SECRET check this test is actually about).
+  const failCase = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: "", TRUST_PROXY: "0", PORT: String(randomPort()), DATABASE_URL: DB }, 15000);
   t("production startup with no SESSION_SECRET did not hang/spawn-fail", !failCase.spawnError);
   t("production startup with no SESSION_SECRET exits (non-zero, not still running)", failCase.code !== null && failCase.code !== 0);
   t("production startup with no SESSION_SECRET never logs 'listening'", !/listening on/.test(failCase.stdout));
   t("production startup with no SESSION_SECRET reports the expected error", /SESSION_SECRET must be set in production/.test(failCase.stderr));
 
   // ---- complementary path: a real secret must still let production start normally -----------------
-  const passCase = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: "a-sufficiently-long-test-only-session-secret-000000", PORT: String(randomPort()), DATABASE_URL: DB }, 15000);
+  const passCase = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: "a-sufficiently-long-test-only-session-secret-000000", TRUST_PROXY: "0", PORT: String(randomPort()), DATABASE_URL: DB }, 15000);
   t("production startup with a real SESSION_SECRET did not hang/spawn-fail", !passCase.spawnError);
   t("production startup with a real SESSION_SECRET actually starts listening", /listening on/.test(passCase.stdout));
   t("production startup with a real SESSION_SECRET is still running (not exited on its own)", passCase.code === null);
