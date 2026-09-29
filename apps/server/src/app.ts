@@ -4,19 +4,45 @@ import { Prisma } from "@prisma/client";
 import { createSessionMiddleware } from "./lib/session.js";
 import { ValidationError, HttpError } from "./lib/validate.js";
 import { multerErrorMessage } from "./lib/fileService.js";
+import { resolveTrustProxy } from "./lib/trustProxy.js";
+import { securityHeaders } from "./lib/security.js";
 import apiRoutes from "./routes/index.js";
+import sitemapRoutes from "./routes/sitemap.routes.js";
+
+// Explicit, documented JSON body cap (Phase 26). This is Express's own long-standing default —
+// unchanged in behavior — made explicit rather than an implicit library default, and named so a
+// future change is a deliberate one-line edit instead of a rediscovery of what "the default" is.
+const JSON_BODY_LIMIT = "100kb";
 
 export function createApp() {
   const app = express();
+  const isProduction = process.env.NODE_ENV === "production";
 
-  app.set("trust proxy", 1);
-  app.use(express.json());
+  // Explicit, environment-driven client-IP trust policy (Phase 26 — see lib/trustProxy.ts for the
+  // full rationale). Replaces a previously hard-coded `trust proxy: 1`, which was safe only for
+  // one specific, undocumented deployment topology and silently wrong for any other.
+  app.set("trust proxy", resolveTrustProxy());
+  app.use(securityHeaders(isProduction));
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(createSessionMiddleware());
 
   app.get("/api/health", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.json({ status: "ok" });
   });
 
+  // robots.txt / sitemap.xml (Phase 26 §14): served at the root, not under /api, because search
+  // engines fetch them from the document root by convention. See routes/sitemap.routes.ts and the
+  // deployment topology note there for what a reverse proxy needs to route here.
+  app.use(sitemapRoutes);
+
+  app.use("/api", (_req, res, next) => {
+    // Default for every API response: never cache a JSON API response by default. Any route that
+    // legitimately wants caching (e.g. GET /api/files/:id for a PUBLIC file) sets its own
+    // Cache-Control later in its handler, which overrides this.
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
   app.use("/api", apiRoutes);
 
   app.use((req, res) => {

@@ -20,6 +20,18 @@ function sessionSecret(): string {
   return "dev-secret-change-me";
 }
 
+/**
+ * PRODUCTION DEPLOYMENT TRAP (Phase 26, found while adding scripts/session-cookie-regression.mjs):
+ * `cookie.secure: true` makes express-session refuse to send `Set-Cookie` AT ALL — not "without
+ * Secure", none — unless it can positively confirm the request is secure. That confirmation comes
+ * from Express's own `req.secure`, which (once `TRUST_PROXY` — see lib/trustProxy.ts — trusts the
+ * hop) reads the `X-Forwarded-Proto` header. A reverse proxy that terminates TLS but forgets to set
+ * `X-Forwarded-Proto: https` will make login look like it succeeds (200 + the user's own JSON body)
+ * while NO session is ever established — every following request is silently treated as a guest.
+ * `TRUST_PROXY=1` alone does not prevent this; the proxy must also send that header. Documented in
+ * the deployment checklist (docs/architecture/phase26-…) and exercised directly by
+ * scripts/session-cookie-regression.mjs.
+ */
 export function createSessionMiddleware() {
   return session({
     store: new PrismaSessionStore(prisma),
