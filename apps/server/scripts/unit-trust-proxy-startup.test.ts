@@ -94,7 +94,12 @@ const main = async () => {
   t("production startup with TRUST_PROXY=1 is still running (not exited on its own)", oneHop.code === null);
 
   // ---- No database configuration at all in production: must refuse to start (lib/config.ts) ------
-  const noDb = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "0", PORT: String(randomPort()), DATABASE_URL: "" }, 15000);
+  // Explicitly clears TURSO_DATABASE_URL/TURSO_AUTH_TOKEN too, not just DATABASE_URL -- baseEnv
+  // spreads process.env, so a shell that happens to have real Turso credentials set (e.g. while
+  // working on the Vercel/Turso adapter itself) would otherwise leak them in here and make this
+  // case wrongly pass via the Turso branch instead of exercising the "nothing configured" refusal
+  // this check exists to prove.
+  const noDb = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "0", PORT: String(randomPort()), DATABASE_URL: "", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "" }, 15000);
   t("production startup with no database config did not hang/spawn-fail", !noDb.spawnError);
   t("production startup with no database config exits (non-zero, not still running)", noDb.code !== null && noDb.code !== 0);
   t("production startup with no database config never logs 'listening'", !/listening on/.test(noDb.stdout));
