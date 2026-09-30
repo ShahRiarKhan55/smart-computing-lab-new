@@ -1,6 +1,8 @@
 /**
  * Regression test for the Phase 26 TRUST_PROXY/DATABASE_URL production fail-fast checks (see
- * lib/trustProxy.ts and lib/config.ts). Same real-process-spawn approach as
+ * lib/trustProxy.ts and lib/config.ts), extended by the Vercel deployment adapter to also cover
+ * the TURSO_DATABASE_URL/TURSO_AUTH_TOKEN pair `assertProductionConfig()` now accepts as an
+ * alternative to a plain `DATABASE_URL` (see lib/prisma.ts). Same real-process-spawn approach as
  * unit-session-startup.test.ts (see that file's header for why a direct function call would not
  * actually prove the app refuses to boot): this spawns the real `src/index.ts` entry point.
  *
@@ -91,12 +93,53 @@ const main = async () => {
   t("production startup with TRUST_PROXY=1 actually starts listening", /listening on/.test(oneHop.stdout));
   t("production startup with TRUST_PROXY=1 is still running (not exited on its own)", oneHop.code === null);
 
-  // ---- DATABASE_URL unset in production: must refuse to start (lib/config.ts) --------------------
-  const noDb = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "0", PORT: String(randomPort()), DATABASE_URL: "" }, 15000);
-  t("production startup with no DATABASE_URL did not hang/spawn-fail", !noDb.spawnError);
-  t("production startup with no DATABASE_URL exits (non-zero, not still running)", noDb.code !== null && noDb.code !== 0);
-  t("production startup with no DATABASE_URL never logs 'listening'", !/listening on/.test(noDb.stdout));
-  t("production startup with no DATABASE_URL reports the expected error", /DATABASE_URL must be set in production/.test(noDb.stderr));
+  // ---- No database configuration at all in production: must refuse to start (lib/config.ts) ------
+  // Explicitly clears TURSO_DATABASE_URL/TURSO_AUTH_TOKEN too, not just DATABASE_URL -- baseEnv
+  // spreads process.env, so a shell that happens to have real Turso credentials set (e.g. while
+  // working on the Vercel/Turso adapter itself) would otherwise leak them in here and make this
+  // case wrongly pass via the Turso branch instead of exercising the "nothing configured" refusal
+  // this check exists to prove.
+  const noDb = await runStartup({ ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "0", PORT: String(randomPort()), DATABASE_URL: "", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "" }, 15000);
+  t("production startup with no database config did not hang/spawn-fail", !noDb.spawnError);
+  t("production startup with no database config exits (non-zero, not still running)", noDb.code !== null && noDb.code !== 0);
+  t("production startup with no database config never logs 'listening'", !/listening on/.test(noDb.stdout));
+  t("production startup with no database config reports the expected error", /A database connection is required in production/.test(noDb.stderr));
+
+  // ---- Vercel deployment adapter: TURSO_DATABASE_URL set without TURSO_AUTH_TOKEN must refuse ----
+  const tursoUrlOnly = await runStartup(
+    { ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "1", PORT: String(randomPort()), DATABASE_URL: "", TURSO_DATABASE_URL: "libsql://fake-test-db.turso.io", TURSO_AUTH_TOKEN: "" },
+    15000,
+  );
+  t("production startup with TURSO_DATABASE_URL but no TURSO_AUTH_TOKEN did not hang/spawn-fail", !tursoUrlOnly.spawnError);
+  t("production startup with TURSO_DATABASE_URL but no TURSO_AUTH_TOKEN exits (non-zero, not still running)", tursoUrlOnly.code !== null && tursoUrlOnly.code !== 0);
+  t("production startup with TURSO_DATABASE_URL but no TURSO_AUTH_TOKEN never logs 'listening'", !/listening on/.test(tursoUrlOnly.stdout));
+  t(
+    "production startup with TURSO_DATABASE_URL but no TURSO_AUTH_TOKEN reports the expected error",
+    /TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must both be set together/.test(tursoUrlOnly.stderr),
+  );
+
+  // ---- Vercel deployment adapter: TURSO_AUTH_TOKEN set without TURSO_DATABASE_URL must refuse ----
+  const tursoTokenOnly = await runStartup(
+    { ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "1", PORT: String(randomPort()), DATABASE_URL: "", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "fake-test-token" },
+    15000,
+  );
+  t("production startup with TURSO_AUTH_TOKEN but no TURSO_DATABASE_URL exits (non-zero, not still running)", tursoTokenOnly.code !== null && tursoTokenOnly.code !== 0);
+  t(
+    "production startup with TURSO_AUTH_TOKEN but no TURSO_DATABASE_URL reports the expected error",
+    /TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must both be set together/.test(tursoTokenOnly.stderr),
+  );
+
+  // ---- Vercel deployment adapter: both Turso vars set starts normally, no local DATABASE_URL ----
+  // PrismaClient (like the plain-file path above) never connects eagerly — the libSQL adapter is
+  // constructed against a syntactically valid but unreachable URL, and the process still reaches
+  // "listening on" without ever attempting a real connection, exactly like the TRUST_PROXY=0/1
+  // positive-path checks above.
+  const tursoBoth = await runStartup(
+    { ...baseEnv, NODE_ENV: "production", SESSION_SECRET: REAL_SECRET, TRUST_PROXY: "1", PORT: String(randomPort()), DATABASE_URL: "", TURSO_DATABASE_URL: "libsql://fake-test-db.turso.io", TURSO_AUTH_TOKEN: "fake-test-token" },
+    15000,
+  );
+  t("production startup with both TURSO_DATABASE_URL and TURSO_AUTH_TOKEN actually starts listening", /listening on/.test(tursoBoth.stdout));
+  t("production startup with both TURSO_DATABASE_URL and TURSO_AUTH_TOKEN is still running (not exited on its own)", tursoBoth.code === null);
 
   console.log(`\n${ok} trust-proxy/config startup checks passed, ${failures.length} failed.`);
   if (failures.length) {

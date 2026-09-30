@@ -7,6 +7,15 @@
  * matches the app's current single-process deployment (see docs/architecture); a future
  * multi-instance deployment would need a shared store instead (Phase 26 territory, not a
  * change made here).
+ *
+ * VERCEL DEPLOYMENT ADAPTER — known limitation, deliberately not changed here: Vercel Functions
+ * are exactly the "multi-instance" case the note above already flagged. This `Map` is per
+ * function-instance, not shared across concurrent/cold-started instances, so the guard's
+ * effectiveness degrades (a fresh instance means a fresh, empty bucket) rather than disappearing
+ * outright — a real login still requires the correct password regardless. Fixing this properly
+ * means a shared store (e.g. the same Turso database this app already uses — see lib/prisma.ts),
+ * which is a real, separate follow-up, not something this deployment-adapter change redesigns
+ * without evidence it's actually needed in practice.
  */
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 10;

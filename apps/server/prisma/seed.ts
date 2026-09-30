@@ -2,11 +2,16 @@
  * CLI-only seed script. Run with `npm run seed -w apps/server`.
  * Safe to re-run — it skips anything that already exists, and it is
  * NOT exposed over HTTP.
+ *
+ * Uses the application's own Prisma client (src/lib/prisma.ts) rather than constructing a
+ * separate one, so this script picks the same local-file-vs-Turso connection the running app
+ * does: local `DATABASE_URL` when `TURSO_DATABASE_URL` is unset, the libSQL driver adapter
+ * against Turso when it's set. A second, independent `PrismaClient` here would silently ignore
+ * TURSO_DATABASE_URL/TURSO_AUTH_TOKEN and always open the local file, even when the caller's
+ * intent was clearly to seed Turso.
  */
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/lib/prisma.js";
 
 async function seedAdmin() {
   const email = "admin@smartcomputinglab.org";

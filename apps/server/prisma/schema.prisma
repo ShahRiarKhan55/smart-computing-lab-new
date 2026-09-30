@@ -1,5 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Vercel deployment adapter (see src/lib/prisma.ts): lets PrismaClient accept a driver
+  // adapter (Turso/libSQL in production) instead of only ever opening `url` itself. The
+  // datasource below is unchanged — still plain "sqlite", still reads DATABASE_URL for local
+  // dev/test — this only makes the adapter constructor option available.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

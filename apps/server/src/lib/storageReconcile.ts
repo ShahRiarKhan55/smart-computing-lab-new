@@ -35,6 +35,14 @@ import { STORAGE_ROOT } from "./storage.js";
  * Deleting is opt-in (`delete: true`) and touches ONLY paths already computed on disk (filtered
  * through the same UUID key pattern `lib/storage.ts` uses), never a client- or DB-supplied path —
  * the same "never trust a path, only ever an opaque key" discipline as the rest of this module.
+ *
+ * LOCAL-FILESYSTEM ONLY (Vercel deployment adapter): this module reads `STORAGE_ROOT` and walks
+ * it directly with `readdir`/`stat`/`unlink` — it does not go through `lib/storage.ts`'s own
+ * exported functions, and has no equivalent for the Vercel Blob backend those functions use when
+ * `BLOB_READ_WRITE_TOKEN` is set. Running this against a Blob-backed deployment finds nothing (an
+ * empty/nonexistent local directory), not an error — a known, documented limitation, not a bug.
+ * A Blob-aware reconciler (using `@vercel/blob`'s own `list()`) is a real but separate follow-up,
+ * out of scope for this adapter change.
  */
 
 const KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
