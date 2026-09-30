@@ -1,3 +1,4 @@
+import path from "node:path";
 import { assertProductionConfig } from "../apps/server/src/lib/config.js";
 import { createApp } from "../apps/server/src/app.js";
 
@@ -29,7 +30,36 @@ import { createApp } from "../apps/server/src/app.js";
  * `vercel.json`, per docs/architecture/…-vercel-deployment-adapter.md, because it also needs
  * `/robots.txt`, `/sitemap.xml`, and the separately-built static SPA to coexist in one project,
  * which the zero-config single-purpose example does not need to handle).
+ *
+ * PRISMA NATIVE ENGINE PATH (found by reproducing the actual production crash locally — see
+ * docs/architecture/…-vercel-deployment-adapter.md): Vercel bundles this whole file, including
+ * `@prisma/client`, into one flat function artifact. `@prisma/client`'s own engine-locator code
+ * finds its native query-engine binary (`libquery_engine-<target>.so.node`) by walking a
+ * hardcoded number of directories up from its OWN source file's location — a path that only
+ * makes sense in the normal, un-bundled `node_modules/@prisma/client/...` layout. Once bundled
+ * into a single file living somewhere else entirely, that computed path no longer points at the
+ * real file, and the very first Prisma query (the session middleware's own lookup, on every
+ * request including `/api/health`) throws `PrismaClientInitializationError`. `vercel.json`'s
+ * `functions["api/index.ts"].includeFiles` ships the binary alongside this function (preserving
+ * its normal `node_modules/.prisma/client/...` path within the deployment), but that alone does
+ * NOT fix the lookup — reproduced directly: even with the file physically present at that exact
+ * path, none of the locations `@prisma/client`'s own broken relative search actually checks match
+ * it. `PRISMA_QUERY_ENGINE_LIBRARY` is Prisma's own documented escape hatch for exactly this case
+ * — an explicit absolute path that bypasses its own (broken-by-bundling) auto-detection entirely.
+ * Computed from `process.cwd()` (Vercel always invokes a function with its working directory set
+ * to the function's own root) rather than hardcoded, so this works regardless of the exact
+ * absolute path Vercel happens to deploy to. Only ever runs here, in the Vercel-only entry point
+ * — never during `npm install`/`prisma generate` (a separate, earlier build step that never
+ * imports this file), so it cannot interfere with the client actually being generated. A
+ * pre-existing value (e.g. set explicitly in the Vercel dashboard) is respected, not overridden.
  */
+if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
+  process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
+    process.cwd(),
+    "node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node",
+  );
+}
+
 assertProductionConfig();
 
 export default createApp();
