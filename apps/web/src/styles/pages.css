@@ -2203,3 +2203,93 @@ a.tag:hover {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* ------------------------------------------------------------
+   Documentation / help area (researcher onboarding phase). The body content is pre-rendered
+   HTML from docs/user-guide/*.md (see apps/web/src/pages/docs/DocPage.tsx) — bare h1/h2/p/ul/
+   table/code elements with no classes of their own, so this is the one place the site styles
+   those tags directly rather than via a component class.
+   ------------------------------------------------------------ */
+.docs-page__body {
+  padding-block: var(--space-8) var(--space-16);
+}
+
+.docs-page__body h1 {
+  margin-bottom: var(--space-2);
+}
+
+.docs-page__body h2 {
+  margin-top: var(--space-10);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.docs-page__body h3 {
+  margin-top: var(--space-6);
+}
+
+.docs-page__body p,
+.docs-page__body ul,
+.docs-page__body ol {
+  margin-block: var(--space-3);
+  line-height: 1.65;
+}
+
+.docs-page__body ul,
+.docs-page__body ol {
+  padding-inline-start: var(--space-6);
+}
+
+.docs-page__body li {
+  margin-block: var(--space-1);
+}
+
+.docs-page__body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: var(--space-4);
+  font-size: 0.9em;
+}
+
+.docs-page__body th,
+.docs-page__body td {
+  border: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.docs-page__body th {
+  background: var(--neutral-bg);
+}
+
+.docs-page__body code {
+  background: var(--neutral-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+
+.docs-page__body blockquote {
+  border-left: 3px solid var(--border-strong);
+  margin-block: var(--space-4);
+  padding-inline-start: var(--space-4);
+  color: var(--neutral-fg);
+}
+
+.docs-index-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-6) 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.docs-index-list__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-heading);
+}

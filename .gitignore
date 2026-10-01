@@ -11,3 +11,9 @@ apps/server/sessions.sqlite
 apps/server/storage/
 .DS_Store
 *.log
+
+# Generated PDF guides (npm run docs:pdf -w apps/server) — regenerated on demand from
+# docs/user-guide/*.md, not committed. apps/web/src/docs/content/*.ts (the HTML the web /docs
+# pages render) is NOT listed here: unlike these PDFs, the web app needs those files to build, so
+# they are committed generated source — see docs/user-guide/README.md.
+apps/server/dist-docs/

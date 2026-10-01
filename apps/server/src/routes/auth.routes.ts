@@ -1,11 +1,12 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { loginSchema } from "@scl/shared";
+import { loginSchema, changePasswordSchema } from "@scl/shared";
 import { prisma } from "../lib/prisma.js";
-import { getSessionUser } from "../middleware/auth.js";
+import { getSessionUser, requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { clearLoginAttempts, isLoginRateLimited, recordFailedLogin } from "../lib/loginRateLimit.js";
+import { recordAudit } from "../lib/audit.js";
 
 const router = Router();
 
@@ -55,6 +56,52 @@ router.post(
     req.session.userId = user.id;
 
     res.json({ user: { id: user.id, email: user.email, role: user.role } });
+  }),
+);
+
+// POST /api/auth/password { currentPassword, newPassword } -> self-service password change for
+// the logged-in account only (there is no "change someone else's password" route anywhere —
+// account recovery for a locked-out user is an admin deleting + re-inviting them, same as today).
+// Requires the correct CURRENT password, so a hijacked-but-still-logged-in session cannot be used
+// to lock the real owner out permanently without first proving it already knows the password.
+router.post(
+  "/password",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = parseOrThrow(changePasswordSchema, req.body);
+    const ip = req.ip ?? "unknown";
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { id: true, email: true, passwordHash: true } });
+    if (!user) throw new HttpError(401, "Unauthorized");
+
+    // Same brute-force guard as login (keyed the same way), since this is the same kind of
+    // bcrypt.compare an attacker could otherwise hammer from a stolen-but-still-valid session.
+    if (isLoginRateLimited(ip, user.email)) {
+      throw new HttpError(429, "Too many attempts. Please wait a few minutes and try again.");
+    }
+
+    const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!currentOk) {
+      recordFailedLogin(ip, user.email);
+      throw new HttpError(401, "Current password is incorrect.");
+    }
+    clearLoginAttempts(ip, user.email);
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+      await recordAudit(tx, { actor: { id: user.id, email: user.email }, action: "PASSWORD_CHANGED", entityType: "USER", entityId: user.id });
+    });
+
+    // Fresh session id after a password change, same fixation-safe pattern as login — the old
+    // session id (and so any copy of it an attacker may hold) stops working immediately, while the
+    // user making the change stays logged in under the new id.
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
+    req.session.userId = user.id;
+
+    res.json({ success: true });
   }),
 );
 

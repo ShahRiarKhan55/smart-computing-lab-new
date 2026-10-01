@@ -11,6 +11,7 @@ export const ja: Record<keyof typeof en, string> = {
   "common.save": "保存",
   "common.saving": "保存中…",
   "common.cancel": "キャンセル",
+  "common.done": "完了",
   "common.delete": "削除",
   "common.deleting": "削除中…",
   "common.edit": "編集",
@@ -90,6 +91,7 @@ export const ja: Record<keyof typeof en, string> = {
   "nav.messages": "メッセージ",
   "nav.notifications": "通知",
   "nav.adminDashboard": "管理者ダッシュボード",
+  "nav.help": "ヘルプ・ドキュメント",
   "nav.logout": "ログアウト",
   "nav.login": "ログイン",
   "nav.searchSite": "サイト内検索",
@@ -529,6 +531,34 @@ export const ja: Record<keyof typeof en, string> = {
   "auth.contactAdminSuffix": "して追加を依頼してください。",
   "auth.invalidCredentials": "メールアドレスまたはパスワードが正しくありません。",
 
+  // ---- researcher onboarding: invitation acceptance (/invite/:token) ------------------------
+  "invite.title": "アカウントを有効化",
+  "invite.heading": "アカウントを有効化",
+  "invite.checking": "招待を確認しています…",
+  "invite.invalidOrExpired": "この招待リンクは無効か、期限切れ、またはすでに使用されています。",
+  "invite.invalidHint": "研究室の管理者に新しい招待リンクを依頼してください。",
+  "invite.subtitle": "ようこそ、{email}さん。アカウントを有効化するためにパスワードを設定してください。",
+  "invite.newPassword": "新しいパスワード",
+  "invite.passwordHint": "8文字以上で入力してください。",
+  "invite.confirmPassword": "パスワードの確認",
+  "invite.passwordsDontMatch": "パスワードが一致しません。",
+  "invite.activating": "有効化中…",
+  "invite.activateAccount": "アカウントを有効化",
+  "invite.neverShareNote": "パスワードは研究室の管理者を含め、誰にも教えないでください。",
+
+  // ---- documentation / help area --------------------------------------------------------------
+  "docs.index.title": "ヘルプ・ドキュメント",
+  "docs.index.description": "サイトの使い方ガイドです — 訪問者、ラボメンバー、管理者それぞれ向けの内容があります。",
+  "docs.index.moreAfterLogin": "ログインすると、研究者/ラボメンバー向けガイドも表示されます。",
+  "docs.adminGuideLink": "管理者ガイドを読む",
+  "docs.onboardingGuideLink": "招待を受け取りましたか？ 研究者オンボーディングガイドを読む",
+
+  "invite.err.invalidLink": "この招待リンクは無効です。",
+  "invite.err.alreadyUsed": "この招待はすでに使用されています。ログインしてください。",
+  "invite.err.revoked": "この招待は取り消されています。管理者に新しい招待を依頼してください。",
+  "invite.err.expired": "この招待は期限切れです。管理者に新しい招待を依頼してください。",
+  "invite.err.noLongerValid": "この招待は無効になっています。",
+
   // ---- profile ------------------------------------------------------------------------------
   "profile.pageTitle": "マイプロフィール",
 
@@ -640,6 +670,8 @@ export const ja: Record<keyof typeof en, string> = {
   "error.network": "サーバーに接続できませんでした。接続を確認して再試行してください。",
   "error.somethingWentWrong": "問題が発生しました。",
   "error.nothingToUpdate": "更新する内容がありません。",
+  "error.tooManyRequests": "リクエストが多すぎます。しばらくしてから再度お試しください。",
+  "error.tooManyAttempts": "試行回数が多すぎます。しばらくしてから再度お試しください。",
   "error.requestBodyInvalid": "リクエスト本文はJSONオブジェクトである必要があります。",
   "error.fileTooLarge": "ファイルサイズが大きすぎます。",
   "error.unsupportedFileType": "対応していないファイル形式です。",
@@ -879,6 +911,17 @@ export const ja: Record<keyof typeof en, string> = {
   "profile.categoryNote": "カテゴリー：{category}（管理者のみ変更可）",
   "profile.viewPublic": "公開プロフィールを見る",
 
+  // ---- self-service password change (own account only) ---------------------------------------
+  "profile.password.heading": "パスワード",
+  "profile.password.description": "ご自身のパスワードを変更します。この操作に研究室の管理者が関わることはありません。",
+  "profile.password.current": "現在のパスワード",
+  "profile.password.new": "新しいパスワード",
+  "profile.password.confirm": "新しいパスワード（確認）",
+  "profile.password.submit": "パスワードを変更",
+  "profile.password.success": "パスワードを変更しました。",
+  "profile.password.mismatch": "新しいパスワードが一致しません。",
+  "profile.password.err.incorrect": "現在のパスワードが正しくありません。",
+
   // ---- team member category labels (Phase 15) -------------------------------------------------
   "team.category.FACULTY": "教員",
   "team.category.PHD": "博士課程学生",
@@ -898,12 +941,10 @@ export const ja: Record<keyof typeof en, string> = {
   "team.removeConfirm": "{name}をチームから削除しますか？",
   "team.addTeamMember": "チームメンバーを追加",
 
-  // ---- create-login modal, admin dashboard (Phase 15) ----------------------------------------
-  "admin.createLogin.title": "メンバーのログインを作成",
+  // ---- researcher invitation modal, admin dashboard (Phase 15; fields reused by Phase: researcher
+  // onboarding — the modal itself was replaced, these per-field labels were not) ----------------
   "admin.createLogin.chooseOrCreate": "リンクするチームメンバーを選択するか、「新しいチームメンバープロフィールを作成」を選んでください。",
   "admin.createLogin.email": "メールアドレス",
-  "admin.createLogin.tempPassword": "仮パスワード",
-  "admin.createLogin.tempPasswordHint": "{min}文字以上",
   "admin.createLogin.accountRole": "アカウントの役割",
   "admin.createLogin.roleMember": "メンバー（自分のプロフィールを編集、論文・ニュース・研究を追加）",
   "admin.createLogin.roleLabManager": "ラボ管理者（コンテンツ・プロジェクト・グループを管理、アカウントは不可）",
@@ -918,8 +959,30 @@ export const ja: Record<keyof typeof en, string> = {
   "admin.createLogin.initials": "イニシャル",
   "admin.createLogin.memberRole": "役職 / 肩書き",
   "admin.createLogin.category": "カテゴリー",
-  "admin.createLogin.creating": "作成中…",
-  "admin.createLogin.createAccount": "アカウントを作成",
+  // ---- researcher onboarding invitations (admin side) -----------------------------------------
+  "admin.invite.title": "研究者を招待",
+  "admin.invite.intro": "研究者は以下のリンクを開いたときに自分でパスワードを設定します。管理者がパスワードを見たり設定したりすることはありません。",
+  "admin.invite.creating": "生成中…",
+  "admin.invite.generateLink": "招待リンクを生成",
+  "admin.invite.sectionTitle": "招待の一覧（保留中・過去分）",
+  "admin.invite.sectionDescription": "これまでに生成した研究者招待リンクです。各リンクは1回限り有効で、7日後に期限切れとなります。",
+  "admin.invite.noneYet": "招待はまだありません。",
+  "admin.invite.metaLine": "{role}として{by}が招待 · {expires}に期限切れ",
+  "admin.invite.revoke": "取り消す",
+  "admin.invite.revoking": "取り消し中…",
+  "admin.invite.revokeTitle": "この招待を取り消しますか？",
+  "admin.invite.revokeMessage": "{email}宛の招待リンクはすぐに無効になります。この操作は取り消せません。",
+  "admin.invite.revokedFor": "{email}宛の招待を取り消しました。",
+  "admin.invite.status.PENDING": "保留中",
+  "admin.invite.status.ACCEPTED": "承諾済み",
+  "admin.invite.status.EXPIRED": "期限切れ",
+  "admin.invite.status.REVOKED": "取り消し済み",
+  "admin.invite.linkReadyTitle": "招待リンクの準備ができました",
+  "admin.invite.linkReadyBody": "このリンクを今すぐコピーし、研究者本人に非公開で送ってください（メール、チャット、対面など）。再表示はされず、このサーバーにも保存されません。",
+  "admin.invite.linkLabel": "招待リンク",
+  "admin.invite.linkCopied": "クリップボードにコピーしました。",
+  "admin.invite.linkWarning": "このリンクはパスワードと同様に扱ってください。開いた人は誰でもアカウントを作成できます。7日後、または初回使用後に無効になります。",
+  "admin.invite.copyLink": "リンクをコピー",
   // ---- events (Phase 16) ---------------------------------------------------------------
   "nav.events": "イベント",
   "search.type.event": "イベント",

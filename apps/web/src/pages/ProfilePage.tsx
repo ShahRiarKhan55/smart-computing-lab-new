@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { updateOwnProfileSchema, type TeamMember } from "@scl/shared";
+import { updateOwnProfileSchema, changePasswordSchema, type TeamMember } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
+import { apiErrorMessage } from "../i18n/errorMessages";
 import { PageHeader } from "../components/PageHeader";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
@@ -50,8 +51,92 @@ export function ProfilePage() {
         {status === 404 && <EmptyState title={error ?? t("profile.noLinkedProfile")} />}
         {error && status !== 404 && <ErrorState message={error} onRetry={reload} />}
         {member && <ProfileForm initial={member} />}
+        {/* Account security (password change) is an ACCOUNT action, not a team-profile one, so it
+            is always available here even when this account has no linked team profile yet
+            (status === 404 above) — see apps/server/src/routes/auth.routes.ts POST /auth/password. */}
+        <PasswordChangeSection />
       </div>
     </>
+  );
+}
+
+function PasswordChangeSection() {
+  const t = useT();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+
+    if (newPassword !== confirm) {
+      setError(t("profile.password.mismatch"));
+      return;
+    }
+    const parsed = changePasswordSchema.safeParse({ currentPassword, newPassword });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? t("common.checkForm"));
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await apiFetch("/auth/password", { method: "POST", body: JSON.stringify(parsed.data) });
+      setSuccess(true);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirm("");
+    } catch (err) {
+      setError(err instanceof ApiError ? apiErrorMessage(err, t) : t("error.network"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="detail-section" aria-labelledby="profile-security">
+      <h2 id="profile-security">{t("profile.password.heading")}</h2>
+      <p className="sub">{t("profile.password.description")}</p>
+      {success && (
+        <div className="form-success" role="status">
+          <Icon name="check" size={16} /> {t("profile.password.success")}
+        </div>
+      )}
+      {error && <ErrorState message={error} />}
+      <form className="form-card" onSubmit={handleSubmit} noValidate aria-label={t("profile.password.heading")}>
+        <div className="form-group">
+          <label htmlFor="pw_current">{t("profile.password.current")}</label>
+          <input
+            id="pw_current"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+          />
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="pw_new">{t("profile.password.new")}</label>
+            <input id="pw_new" type="password" required autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label htmlFor="pw_confirm">{t("profile.password.confirm")}</label>
+            <input id="pw_confirm" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-actions">
+          <button className="btn btn--primary form-submit" type="submit" disabled={saving} aria-busy={saving}>
+            {saving ? t("common.saving") : t("profile.password.submit")}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 

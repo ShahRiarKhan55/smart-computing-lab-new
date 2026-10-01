@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ROLES, type CreateUserInput, type Role, type TeamMember, type UserSummary } from "@scl/shared";
+import { ROLES, type CreateInvitationInput, type InvitationSummary, type Role, type TeamMember, type UserSummary } from "@scl/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { apiFetch } from "../../lib/api";
 import { useT } from "../../i18n/LocaleContext";
@@ -9,7 +9,7 @@ import { ROLE_LABEL_KEY } from "../../auth/usePolicy";
 import { AdminBar } from "../../components/AdminBar";
 import { ConfirmActionModal } from "../../components/ConfirmActionModal";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
-import { CreateLoginModal } from "../../components/CreateLoginModal";
+import { InviteResearcherModal } from "../../components/InviteResearcherModal";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
 import { Icon } from "../../components/Icon";
@@ -28,12 +28,15 @@ export function AdminPeoplePage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<UserSummary[] | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invitations, setInvitations] = useState<InvitationSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
   const [linkTarget, setLinkTarget] = useState<UserSummary | null>(null);
   const [unlinkTarget, setUnlinkTarget] = useState<UserSummary | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<InvitationSummary | null>(null);
   const [pendingRole, setPendingRole] = useState<{ id: string; role: Role } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -44,9 +47,14 @@ export function AdminPeoplePage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [userList, teamList] = await Promise.all([apiFetch<UserSummary[]>("/users"), apiFetch<TeamMember[]>("/team")]);
+      const [userList, teamList, invitationList] = await Promise.all([
+        apiFetch<UserSummary[]>("/users"),
+        apiFetch<TeamMember[]>("/team"),
+        apiFetch<InvitationSummary[]>("/invitations"),
+      ]);
       setUsers(userList);
       setMembers(teamList);
+      setInvitations(invitationList);
       setLoadError(null);
     } catch (err) {
       setLoadError(apiErrorMessage(err, t));
@@ -59,8 +67,11 @@ export function AdminPeoplePage() {
   }, [loadData]);
 
   // Which profiles already have a login comes from the admin-only /users list, not from the public /team.
+  // A profile targeted by a still-PENDING invitation is excluded too, so two invitations can never
+  // race to claim the same team member.
   const linkedProfileIds = new Set((users ?? []).map((u) => u.teamMemberId));
-  const unlinkedMembers = members.filter((m) => !linkedProfileIds.has(m.id));
+  const pendingInviteProfileIds = new Set((invitations ?? []).filter((i) => i.status === "PENDING").map((i) => i.teamMemberId));
+  const unlinkedMembers = members.filter((m) => !linkedProfileIds.has(m.id) && !pendingInviteProfileIds.has(m.id));
   const countRole = (role: Role) => (users ? users.filter((u) => u.role === role).length : null);
   const roleLabel = (role: Role) => t(ROLE_LABEL_KEY[role] ?? "admin.role.MEMBER");
 
@@ -94,10 +105,18 @@ export function AdminPeoplePage() {
     }
   }
 
-  async function handleCreate(payload: CreateUserInput) {
+  async function handleCreate(payload: CreateInvitationInput): Promise<string> {
     reset();
-    await apiFetch("/users", { method: "POST", body: JSON.stringify(payload) });
-    setNotice(t("admin.loginCreatedFor", { email: payload.email }));
+    const created = await apiFetch<{ url: string }>("/invitations", { method: "POST", body: JSON.stringify(payload) });
+    setNewInviteUrl(created.url);
+    await loadData();
+    return created.url;
+  }
+
+  async function handleRevoke(target: InvitationSummary) {
+    reset();
+    await apiFetch(`/invitations/${target.id}`, { method: "DELETE" });
+    setNotice(t("admin.invite.revokedFor", { email: target.email }));
     await loadData();
   }
 
@@ -256,7 +275,55 @@ export function AdminPeoplePage() {
         )}
       </section>
 
-      <CreateLoginModal open={createOpen} unlinkedMembers={unlinkedMembers} onClose={() => setCreateOpen(false)} onCreate={handleCreate} />
+      <section className="detail-section" aria-labelledby="admin-invitations">
+        <SectionHeader compact id="admin-invitations" title={t("admin.invite.sectionTitle")} description={t("admin.invite.sectionDescription")} />
+        {!invitations && !loadError && <LoadingState label={t("admin.loadingAccounts")} variant="list" />}
+        {invitations && (
+          <div className="account-list">
+            {invitations.length === 0 && <EmptyState title={t("admin.invite.noneYet")} compact />}
+            {invitations.map((inv) => (
+              <div key={inv.id} className="account-row">
+                <div>
+                  <div className="account-row__email">
+                    {inv.email} <InvitationStatusBadge status={inv.status} />
+                  </div>
+                  <div className="account-row__meta">
+                    {t("admin.invite.metaLine", {
+                      role: roleLabel(inv.role).toLowerCase(),
+                      by: inv.invitedByEmail,
+                      expires: new Date(inv.expiresAt).toLocaleDateString(),
+                    })}
+                  </div>
+                </div>
+                {inv.status === "PENDING" && (
+                  <div className="account-row__actions">
+                    <button className="btn btn--danger btn--sm" type="button" onClick={() => { reset(); setRevokeTarget(inv); }}>
+                      {t("admin.invite.revoke")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <InviteResearcherModal open={createOpen} unlinkedMembers={unlinkedMembers} onClose={() => setCreateOpen(false)} onCreate={handleCreate} />
+
+      <InvitationLinkModal url={newInviteUrl} onClose={() => setNewInviteUrl(null)} />
+
+      <ConfirmActionModal
+        open={revokeTarget !== null}
+        title={t("admin.invite.revokeTitle")}
+        message={revokeTarget ? t("admin.invite.revokeMessage", { email: revokeTarget.email }) : ""}
+        confirmLabel={t("admin.invite.revoke")}
+        busyLabel={t("admin.invite.revoking")}
+        danger
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={async () => {
+          if (revokeTarget) await handleRevoke(revokeTarget);
+        }}
+      />
 
       <ConfirmDeleteModal
         open={deleteTarget !== null}
@@ -288,6 +355,67 @@ export function AdminPeoplePage() {
         }}
       />
     </>
+  );
+}
+
+function InvitationStatusBadge({ status }: { status: InvitationSummary["status"] }) {
+  const t = useT();
+  const labelKey = {
+    PENDING: "admin.invite.status.PENDING",
+    ACCEPTED: "admin.invite.status.ACCEPTED",
+    EXPIRED: "admin.invite.status.EXPIRED",
+    REVOKED: "admin.invite.status.REVOKED",
+  } as const;
+  const cls = {
+    PENDING: "badge badge--info",
+    ACCEPTED: "badge badge--brand",
+    EXPIRED: "badge",
+    REVOKED: "badge",
+  } as const;
+  return <span className={cls[status]}>{t(labelKey[status])}</span>;
+}
+
+/**
+ * Shown exactly once, right after POST /api/invitations returns — this is the ONLY place the raw
+ * link is ever available (see routes/invitations.routes.ts: the server never stores it and the
+ * list endpoint never includes it). Closing this dialog loses the link for good; the admin must
+ * copy it now and send it privately to the researcher, never to anyone else.
+ */
+function InvitationLinkModal({ url, onClose }: { url: string | null; onClose: () => void }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url ?? "");
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Modal open={url !== null} onClose={onClose} title={t("admin.invite.linkReadyTitle")}>
+      <p className="modal__body">{t("admin.invite.linkReadyBody")}</p>
+      <div className="form-group">
+        <label htmlFor="invite-link">{t("admin.invite.linkLabel")}</label>
+        <input id="invite-link" readOnly value={url ?? ""} onFocus={(e) => e.currentTarget.select()} />
+      </div>
+      {copied && (
+        <div className="form-success" role="status">
+          <Icon name="check" size={16} /> {t("admin.invite.linkCopied")}
+        </div>
+      )}
+      <p className="form-hint">{t("admin.invite.linkWarning")}</p>
+      <div className="modal__actions">
+        <button className="btn btn--primary" type="button" onClick={copy}>
+          <Icon name="copy" size={16} /> {t("admin.invite.copyLink")}
+        </button>
+        <button className="btn btn--secondary" type="button" onClick={onClose}>
+          {t("common.done")}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

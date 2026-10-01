@@ -56,6 +56,9 @@ export function Footer() {
             <li>
               <NavLink to="/search">{t("search.pageTitle")}</NavLink>
             </li>
+            <li>
+              <NavLink to="/docs">{t("docs.index.title")}</NavLink>
+            </li>
           </ul>
         </nav>
         <div className="footer__copy">{t("footer.copyright", { year: new Date().getFullYear() })}</div>

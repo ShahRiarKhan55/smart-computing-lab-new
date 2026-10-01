@@ -1130,7 +1130,12 @@ async function phase91(admin, guest) {
       if (!routerGuard && !/\brequire\w+/.test(m[3])) unguarded.push(`${f} ${m[1].toUpperCase()} ${m[2]}`);
     }
   }
-  check("static: every mutating route has an auth/policy guard (only login/logout are open)", mutating >= 36 && unguarded.sort().join("|") === "auth.routes.ts POST /login|auth.routes.ts POST /logout", `${mutating} routes; unguarded: ${unguarded.join("; ")}`);
+  // invitations.routes.ts POST /token/:token/accept is intentionally open, same class as
+  // login/logout: it is the one route a signed-OUT researcher calls (there is no session yet to
+  // guard with) — authorized instead by possession of the single-use invitation token itself
+  // (looked up by its hash inside the handler), not by requireAuth/requireCan.
+  const EXPECTED_UNGUARDED = ["auth.routes.ts POST /login", "auth.routes.ts POST /logout", "invitations.routes.ts POST /token/:token/accept"];
+  check("static: every mutating route has an auth/policy guard (only login/logout/invitation-accept are open)", mutating >= 36 && unguarded.sort().join("|") === EXPECTED_UNGUARDED.sort().join("|"), `${mutating} routes; unguarded: ${unguarded.join("; ")}`);
 
   // ------------------------------------------------------------------
   section("phase 9.1: audit regression");

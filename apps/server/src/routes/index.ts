@@ -21,6 +21,7 @@ import knowledgeRoutes from "./knowledge.routes.js";
 import resourcesRoutes from "./resources.routes.js";
 import adminRoutes from "./admin.routes.js";
 import workspaceRoutes from "./workspace.routes.js";
+import invitationsRoutes from "./invitations.routes.js";
 
 const router = Router();
 
@@ -46,5 +47,6 @@ router.use("/knowledge", knowledgeRoutes);
 router.use("/resources", resourcesRoutes);
 router.use("/admin", adminRoutes);
 router.use("/workspace", workspaceRoutes);
+router.use("/invitations", invitationsRoutes);
 
 export default router;

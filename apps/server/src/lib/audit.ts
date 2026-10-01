@@ -18,6 +18,11 @@ export type AuditAction =
   | "USER_DELETED"
   | "USER_LINKED"
   | "USER_UNLINKED"
+  | "PASSWORD_CHANGED"
+  // researcher onboarding invitations
+  | "INVITATION_CREATED"
+  | "INVITATION_REVOKED"
+  | "INVITATION_ACCEPTED"
   // visibility (one row per change, on top of the ordinary *_UPDATED row)
   | "CONTENT_VISIBILITY_CHANGED"
   // curated content
@@ -93,6 +98,7 @@ export type AuditAction =
 
 export type AuditEntityType =
   | "USER"
+  | "ACCOUNT_INVITATION"
   | "RESEARCH_AREA"
   | "PUBLICATION"
   | "NEWS_ITEM"
