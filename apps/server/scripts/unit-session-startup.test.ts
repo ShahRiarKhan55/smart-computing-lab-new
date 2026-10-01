@@ -77,7 +77,11 @@ function runStartup(env: NodeJS.ProcessEnv, timeoutMs: number): Promise<StartupR
   });
 }
 
-const baseEnv: NodeJS.ProcessEnv = { ...process.env };
+// Test-environment safety: clears any ambient TURSO_DATABASE_URL/TURSO_AUTH_TOKEN the invoking
+// shell might have (e.g. from unrelated Turso work in the same terminal) so every spawned server
+// below — none of which cares about Turso — can never silently reconnect to the real production
+// Turso database instead of the disposable local DATABASE_URL each case sets.
+const baseEnv: NodeJS.ProcessEnv = { ...process.env, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "" };
 const DB = "file:./unused-session-startup-test.db";
 
 const main = async () => {

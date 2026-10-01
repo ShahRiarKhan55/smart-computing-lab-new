@@ -62,7 +62,14 @@ function runStartup(env: NodeJS.ProcessEnv, timeoutMs: number): Promise<StartupR
   });
 }
 
-const baseEnv: NodeJS.ProcessEnv = { ...process.env };
+// Test-environment safety: clears any ambient TURSO_DATABASE_URL/TURSO_AUTH_TOKEN the invoking
+// shell might have, so a case that doesn't care about Turso can never silently have its spawned
+// server reconnect to the real production Turso database instead of the disposable local
+// DATABASE_URL it set. Safe for the cases below that DO care about Turso (the "TURSO_DATABASE_URL
+// without TURSO_AUTH_TOKEN", "...vice versa" and "both set" cases a few lines down): each spreads
+// its own TURSO_DATABASE_URL/TURSO_AUTH_TOKEN AFTER `...baseEnv`, so its explicit (fake) value
+// still wins — this only changes what an ambient, un-overridden value would otherwise leak in as.
+const baseEnv: NodeJS.ProcessEnv = { ...process.env, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "" };
 const DB = "file:./unused-trust-proxy-startup-test.db";
 const REAL_SECRET = "a-sufficiently-long-test-only-session-secret-111111";
 
