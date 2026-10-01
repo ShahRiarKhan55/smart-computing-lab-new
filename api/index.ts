@@ -52,11 +52,23 @@ import { createApp } from "../apps/server/src/app.js";
  * — never during `npm install`/`prisma generate` (a separate, earlier build step that never
  * imports this file), so it cannot interfere with the client actually being generated. A
  * pre-existing value (e.g. set explicitly in the Vercel dashboard) is respected, not overridden.
+ *
+ * ENGINE TARGET — `rhel-openssl-3.0.x`, not `debian-openssl-3.0.x`: the path above being
+ * physically present was *not* sufficient on its own (confirmed against a real Preview
+ * deployment) — `debian-openssl-3.0.x` is only what `prisma generate` emits by default, because
+ * Vercel's *build* container happens to be Debian-based; the deployed *Function* itself runs on
+ * Amazon Linux, which Prisma's own documented AWS Lambda deployment target maps to
+ * `rhel-openssl-3.0.x` (Node >18) — a different binary that is never generated at all unless
+ * requested. `prisma/schema.prisma`'s `generator client` block now lists
+ * `binaryTargets = ["native", "rhel-openssl-3.0.x"]` so `prisma generate` (via the existing
+ * `postinstall`) emits both: `native` keeps matching whatever OS runs locally/in CI (unaffected,
+ * since this block never runs outside Vercel), and `rhel-openssl-3.0.x` is the one this function
+ * actually loads in production.
  */
 if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
   process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
     process.cwd(),
-    "node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node",
+    "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node",
   );
 }
 

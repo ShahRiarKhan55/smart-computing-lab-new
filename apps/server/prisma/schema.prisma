@@ -5,6 +5,15 @@ generator client {
   // datasource below is unchanged — still plain "sqlite", still reads DATABASE_URL for local
   // dev/test — this only makes the adapter constructor option available.
   previewFeatures = ["driverAdapters"]
+  // Even with the libSQL driver adapter, Prisma 5.x's "library" query engine is still loaded
+  // in-process to compile queries (the adapter only swaps out the low-level DB I/O) — see
+  // api/index.ts. `native` alone only produces the engine for whatever OS runs `prisma
+  // generate` (this Debian-based build container → debian-openssl-3.0.x), never the actual
+  // Vercel Function runtime, which runs on Amazon Linux and needs rhel-openssl-3.0.x (Prisma's
+  // own documented AWS Lambda deployment target for Node >18 — see
+  // docs/architecture/…-vercel-deployment-adapter.md). `native` is kept so local dev/tests
+  // (which never set PRISMA_QUERY_ENGINE_LIBRARY) keep using the engine matching this machine.
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
