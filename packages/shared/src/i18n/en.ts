@@ -120,7 +120,7 @@ export const en = {
   "footer.copyright": "© {year} Smart Computing Lab. All rights reserved.",
 
   // ---- home -------------------------------------------------------------------------------
-  "home.badge": "University research lab",
+  "home.badge": "Shimane University research lab",
   "home.heroSubtitle": "Advancing the frontiers of AI, hardware computing, and intelligent data systems — from silicon to satellite.",
   "home.exploreResearch": "Explore Research",
   "home.meetResearchers": "Meet Our Researchers",
@@ -513,6 +513,8 @@ export const en = {
   "contact.emailLabel": "Email",
   "contact.officeHoursLabel": "Office Hours",
   "contact.universityLabel": "University",
+  "contact.facultyName": "Interdisciplinary Faculty of Science and Engineering",
+  "contact.campusAddress": "Matsue Campus, Shimane University — 1060 Nishikawatsu-cho, Matsue, Shimane 690-8504, Japan",
   "contact.formHeadingSr": "Send a message",
   "contact.notConnectedNotice": "This form isn't connected to an email service yet — nothing was sent. Please use the email address above in the meantime.",
   "contact.fullNameLabel": "Full name",

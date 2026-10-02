@@ -116,7 +116,7 @@ export const ja: Record<keyof typeof en, string> = {
   "footer.copyright": "© {year} Smart Computing Lab. All rights reserved.",
 
   // ---- home -------------------------------------------------------------------------------
-  "home.badge": "大学研究室",
+  "home.badge": "島根大学研究室",
   "home.heroSubtitle": "半導体から人工衛星まで、AI・ハードウェアコンピューティング・インテリジェントデータシステムの最前線を切り拓く。",
   "home.exploreResearch": "研究内容を見る",
   "home.meetResearchers": "研究員を見る",
@@ -503,6 +503,8 @@ export const ja: Record<keyof typeof en, string> = {
   "contact.emailLabel": "メール",
   "contact.officeHoursLabel": "対応時間",
   "contact.universityLabel": "大学",
+  "contact.facultyName": "島根大学 総合理工学部",
+  "contact.campusAddress": "松江キャンパス　〒690-8504　島根県松江市西川津町1060",
   "contact.formHeadingSr": "メッセージを送る",
   "contact.notConnectedNotice": "このフォームはまだメール送信サービスに接続されていないため、送信されませんでした。それまでは上記のメールアドレスをご利用ください。",
   "contact.fullNameLabel": "氏名",
