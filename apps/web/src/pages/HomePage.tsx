@@ -49,7 +49,21 @@ export function HomePage() {
   useSeo({
     title: null,
     description: t("home.heroSubtitle"),
-    jsonLd: { "@context": "https://schema.org", "@type": "Organization", name: "Smart Computing Lab", url: window.location.origin },
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Smart Computing Lab",
+      url: window.location.origin,
+      parentOrganization: { "@type": "CollegeOrUniversity", name: "Shimane University", url: "https://www.shimane-u.ac.jp/" },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "1060 Nishikawatsu-cho",
+        addressLocality: "Matsue",
+        addressRegion: "Shimane",
+        postalCode: "690-8504",
+        addressCountry: "JP",
+      },
+    },
   });
 
   // Selected projects: the ones under way first, then the rest, in the API's own order.

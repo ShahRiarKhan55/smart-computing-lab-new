@@ -81,7 +81,7 @@ Existing checks changed only where the DOM class names changed (`.member-pick`�
 
 ## 9. Known limitations / deferred
 
-* The contact page still shows the reference site's placeholder details ("[University Name]", `lab@university.edu`); the form is not connected to email. The lab must supply real details.
+* The contact page still shows the reference site's placeholder details ("[University Name]", `lab@university.edu`); the form is not connected to email. The lab must supply real details. **Update:** resolved by the Shimane University content update — `ContactPage` now shows the real Interdisciplinary Faculty of Science and Engineering / Matsue Campus address and `susmartcomputinglab@gmail.com`; the contact form itself is still not connected to an email service.
 * Dark mode, i18n UI, events, notifications, messaging, forum, files/gallery, CMS, audit viewer: not started (Phase 11+).
 * Publication ↔ project relationships are shown on project and profile pages, not on the publications list (the list API does not carry them, and no extra requests were added).
 * Fonts still load from Google Fonts (unchanged); without them the fallbacks are system fonts.

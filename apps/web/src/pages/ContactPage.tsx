@@ -5,14 +5,15 @@ import { Icon, type IconName } from "../components/Icon";
 import { useT } from "../i18n/LocaleContext";
 
 /**
- * The reference contact form has no backend (action="#") — it's a static
- * mailto-style placeholder the lab is meant to wire up to a real email
- * service later. We keep that same "not connected to anything" behavior
- * instead of inventing a fake submit-success flow.
+ * The contact form has no backend (action="#") — it's a static mailto-style placeholder the
+ * lab can wire up to a real email service later. We keep that same "not connected to anything"
+ * behavior instead of inventing a fake submit-success flow.
  *
- * The VALUES below are the reference site's own (placeholder) details, unchanged and not
- * translated: this phase only presents them; the lab supplies the real ones. Only the field
- * labels (below, via t()) are UI text.
+ * The lab/university details below (location, email, website) ARE the real values — Shimane
+ * University, Interdisciplinary Faculty of Science and Engineering, Matsue Campus — sourced from
+ * the university's own official site. Only the email's user part and the office hours are not
+ * independently verifiable from a public source and are taken as given; no building/room number
+ * is included since none is specified anywhere in this project.
  */
 function useDetails(): { icon: IconName; label: string; value: ReactNode }[] {
   const t = useT();
@@ -22,15 +23,23 @@ function useDetails(): { icon: IconName; label: string; value: ReactNode }[] {
       label: t("contact.locationLabel"),
       value: (
         <>
-          Department of Computer Engineering
+          {t("contact.facultyName")}
           <br />
-          [University Name], Building [X], Room [Y]
+          {t("contact.campusAddress")}
         </>
       ),
     },
-    { icon: "mail", label: t("contact.emailLabel"), value: <a href="mailto:lab@university.edu">lab@university.edu</a> },
+    {
+      icon: "mail",
+      label: t("contact.emailLabel"),
+      value: <a href="mailto:susmartcomputinglab@gmail.com">susmartcomputinglab@gmail.com</a>,
+    },
     { icon: "clock", label: t("contact.officeHoursLabel"), value: "Monday – Friday, 09:00 – 17:00" },
-    { icon: "globe", label: t("contact.universityLabel"), value: <a href="https://www.university.edu">www.university.edu</a> },
+    {
+      icon: "globe",
+      label: t("contact.universityLabel"),
+      value: <a href="https://www.shimane-u.ac.jp/">www.shimane-u.ac.jp</a>,
+    },
   ];
 }
 

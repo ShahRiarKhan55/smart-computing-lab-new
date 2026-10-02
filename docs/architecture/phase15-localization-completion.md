@@ -217,6 +217,10 @@ had one stray `aria-label`. `NotFoundPage` had zero `t()` calls at all.
 address, email, office hours, and university URL — are the reference site's own placeholder VALUES,
 already documented as unlocalized placeholder content since Phase 10.5 (`docs/architecture/
 phase10-5-ui-ux-modernization.md`: "Contact page still shows the reference site placeholders").
+**Update:** resolved by the Shimane University content update — the location and university-URL
+values now come from `contact.facultyName`/`contact.campusAddress` (translated per locale), and the
+email/website point at the lab's real Gmail address and `shimane-u.ac.jp`; office hours remain an
+untranslated plain string as before.
 Only the field *labels* around them ("Location", "Email", …) and the rest of the page's UI chrome
 were localized — inventing a Japanese office address would be worse than leaving the placeholder
 English, exactly the same judgment call Phase 10.5 already made for English.
@@ -254,9 +258,11 @@ everything with the same shape, not to patch the one instance and move on.
   own disclosed boundary — touching this would mean localizing every nested `include` across
   `projects.routes.ts`/`groups.routes.ts`, which both phases have judged disproportionate to a
   "smallest safe change" localization pass.
-- **`ContactPage`'s placeholder office details** (address, email, office hours, university URL) stay
+- **`ContactPage`'s placeholder office details** (address, email, office hours, university URL) stayed
   as the reference site's own unlocalized placeholder English, per Phase 10.5's own precedent (§6) —
-  deliberate, not missed.
+  deliberate, not missed, at the time this phase was written. **Update:** resolved by the Shimane
+  University content update (address/university URL now localized via `contact.facultyName`/
+  `contact.campusAddress`; email/website point at the real lab Gmail address and `shimane-u.ac.jp`).
 - **Accessibility and responsive verification for the newly-localized areas** was performed by
   design review (every new interactive element follows an already-audited pattern: `ConfirmDeleteModal`,
   `Modal`'s focus trap, the existing `.chip`/`.btn`/`.form-group` styles, word-labelled badges) and by
