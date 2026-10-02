@@ -44,7 +44,13 @@ const DATABASE_URL = `file:${dbCopy}`;
 function startServer(env) {
   const child = spawn(process.execPath, [path.join(SERVER_ROOT, "..", "..", "node_modules", "tsx", "dist", "cli.mjs"), path.join(SERVER_ROOT, "src", "index.ts")], {
     cwd: SERVER_ROOT,
-    env,
+    // Test-environment safety: every call site below spreads `...process.env` for convenience,
+    // which (if the invoking shell has TURSO_DATABASE_URL/TURSO_AUTH_TOKEN set — e.g. left over
+    // from unrelated Turso work in the same terminal) would otherwise silently reconnect this
+    // "local" test server to the REAL production Turso database instead of the disposable
+    // DATABASE_URL copy this script just made. Cleared here, once, so no call site needs to
+    // remember to do it.
+    env: { ...env, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "" },
   });
   return new Promise((resolve, reject) => {
     let out = "";

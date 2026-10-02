@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
-import { canAccessAdmin, canManageUsers } from "@scl/shared";
+import { canAccessAdmin, canManageUsers, isAdmin } from "@scl/shared";
 import { Nav } from "./components/Nav";
 import { Footer } from "./components/Footer";
 import { LoadingState } from "./components/LoadingState";
@@ -20,6 +20,7 @@ import { EventsPage } from "./pages/EventsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
+import { InvitePage } from "./pages/InvitePage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SchedulePage } from "./pages/SchedulePage";
 import { SearchPage } from "./pages/SearchPage";
@@ -92,6 +93,8 @@ const AdminCommunityPage = lazy(() => import("./pages/admin/AdminCommunityPage")
 const AdminFilesPage = lazy(() => import("./pages/admin/AdminFilesPage").then((m) => ({ default: m.AdminFilesPage })));
 const AdminTranslationsPage = lazy(() => import("./pages/admin/AdminTranslationsPage").then((m) => ({ default: m.AdminTranslationsPage })));
 const AdminAuditPage = lazy(() => import("./pages/admin/AdminAuditPage").then((m) => ({ default: m.AdminAuditPage })));
+const DocsIndexPage = lazy(() => import("./pages/docs/DocsIndexPage").then((m) => ({ default: m.DocsIndexPage })));
+const DocPage = lazy(() => import("./pages/docs/DocPage").then((m) => ({ default: m.DocPage })));
 
 function RouteFallback() {
   const t = useT();
@@ -138,6 +141,7 @@ export default function App() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/invite/:token" element={<InvitePage />} />
         <Route
           path="/schedule"
           element={
@@ -211,6 +215,41 @@ export default function App() {
           <Route path="translations" element={<AdminTranslationsPage />} />
           <Route path="audit" element={<AdminAuditPage />} />
         </Route>
+        {/* Documentation (researcher onboarding phase). Access control mirrors each guide's own
+            audience: quick-start/visitor/onboarding are public (onboarding in particular MUST stay
+            public — its reader has no account yet), researcher requires any signed-in account,
+            admin/maintenance require manager/admin as ProtectedRoute's `allow` already does for
+            /admin itself. This is UX gating only, same as every other ProtectedRoute use below —
+            these pages contain no secrets, so there is nothing for an API-level check to protect
+            beyond what the rest of the bundle already doesn't. */}
+        <Route path="/docs" element={<DocsIndexPage />} />
+        <Route path="/docs/quick-start" element={<DocPage slug="quick-start" />} />
+        <Route path="/docs/visitor" element={<DocPage slug="public-visitor-guide" />} />
+        <Route path="/docs/onboarding" element={<DocPage slug="researcher-onboarding" />} />
+        <Route
+          path="/docs/researcher"
+          element={
+            <ProtectedRoute>
+              <DocPage slug="researcher-guide" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/docs/admin"
+          element={
+            <ProtectedRoute allow={canAccessAdmin}>
+              <DocPage slug="admin-guide" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/docs/maintenance"
+          element={
+            <ProtectedRoute allow={isAdmin}>
+              <DocPage slug="site-maintainer-guide" />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       </Suspense>

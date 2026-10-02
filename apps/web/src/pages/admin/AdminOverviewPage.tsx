@@ -83,6 +83,9 @@ export function AdminOverviewPage() {
       </section>
 
       <p className="text-muted admin-note">{t("adm.ov.privacyNote")}</p>
+      <p className="admin-note">
+        <Link to="/docs/admin">{t("docs.adminGuideLink")}</Link>
+      </p>
     </>
   );
 }

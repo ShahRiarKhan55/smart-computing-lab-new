@@ -84,6 +84,7 @@ model User {
   forumMentions      ForumMention[]
   conversations      ConversationParticipant[]
   sentMessages       Message[]
+  invitationsSent    AccountInvitation[]
 
   @@index([role])
 }
@@ -115,6 +116,38 @@ model TeamMember {
   labResources  LabResource[]
 
   @@index([category, sortOrder])
+}
+
+/// Researcher onboarding (admin invites, researcher chooses their own password — see
+/// src/routes/invitations.routes.ts and docs/architecture/…-researcher-onboarding.md). The raw,
+/// high-entropy token is NEVER stored — only its SHA-256 hash (`tokenHash`), the same principle
+/// applied to `User.passwordHash`: a database read alone can never yield a usable credential.
+/// No `User` row exists until acceptance, so the admin never creates, sees, or chooses the
+/// researcher's password — `POST .../accept` is the only path that ever sets `passwordHash` for
+/// an account created this way. `teamMemberId`/`name`/`initials`/`memberRole`/`category` mirror
+/// `POST /api/users`'s three link-existing / create-new / no-profile modes exactly, re-validated
+/// again at acceptance time (the referenced team member may have changed state while the
+/// invitation was pending).
+model AccountInvitation {
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique
+  email        String
+  role         String
+  teamMemberId String?
+  name         String?
+  initials     String?
+  memberRole   String?
+  category     String?
+  invitedById  String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  invitedBy User @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([expiresAt])
 }
 
 model HistoryEntry {

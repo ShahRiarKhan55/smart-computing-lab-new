@@ -15,6 +15,7 @@ export const en = {
   "common.save": "Save",
   "common.saving": "Saving…",
   "common.cancel": "Cancel",
+  "common.done": "Done",
   "common.delete": "Delete",
   "common.deleting": "Deleting…",
   "common.edit": "Edit",
@@ -94,6 +95,7 @@ export const en = {
   "nav.messages": "Messages",
   "nav.notifications": "Notifications",
   "nav.adminDashboard": "Admin Dashboard",
+  "nav.help": "Help & Documentation",
   "nav.logout": "Log out",
   "nav.login": "Log in",
   "nav.searchSite": "Search the site",
@@ -539,6 +541,34 @@ export const en = {
   "auth.contactAdminSuffix": "to be added.",
   "auth.invalidCredentials": "Incorrect email or password.",
 
+  // ---- researcher onboarding: invitation acceptance (/invite/:token) ------------------------
+  "invite.title": "Activate your account",
+  "invite.heading": "Activate your account",
+  "invite.checking": "Checking your invitation…",
+  "invite.invalidOrExpired": "This invitation link is invalid, expired, or has already been used.",
+  "invite.invalidHint": "Ask your lab administrator for a new invitation link.",
+  "invite.subtitle": "Welcome, {email}. Choose a password to activate your account.",
+  "invite.newPassword": "New password",
+  "invite.passwordHint": "At least 8 characters.",
+  "invite.confirmPassword": "Confirm password",
+  "invite.passwordsDontMatch": "Passwords don't match.",
+  "invite.activating": "Activating…",
+  "invite.activateAccount": "Activate account",
+  "invite.neverShareNote": "Do not share your password with the lab administrator or anyone else.",
+
+  // ---- documentation / help area --------------------------------------------------------------
+  "docs.index.title": "Help & Documentation",
+  "docs.index.description": "Guides for using the site — whether you're a visitor, a lab member, or an administrator.",
+  "docs.index.moreAfterLogin": "Log in to see the Researcher/Lab Member Guide.",
+  "docs.adminGuideLink": "Read the Administrator Guide",
+  "docs.onboardingGuideLink": "Received an invitation? Read the Researcher Onboarding Guide",
+
+  "invite.err.invalidLink": "This invitation link is invalid.",
+  "invite.err.alreadyUsed": "This invitation has already been used. Please log in instead.",
+  "invite.err.revoked": "This invitation has been revoked. Ask your administrator for a new one.",
+  "invite.err.expired": "This invitation has expired. Ask your administrator for a new one.",
+  "invite.err.noLongerValid": "This invitation is no longer valid.",
+
   // ---- profile ------------------------------------------------------------------------------
   "profile.pageTitle": "My Profile",
 
@@ -652,6 +682,8 @@ export const en = {
   "error.network": "Could not reach the server. Check your connection and try again.",
   "error.somethingWentWrong": "Something went wrong.",
   "error.nothingToUpdate": "Nothing to update.",
+  "error.tooManyRequests": "Too many requests. Please wait a few minutes and try again.",
+  "error.tooManyAttempts": "Too many attempts. Please wait a few minutes and try again.",
   "error.requestBodyInvalid": "Request body must be a JSON object.",
   "error.fileTooLarge": "File is too large.",
   "error.unsupportedFileType": "Unsupported file type.",
@@ -891,6 +923,17 @@ export const en = {
   "profile.categoryNote": "Category: {category} (changed only by the admin)",
   "profile.viewPublic": "View your public profile",
 
+  // ---- self-service password change (own account only) ---------------------------------------
+  "profile.password.heading": "Password",
+  "profile.password.description": "Change your own password. This never involves the lab administrator.",
+  "profile.password.current": "Current password",
+  "profile.password.new": "New password",
+  "profile.password.confirm": "Confirm new password",
+  "profile.password.submit": "Change password",
+  "profile.password.success": "Your password has been changed.",
+  "profile.password.mismatch": "New passwords don't match.",
+  "profile.password.err.incorrect": "Current password is incorrect.",
+
   // ---- team member category labels (Phase 15) -------------------------------------------------
   "team.category.FACULTY": "Faculty",
   "team.category.PHD": "PhD Students",
@@ -910,12 +953,10 @@ export const en = {
   "team.removeConfirm": "Remove {name} from the team?",
   "team.addTeamMember": "Add team member",
 
-  // ---- create-login modal, admin dashboard (Phase 15) ----------------------------------------
-  "admin.createLogin.title": "Create login for a member",
+  // ---- researcher invitation modal, admin dashboard (Phase 15; fields reused by Phase: researcher
+  // onboarding — the modal itself was replaced, these per-field labels were not) ----------------
   "admin.createLogin.chooseOrCreate": "Choose a team member to link, or pick \"Create a brand new team member profile\" instead.",
   "admin.createLogin.email": "Email",
-  "admin.createLogin.tempPassword": "Temporary password",
-  "admin.createLogin.tempPasswordHint": "At least {min} characters",
   "admin.createLogin.accountRole": "Account role",
   "admin.createLogin.roleMember": "Member (edits own profile; adds publications, news, research)",
   "admin.createLogin.roleLabManager": "Lab manager (manages content, projects and groups; no accounts)",
@@ -930,8 +971,30 @@ export const en = {
   "admin.createLogin.initials": "Initials",
   "admin.createLogin.memberRole": "Role / title",
   "admin.createLogin.category": "Category",
-  "admin.createLogin.creating": "Creating…",
-  "admin.createLogin.createAccount": "Create account",
+  // ---- researcher onboarding invitations (admin side) -----------------------------------------
+  "admin.invite.title": "Invite a researcher",
+  "admin.invite.intro": "The researcher chooses their own password when they open the link below — you will never see or set it.",
+  "admin.invite.creating": "Generating…",
+  "admin.invite.generateLink": "Generate invitation link",
+  "admin.invite.sectionTitle": "Pending & past invitations",
+  "admin.invite.sectionDescription": "Researcher onboarding links you've generated. Each one is single-use and expires after 7 days.",
+  "admin.invite.noneYet": "No invitations yet.",
+  "admin.invite.metaLine": "Invited as {role} by {by} · expires {expires}",
+  "admin.invite.revoke": "Revoke",
+  "admin.invite.revoking": "Revoking…",
+  "admin.invite.revokeTitle": "Revoke this invitation?",
+  "admin.invite.revokeMessage": "The invitation link sent to {email} will stop working immediately. This can't be undone.",
+  "admin.invite.revokedFor": "Invitation for {email} revoked.",
+  "admin.invite.status.PENDING": "Pending",
+  "admin.invite.status.ACCEPTED": "Accepted",
+  "admin.invite.status.EXPIRED": "Expired",
+  "admin.invite.status.REVOKED": "Revoked",
+  "admin.invite.linkReadyTitle": "Invitation link ready",
+  "admin.invite.linkReadyBody": "Copy this link now and send it privately to the researcher (email, chat, in person). It will not be shown again, and this server never stores it.",
+  "admin.invite.linkLabel": "Invitation link",
+  "admin.invite.linkCopied": "Copied to clipboard.",
+  "admin.invite.linkWarning": "Treat this link like a password — anyone who opens it can create the account. It expires in 7 days or after first use.",
+  "admin.invite.copyLink": "Copy link",
   // ---- events (Phase 16) ---------------------------------------------------------------
   "nav.events": "Events",
   "search.type.event": "Event",

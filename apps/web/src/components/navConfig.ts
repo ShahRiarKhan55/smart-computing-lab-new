@@ -85,6 +85,7 @@ export const ACCOUNT_NAV: NavGroupDef = {
     { to: "/messages", labelKey: "nav.messages" },
     { to: "/notifications", labelKey: "nav.notifications" },
     { to: "/admin", labelKey: "nav.adminDashboard", when: (ctx) => ctx.canAccessAdmin },
+    { to: "/docs", labelKey: "nav.help" },
   ],
 };
 

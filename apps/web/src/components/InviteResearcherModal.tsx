@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { CATEGORY_ORDER, MIN_PASSWORD_LENGTH, createUserSchema, type Category, type CreateUserInput, type Role, type TeamMember } from "@scl/shared";
+import { CATEGORY_ORDER, createInvitationSchema, type Category, type CreateInvitationInput, type Role, type TeamMember } from "@scl/shared";
 import { Modal } from "./Modal";
 import { ApiError } from "../lib/api";
 import { useT } from "../i18n/LocaleContext";
@@ -8,9 +8,8 @@ import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
 type LinkMode = "existing" | "new" | "none";
 
-interface CreateLoginValues {
+interface InviteValues {
   email: string;
-  password: string;
   role: Role;
   linkMode: LinkMode;
   teamMemberId: string;
@@ -20,18 +19,19 @@ interface CreateLoginValues {
   category: Category;
 }
 
-interface CreateLoginModalProps {
+interface InviteResearcherModalProps {
   open: boolean;
   /** Team members with no account yet — the only ones the "link existing" mode can offer. */
   unlinkedMembers: TeamMember[];
   onClose: () => void;
-  onCreate: (payload: CreateUserInput) => Promise<void>;
+  /** Resolves with the one-time invitation link once the server returns it — the caller shows it
+   * to the admin (see AdminPeoplePage's InvitationLinkModal); nothing here ever stores it. */
+  onCreate: (payload: CreateInvitationInput) => Promise<string>;
 }
 
-function emptyValues(unlinkedMembers: TeamMember[]): CreateLoginValues {
+function emptyValues(unlinkedMembers: TeamMember[]): InviteValues {
   return {
     email: "",
-    password: "",
     role: "MEMBER",
     linkMode: "existing",
     teamMemberId: unlinkedMembers[0]?.id ?? "",
@@ -42,10 +42,16 @@ function emptyValues(unlinkedMembers: TeamMember[]): CreateLoginValues {
   };
 }
 
-/** Reference admin.html "Create login for a member" dialog: link existing / create new profile / no profile. */
-export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: CreateLoginModalProps) {
+/**
+ * Researcher onboarding (PHASE 1): replaces the old "create login with a temp password" dialog.
+ * This form never collects a password — the admin chooses an email, a role and (optionally) a
+ * team-profile link, then POST /api/invitations returns a one-time setup link for the admin to
+ * copy and send privately. The researcher chooses their own password at that link (see
+ * pages/InvitePage.tsx); the admin never sees it.
+ */
+export function InviteResearcherModal({ open, unlinkedMembers, onClose, onCreate }: InviteResearcherModalProps) {
   const t = useT();
-  const [values, setValues] = useState<CreateLoginValues>(() => emptyValues(unlinkedMembers));
+  const [values, setValues] = useState<InviteValues>(() => emptyValues(unlinkedMembers));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,7 +64,7 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  function set<K extends keyof CreateLoginValues>(key: K, value: CreateLoginValues[K]) {
+  function set<K extends keyof InviteValues>(key: K, value: InviteValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
   }
 
@@ -68,7 +74,6 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
 
     const payload: Record<string, unknown> = {
       email: values.email,
-      password: values.password,
       role: values.role,
     };
     if (values.linkMode === "existing") {
@@ -84,7 +89,7 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
       payload.category = values.category;
     }
 
-    const parsed = createUserSchema.safeParse(payload);
+    const parsed = createInvitationSchema.safeParse(payload);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? t("common.checkForm"));
       return;
@@ -102,42 +107,22 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
   }
 
   return (
-    <Modal open={open} onClose={submitting ? () => {} : onClose} title={t("admin.createLogin.title")}>
+    <Modal open={open} onClose={submitting ? () => {} : onClose} title={t("admin.invite.title")}>
       {error && (
         <div className="form-error" role="alert">
           {error}
         </div>
       )}
       <form onSubmit={handleSubmit} noValidate>
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="c_email">{t("admin.createLogin.email")}</label>
-            <input
-              id="c_email"
-              type="email"
-              autoComplete="off"
-              value={values.email}
-              onChange={(e) => set("email", e.target.value)}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="c_password">{t("admin.createLogin.tempPassword")}</label>
-            <input
-              id="c_password"
-              type="text"
-              autoComplete="off"
-              value={values.password}
-              onChange={(e) => set("password", e.target.value)}
-              placeholder={t("admin.createLogin.tempPasswordHint", { min: MIN_PASSWORD_LENGTH })}
-              required
-            />
-          </div>
+        <p className="form-hint">{t("admin.invite.intro")}</p>
+        <div className="form-group">
+          <label htmlFor="inv_email">{t("admin.createLogin.email")}</label>
+          <input id="inv_email" type="email" autoComplete="off" value={values.email} onChange={(e) => set("email", e.target.value)} required />
         </div>
 
         <div className="form-group">
-          <label htmlFor="c_role">{t("admin.createLogin.accountRole")}</label>
-          <select id="c_role" value={values.role} onChange={(e) => set("role", e.target.value as Role)}>
+          <label htmlFor="inv_role">{t("admin.createLogin.accountRole")}</label>
+          <select id="inv_role" value={values.role} onChange={(e) => set("role", e.target.value as Role)}>
             <option value="MEMBER">{t("admin.createLogin.roleMember")}</option>
             <option value="LAB_MANAGER">{t("admin.createLogin.roleLabManager")}</option>
             <option value="ADMIN">{t("admin.createLogin.roleAdmin")}</option>
@@ -145,8 +130,8 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
         </div>
 
         <div className="form-group">
-          <label htmlFor="c_linkMode">{t("admin.createLogin.linkToProfile")}</label>
-          <select id="c_linkMode" value={values.linkMode} onChange={(e) => set("linkMode", e.target.value as LinkMode)}>
+          <label htmlFor="inv_linkMode">{t("admin.createLogin.linkToProfile")}</label>
+          <select id="inv_linkMode" value={values.linkMode} onChange={(e) => set("linkMode", e.target.value as LinkMode)}>
             <option value="existing">{t("admin.createLogin.linkExisting")}</option>
             <option value="new">{t("admin.createLogin.linkNew")}</option>
             <option value="none">{t("admin.createLogin.linkNone")}</option>
@@ -155,9 +140,9 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
 
         {values.linkMode === "existing" && (
           <div className="form-group">
-            <label htmlFor="c_teamMemberId">{t("admin.createLogin.teamMember")}</label>
+            <label htmlFor="inv_teamMemberId">{t("admin.createLogin.teamMember")}</label>
             <select
-              id="c_teamMemberId"
+              id="inv_teamMemberId"
               value={values.teamMemberId}
               onChange={(e) => set("teamMemberId", e.target.value)}
               disabled={unlinkedMembers.length === 0}
@@ -176,26 +161,22 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
           <>
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="c_name">{t("admin.createLogin.fullName")}</label>
-                <input id="c_name" value={values.name} onChange={(e) => set("name", e.target.value)} />
+                <label htmlFor="inv_name">{t("admin.createLogin.fullName")}</label>
+                <input id="inv_name" value={values.name} onChange={(e) => set("name", e.target.value)} />
               </div>
               <div className="form-group">
-                <label htmlFor="c_initials">{t("admin.createLogin.initials")}</label>
-                <input id="c_initials" value={values.initials} onChange={(e) => set("initials", e.target.value)} />
+                <label htmlFor="inv_initials">{t("admin.createLogin.initials")}</label>
+                <input id="inv_initials" value={values.initials} onChange={(e) => set("initials", e.target.value)} />
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="c_memberRole">{t("admin.createLogin.memberRole")}</label>
-                <input id="c_memberRole" value={values.memberRole} onChange={(e) => set("memberRole", e.target.value)} />
+                <label htmlFor="inv_memberRole">{t("admin.createLogin.memberRole")}</label>
+                <input id="inv_memberRole" value={values.memberRole} onChange={(e) => set("memberRole", e.target.value)} />
               </div>
               <div className="form-group">
-                <label htmlFor="c_category">{t("admin.createLogin.category")}</label>
-                <select
-                  id="c_category"
-                  value={values.category}
-                  onChange={(e) => set("category", e.target.value as Category)}
-                >
+                <label htmlFor="inv_category">{t("admin.createLogin.category")}</label>
+                <select id="inv_category" value={values.category} onChange={(e) => set("category", e.target.value as Category)}>
                   {CATEGORY_ORDER.map((cat) => (
                     <option key={cat} value={cat}>
                       {t(CATEGORY_LABEL_KEY[cat])}
@@ -209,7 +190,7 @@ export function CreateLoginModal({ open, unlinkedMembers, onClose, onCreate }: C
 
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={submitting}>
-            {submitting ? t("admin.createLogin.creating") : t("admin.createLogin.createAccount")}
+            {submitting ? t("admin.invite.creating") : t("admin.invite.generateLink")}
           </button>
           <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
             {t("common.cancel")}

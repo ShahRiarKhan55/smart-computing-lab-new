@@ -14,10 +14,13 @@
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "storage:reconcile": "tsx scripts/storage-reconcile.ts",
+    "docs:render": "node scripts/docs-render.mjs",
+    "docs:pdf": "node scripts/docs-render.mjs && node scripts/docs-pdf.mjs",
     "test:api": "node scripts/api-regression.mjs",
     "test:trust-proxy": "node scripts/trust-proxy-regression.mjs",
     "test:sitemap": "node scripts/sitemap-regression.mjs",
     "test:session-cookie": "node scripts/session-cookie-regression.mjs",
+    "test:invitations": "node scripts/invitations-regression.mjs",
     "test:phase26-hostile": "node scripts/phase26-hostile-input-regression.mjs",
     "test:search": "node scripts/search-regression.mjs",
     "test:search-cost": "tsx scripts/search-queries.test.ts",
@@ -38,7 +41,7 @@
     "test:knowledge-cost": "tsx scripts/knowledge-queries.test.ts",
     "test:resources": "node scripts/resources-regression.mjs",
     "test:resources-cost": "tsx scripts/resources-queries.test.ts",
-    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts && tsx scripts/unit-discovery.test.ts && tsx scripts/unit-workspace.test.ts && tsx scripts/unit-knowledge.test.ts && tsx scripts/unit-resources.test.ts && tsx scripts/unit-seo.test.ts && tsx scripts/unit-redirect.test.ts && tsx scripts/unit-session-startup.test.ts && tsx scripts/unit-trust-proxy-startup.test.ts && tsx scripts/unit-storage-reconcile.test.ts && tsx scripts/unit-sitemap.test.ts"
+    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts && tsx scripts/unit-discovery.test.ts && tsx scripts/unit-workspace.test.ts && tsx scripts/unit-knowledge.test.ts && tsx scripts/unit-resources.test.ts && tsx scripts/unit-seo.test.ts && tsx scripts/unit-redirect.test.ts && tsx scripts/unit-session-startup.test.ts && tsx scripts/unit-trust-proxy-startup.test.ts && tsx scripts/unit-turso-env-isolation.test.ts && tsx scripts/unit-storage-reconcile.test.ts && tsx scripts/unit-sitemap.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -63,6 +66,7 @@
     "@types/express-session": "^1.18.0",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.7.4",
+    "marked": "^18.0.14",
     "prisma": "^5.20.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3"

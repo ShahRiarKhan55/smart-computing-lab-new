@@ -73,6 +73,11 @@ export function LoginPage() {
           </Link>{" "}
           {t("auth.contactAdminSuffix")}
         </p>
+        <p className="auth-card__foot">
+          <Link to="/docs/onboarding" className="link">
+            {t("docs.onboardingGuideLink")}
+          </Link>
+        </p>
       </div>
     </div>
   );

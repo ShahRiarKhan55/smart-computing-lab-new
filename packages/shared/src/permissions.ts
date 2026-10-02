@@ -31,6 +31,10 @@ export const isManager = (a: MaybeActor): boolean => isAdmin(a) || isLabManager(
 
 // ---- accounts (ADMIN only) ------------------------------------------------
 export const canManageUsers = isAdmin; // list / create / delete accounts, change roles
+/** Researcher onboarding invitations are an account-management operation, so the same rule as
+ * `canManageUsers`: ADMIN only. LAB_MANAGER deliberately gets no account-management power here,
+ * matching every other account-adjacent permission in this section. */
+export const canManageInvitations = isAdmin;
 
 /**
  * Why `actor` may not change `targetId`'s role, or null if they may. Only admins

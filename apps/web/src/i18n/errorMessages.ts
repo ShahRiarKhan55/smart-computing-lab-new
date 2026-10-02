@@ -70,6 +70,17 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "That researcher is not a member.": "workspace.err.notMember",
   "That researcher already has this role.": "workspace.err.alreadyRole",
   "One or more team members do not exist.": "workspace.err.memberMissing",
+  // Researcher onboarding invitations: the fixed messages the researcher themselves can see on
+  // the public /invite/:token acceptance page.
+  "This invitation link is invalid.": "invite.err.invalidLink",
+  "This invitation has already been used. Please log in instead.": "invite.err.alreadyUsed",
+  "This invitation has been revoked. Ask your administrator for a new one.": "invite.err.revoked",
+  "This invitation has expired. Ask your administrator for a new one.": "invite.err.expired",
+  "This invitation is no longer valid.": "invite.err.noLongerValid",
+  "Too many requests. Please wait a few minutes and try again.": "error.tooManyRequests",
+  // Self-service password change.
+  "Current password is incorrect.": "profile.password.err.incorrect",
+  "Too many attempts. Please wait a few minutes and try again.": "error.tooManyAttempts",
 };
 
 /** The localized text for a known server/schema message, else the message itself (the same rule as `apiErrorMessage`). */
