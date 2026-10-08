@@ -63,6 +63,13 @@ New content you create defaults to **lab-only** visibility (visible to signed-in
 - Your private messages are visible only to you and the other participant.
 - Your profile shows only what you or a manager chose to fill in; anything it links to is still subject to that linked item's own visibility.
 
+## Your profile links, photo and publications
+
+- **Research profile links.** On your profile page you can add an optional **Google Scholar** link, **ResearchGate** link and **ORCID iD**. They appear as small links under your name on your public profile and are hidden when empty. Only your own profile URLs are accepted (Scholar and ResearchGate links must be `https://` addresses on those sites; the ORCID iD is checked for typos).
+- **Profile photo.** Use **Upload photo** to choose a JPEG, PNG or WebP file from your computer (up to 2 MB). The file is checked on the server; your previous photo is replaced only after the new one has been saved. You can also remove your photo.
+- **Adding a publication.** Type the **DOI** by itself (for example `10.1234/example`) — a `doi:` prefix or a full `https://doi.org/…` link also works and is tidied for you. **Fill from DOI** looks the DOI up in Crossref and pre-fills the form; always check the details before saving. You can always type everything by hand instead.
+- **Suggested publications.** If you enter your ORCID iD, a lab manager can check ORCID for works you have made public there. Nothing found this way appears on the site until a manager approves it. Papers that are not on your ORCID record will not be found; add them by hand.
+
 ## Common problems
 
 - **"No team profile is linked to your account yet."** Your login exists but isn't connected to a researcher profile — ask your administrator to link or create one.

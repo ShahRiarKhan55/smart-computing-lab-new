@@ -109,6 +109,16 @@ npm run test:invitations -w apps/server   # 使い捨てのDBコピーに対し�
 <p>通常の <code>npm outdated</code> / <code>npm update</code> の流れで行います。ルートの <code>package.json</code> の <code>allowScripts</code> 項目（<code>@prisma/client</code>、<code>@prisma/engines</code>、<code>esbuild</code>、<code>prisma</code>）は、インストールスクリプトを持つパッケージを明示的に許可するリストです。追加する前によく確認してください。</p>
 <h2>ブラウザテスト</h2>
 <p><code>apps/server/scripts/browser-regression.cjs</code> は、生のCDP（Chrome DevTools Protocol）経由で実際のヘッドレスブラウザを操作します — PlaywrightやPuppeteerへの依存はなく、ブラウザの実行ファイルを直接起動します。<code>BROWSER_PATH</code> で実行ファイルを指定します（デフォルトはWindowsのEdgeのパスですが、このコンテナやほとんどのLinux CIでは、あらかじめインストールされたChromiumを指すように設定されています）。<code>ONLY_*</code> 環境変数で特定フェーズのセクションのみを実行できます。</p>
+<h2>フェーズ27の連携機能（すべて任意）</h2>
+<p>詳細：<code>docs/architecture/phase27-lab-website-integrations.md</code>。</p>
+<ul>
+<li><strong>デプロイ順序：</strong> フェーズ27のマイグレーション（<code>20261008090552_phase27_integrations</code>、追加のみ）は、新しいコードがトラフィックを処理する <strong>前</strong> にTursoへ適用する必要があります。適用しないと <code>/api/team</code> と <code>/api/profile</code> が「no such column」で失敗します。Previewデプロイは本番データベースを共有するため、このブランチのPreviewも影響を受けます。明示的な承認なしに本番へ <code>migrate</code>/<code>seed</code> を実行しないでください。</li>
+<li><strong>環境変数（プレースホルダーは <code>apps/server/.env.example</code>）：</strong> <code>PORTAL_URL</code>（Google SitesのURL、httpsのみ）、<code>GOOGLE_CLIENT_ID</code>・<code>GOOGLE_CLIENT_SECRET</code>・<code>GOOGLE_OAUTH_REDIRECT_URI</code>（3つすべて、または未設定）、<code>ORCID_CLIENT_ID</code>・<code>ORCID_CLIENT_SECRET</code>（任意・推奨）、<code>PUBLICATION_SYNC_CONTACT_EMAIL</code>・<code>PUBLICATION_SYNC_DELAY_MS</code>・<code>PUBLICATION_SYNC_BUDGET_MS</code>、<code>MAX_PROFILE_PHOTO_BYTES</code>。</li>
+<li><strong>Google OAuthの設定：</strong> Google Cloud Consoleで「ウェブアプリケーション」のOAuthクライアントを作成し、環境ごとに <code>/api/auth/google/callback</code> で終わるリダイレクトURI（本番はhttps）を登録します。Googleで管理者セッションを取得できるのは、確認済みのアカウント <code>susmartcomputinglab@gmail.com</code> のみで、メールアドレスだけで自動的にリンクされることはありません。</li>
+<li><strong>アップロードの問題：</strong> 管理者として <code>/api/files/storage-status?probe=1</code> を開きます。<code>STORAGE_NOT_CONFIGURED</code> はプロジェクトにBlobストア／トークンが接続されていないこと、<code>STORAGE_UNAVAILABLE</code> はバックエンドが書き込みを拒否したこと（Blobストアとアクセスモードを確認）を意味します。Vercelではアップロードは4 MBまでです。</li>
+<li><strong>埋め込み不可：</strong> Cookieが <code>SameSite=Lax</code> のため、このアプリはGoogle Sitesの埋め込みでは動作しません。サイトからリンクしてください。</li>
+<li><strong>Facebook：</strong> 未連携です（このプロジェクトには公式ページがありません）。必要な作業はアーキテクチャ文書を参照してください。</li>
+</ul>
 <h2>既知の制限事項</h2>
 <ul>
 <li>ログアウト状態のユーザー向けの自己解決型「パスワードをお忘れですか」機能はありません（メール送信が必要になるため、意図的に導入していません — 管理者ガイドの回避策（新しい招待の発行）を参照）。</li>

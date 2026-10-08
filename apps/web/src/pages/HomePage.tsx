@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import type { LabEvent, NewsItem, ProjectSummary, Publication, ResearchArea, ResourceListResponse, TeamMember } from "@scl/shared";
+import type { LabEvent, UpdatesResponse, ProjectSummary, Publication, ResearchArea, ResourceListResponse, TeamMember } from "@scl/shared";
 import { useApiResource } from "../hooks/useApiResource";
 import { useSeo } from "../hooks/useSeo";
 import { HeroCircuit } from "../components/HeroCircuit";
@@ -42,7 +42,8 @@ export function HomePage() {
   const teamAll = useApiResource<TeamMember[]>("/team");
   // The lab-at-a-glance counts and the featured researchers are CURRENT members; alumni have their own page.
   const team = { ...teamAll, data: teamAll.data ? teamAll.data.filter((m) => m.category !== "ALUMNI") : teamAll.data };
-  const news = useApiResource<NewsItem[]>("/news");
+  // Phase 27: provider-neutral updates (today: the lab's own news; an external source can be added server-side later).
+  const news = useApiResource<UpdatesResponse>(`/updates?limit=${LATEST_NEWS}`);
   const events = useApiResource<LabEvent[]>(`/events?scope=upcoming&limit=${NEXT_EVENTS}`);
   const resources = useApiResource<ResourceListResponse>(`/resources?limit=${FEATURED_RESOURCES}`);
 
@@ -239,11 +240,11 @@ export function HomePage() {
           <SectionHeader id="home-news" eyebrow={t("home.newsEyebrow")} title={t("home.newsTitle")} action={<ViewAll to="/news">{t("home.allNews")}</ViewAll>} />
           {news.loading && !news.data && <LoadingState label={t("home.loadingNews")} />}
           {news.error && <ErrorState message={t("home.errorNews")} onRetry={news.reload} />}
-          {news.data && news.data.length === 0 && <EmptyState title={t("home.emptyNews")} compact />}
-          {news.data && news.data.length > 0 && (
+          {news.data && news.data.items.length === 0 && <EmptyState title={t("home.emptyNews")} compact />}
+          {news.data && news.data.items.length > 0 && (
             <div className="grid">
-              {news.data.slice(0, LATEST_NEWS).map((item) => (
-                <NewsCard key={item.id} item={item} />
+              {news.data.items.slice(0, LATEST_NEWS).map((item) => (
+                <NewsCard key={`${item.source.id}:${item.id}`} item={item} sourceKind={item.source.kind} />
               ))}
             </div>
           )}

@@ -1860,3 +1860,13 @@ button.notification-item--plain {
 .photo-field__note {
   margin-top: var(--space-2);
 }
+
+/* Phase 27: where a homepage update came from, and the footer's copyright / academic-use notice. */
+.news-card__source {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, inherit);
+}
+.footer__disclaimer {
+  margin: 0 0 var(--space-2, 0.5rem);
+  max-width: 70ch;
+}

@@ -32,6 +32,7 @@
     "test:profiles": "node scripts/profiles-regression.mjs",
     "test:google-auth": "node scripts/google-auth-regression.mjs",
     "test:publication-import": "node scripts/publication-import-regression.mjs",
+    "test:site-integrations": "node scripts/site-integrations-regression.mjs",
     "test:events": "node scripts/events-regression.mjs",
     "test:admin": "node scripts/admin-regression.mjs",
     "test:research": "node scripts/research-regression.mjs",

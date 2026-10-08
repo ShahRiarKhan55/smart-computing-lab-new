@@ -117,7 +117,7 @@ export const en = {
   "footer.peopleHeading": "People",
   "footer.communityHeading": "Community",
   "footer.labHeading": "Lab",
-  "footer.copyright": "© {year} Smart Computing Lab. All rights reserved.",
+  "footer.copyright": "© {year} Smart Computing Lab.",
 
   // ---- home -------------------------------------------------------------------------------
   "home.badge": "Shimane University research lab",
@@ -1954,4 +1954,14 @@ export const en = {
   "publications.fillFromDoiDone": "Filled in from the DOI. Please check the details before saving.",
   "publications.fillFromDoiFailed": "Could not look up that DOI. You can type the details by hand.",
   "publications.fillFromDoiLimit": "Too many lookups. Please wait a few minutes or type the details by hand.",
+  "footer.disclaimerShort": "Unless otherwise indicated, the lab's original materials are provided for informational and academic purposes. Third-party materials remain with their rights holders.",
+  "footer.copyrightLink": "Copyright and academic use",
+  "footer.portal": "Lab portal (Google Sites)",
+  "copyright.eyebrow": "About this site",
+  "copyright.pageTitle": "Copyright and academic use",
+  "copyright.pageDescription": "How the materials on this website may be used, and whose rights apply.",
+  "copyright.body": "Unless otherwise indicated, original text and materials created by the Smart Computing Lab are provided for informational and academic purposes. Copyright and other rights in third-party materials, including publications, images, logos, and linked content, remain with their respective rights holders. Such materials may be subject to separate license terms or usage restrictions. Please obtain permission from the relevant rights holder where required. The presence of a link or citation does not imply ownership or endorsement.",
+  "copyright.note": "This notice is general website wording, not legal advice. An academic purpose does not by itself give permission to reuse copyrighted material, and this notice does not replace required attribution or the license terms of third-party material.",
+  "updates.sourceManual": "Posted by the lab",
+  "updates.sourceExternal": "From an external source",
 } as const;

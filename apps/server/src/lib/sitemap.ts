@@ -19,6 +19,7 @@ export const STATIC_PUBLIC_PATHS = [
   "/resources",
   "/gallery",
   "/contact",
+  "/copyright",
 ];
 
 /**

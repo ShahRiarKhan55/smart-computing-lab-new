@@ -117,6 +117,17 @@ Tursoはホスティングプラットフォーム側でポイントインタイ
 
 `apps/server/scripts/browser-regression.cjs` は、生のCDP（Chrome DevTools Protocol）経由で実際のヘッドレスブラウザを操作します — PlaywrightやPuppeteerへの依存はなく、ブラウザの実行ファイルを直接起動します。`BROWSER_PATH` で実行ファイルを指定します（デフォルトはWindowsのEdgeのパスですが、このコンテナやほとんどのLinux CIでは、あらかじめインストールされたChromiumを指すように設定されています）。`ONLY_*` 環境変数で特定フェーズのセクションのみを実行できます。
 
+## フェーズ27の連携機能（すべて任意）
+
+詳細：`docs/architecture/phase27-lab-website-integrations.md`。
+
+- **デプロイ順序：** フェーズ27のマイグレーション（`20261008090552_phase27_integrations`、追加のみ）は、新しいコードがトラフィックを処理する **前** にTursoへ適用する必要があります。適用しないと `/api/team` と `/api/profile` が「no such column」で失敗します。Previewデプロイは本番データベースを共有するため、このブランチのPreviewも影響を受けます。明示的な承認なしに本番へ `migrate`/`seed` を実行しないでください。
+- **環境変数（プレースホルダーは `apps/server/.env.example`）：** `PORTAL_URL`（Google SitesのURL、httpsのみ）、`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GOOGLE_OAUTH_REDIRECT_URI`（3つすべて、または未設定）、`ORCID_CLIENT_ID`・`ORCID_CLIENT_SECRET`（任意・推奨）、`PUBLICATION_SYNC_CONTACT_EMAIL`・`PUBLICATION_SYNC_DELAY_MS`・`PUBLICATION_SYNC_BUDGET_MS`、`MAX_PROFILE_PHOTO_BYTES`。
+- **Google OAuthの設定：** Google Cloud Consoleで「ウェブアプリケーション」のOAuthクライアントを作成し、環境ごとに `/api/auth/google/callback` で終わるリダイレクトURI（本番はhttps）を登録します。Googleで管理者セッションを取得できるのは、確認済みのアカウント `susmartcomputinglab@gmail.com` のみで、メールアドレスだけで自動的にリンクされることはありません。
+- **アップロードの問題：** 管理者として `/api/files/storage-status?probe=1` を開きます。`STORAGE_NOT_CONFIGURED` はプロジェクトにBlobストア／トークンが接続されていないこと、`STORAGE_UNAVAILABLE` はバックエンドが書き込みを拒否したこと（Blobストアとアクセスモードを確認）を意味します。Vercelではアップロードは4 MBまでです。
+- **埋め込み不可：** Cookieが `SameSite=Lax` のため、このアプリはGoogle Sitesの埋め込みでは動作しません。サイトからリンクしてください。
+- **Facebook：** 未連携です（このプロジェクトには公式ページがありません）。必要な作業はアーキテクチャ文書を参照してください。
+
 ## 既知の制限事項
 
 - ログアウト状態のユーザー向けの自己解決型「パスワードをお忘れですか」機能はありません（メール送信が必要になるため、意図的に導入していません — 管理者ガイドの回避策（新しい招待の発行）を参照）。

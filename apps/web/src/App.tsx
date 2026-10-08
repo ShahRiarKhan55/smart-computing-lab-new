@@ -75,6 +75,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 //     satisfied by the generic Suspense fallback's "Loading…" text during the added chunk-fetch hop.
 const PublicationDetailPage = lazy(() => import("./pages/PublicationDetailPage").then((m) => ({ default: m.PublicationDetailPage })));
 const PublicationImportsPage = lazy(() => import("./pages/PublicationImportsPage").then((m) => ({ default: m.PublicationImportsPage })));
+const CopyrightPage = lazy(() => import("./pages/CopyrightPage").then((m) => ({ default: m.CopyrightPage })));
 const AlumniPage = lazy(() => import("./pages/AlumniPage").then((m) => ({ default: m.AlumniPage })));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then((m) => ({ default: m.WorkspacePage })));
 const KnowledgeDetailPage = lazy(() => import("./pages/KnowledgeDetailPage").then((m) => ({ default: m.KnowledgeDetailPage })));
@@ -137,6 +138,7 @@ export default function App() {
         <Route path="/resources/:id" element={<ResourceDetailPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
+        <Route path="/copyright" element={<CopyrightPage />} />
         <Route path="/alumni" element={<AlumniPage />} />
         <Route path="/publications" element={<PublicationsPage />} />
         <Route

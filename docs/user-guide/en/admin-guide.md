@@ -63,6 +63,15 @@ The admin dashboard's other sections are a management view over what managers ca
 - **Translations** (`/admin/translations`): manage Japanese overrides for translatable content.
 - **Audit** (`/admin/audit`): the activity log — who did what, when. Account-level events (account created/deleted, role changed, invitation created/accepted/revoked) are visible to ADMIN only; other audited actions are visible to any manager.
 
+## Publications discovered from ORCID, and the alumni directory
+
+- **Review discovered publications** (lab managers and admins): on the Publications page choose **Review discovered publications**. Press **Check ORCID now** to read the public ORCID works of every current researcher who has an ORCID iD on their profile. Results land in **Waiting for review**; **nothing is public until you press Approve and publish**. You can correct the title, authors, venue and visibility first. Authors are required — they come from Crossref when the paper has a DOI, otherwise type them. **Reject** hides an item for good (it will not be proposed again). Items whose DOI is already in the lab list are filed under **Already in the lab list**.
+- A check can finish as *partial*: researchers whose ORCID record could not be read (slow or unavailable service, wrong iD) are counted and the rest are still processed. Try again later. Only one check runs at a time.
+- ORCID finds only what each person has made public on their own ORCID record, so it can miss papers; add those by hand. The site never scrapes Google Scholar or ResearchGate.
+- **Alumni** (`/alumni`): add former members with the **Alumni** category. Alumni profiles never have a login — the system refuses to create an account, link one or send an invitation for them. Untick **Published** to hide a profile from every public page.
+- **Google sign-in:** when it has been configured, the designated lab Google account can sign in with Google. Other Google accounts are refused unless an administrator has linked them. The password login keeps working either way.
+- **Where does the copyright notice live?** In the footer and at `/copyright`. It is general wording and not legal advice.
+
 ## Account lifecycle, end to end
 
 1. **Invite** (ADMIN) → 2. **Researcher accepts, chooses their own password** → 3. account is active, same as any other → 4. role changes and profile linking (ADMIN) as needed → 5. **delete** (ADMIN) when someone leaves — their team profile and any content they created are kept, simply no longer tied to a login.

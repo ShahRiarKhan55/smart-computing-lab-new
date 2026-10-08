@@ -39,7 +39,7 @@ t("DEFAULT_LOCALE is English", DEFAULT_LOCALE === "en");
 // ---- translate(): lookup, fallback, interpolation -----------------------------------
 t("translate() returns the English string for the base locale", translate("en", "common.save") === "Save");
 t("translate() returns the Japanese string for ja", translate("ja", "common.save") === "保存");
-t("translate() substitutes a single {var}", translate("en", "footer.copyright", { year: 2030 }) === "© 2030 Smart Computing Lab. All rights reserved.");
+t("translate() substitutes a single {var}", translate("en", "footer.copyright", { year: 2030 }) === "© 2030 Smart Computing Lab.");
 t("translate() substitutes multiple distinct {vars}", translate("en", "admin.roleChanged", { email: "a@b.test", role: "admin" }) === "a@b.test is now admin.");
 t(
   "translate() never returns undefined/null/empty for a real key, in either locale",

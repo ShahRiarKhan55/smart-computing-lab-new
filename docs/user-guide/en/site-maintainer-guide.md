@@ -117,6 +117,17 @@ Standard `npm outdated` / `npm update` workflow; `apps/server`'s `allowScripts` 
 
 `apps/server/scripts/browser-regression.cjs` drives a real headless browser over raw CDP (Chrome DevTools Protocol) — no Playwright/Puppeteer dependency; it spawns the browser binary directly. `BROWSER_PATH` selects the executable (defaults to a Windows Edge path; this container/most Linux CI sets it to a pre-installed Chromium). Supports `ONLY_*` env flags to run just one phase's section.
 
+## Phase 27 integrations (all optional)
+
+Full details: `docs/architecture/phase27-lab-website-integrations.md`.
+
+- **Deploy order:** the Phase 27 migration (`20261008090552_phase27_integrations`, additive) must be applied to Turso **before** the new code serves traffic, or `/api/team` and `/api/profile` fail with "no such column". Preview deployments share the production database, so a Preview of the branch is affected too. Never run `migrate`/`seed` against production without explicit approval.
+- **Environment variables (placeholders in `apps/server/.env.example`):** `PORTAL_URL` (Google Sites link, https only); `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (all three or none); `ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET` (optional, recommended); `PUBLICATION_SYNC_CONTACT_EMAIL`, `PUBLICATION_SYNC_DELAY_MS`, `PUBLICATION_SYNC_BUDGET_MS`; `MAX_PROFILE_PHOTO_BYTES`.
+- **Google OAuth setup:** create a Web-application OAuth client in Google Cloud Console and register one redirect URI per environment ending in `/api/auth/google/callback` (https in production). Only the verified account `susmartcomputinglab@gmail.com` can obtain an admin session through Google; nobody is auto-linked by email.
+- **Upload problems:** as an admin open `/api/files/storage-status?probe=1`. `STORAGE_NOT_CONFIGURED` means no Blob store/token is attached to the project; `STORAGE_UNAVAILABLE` means the backend refused a write (check the Blob store and its access mode). Uploads are capped at 4 MB on Vercel.
+- **Not embedded:** the application does not work inside a Google Sites embed (cookies are `SameSite=Lax`); the Site links to it instead.
+- **Facebook:** not integrated — no official Page exists in this project. See the architecture document for what it would take.
+
 ## Known limitations
 
 - No self-service "forgot password" flow for a logged-out user (would require email delivery, deliberately not introduced — see the Administrator Guide's workaround: a fresh invitation).

@@ -2,6 +2,7 @@ import type { NewsItem } from "@scl/shared";
 import { Badge } from "./Badge";
 import { CardEditControls } from "./CardEditControls";
 import { VisibilityBadge } from "./VisibilityField";
+import { useT } from "../i18n/LocaleContext";
 
 interface NewsCardProps {
   item: NewsItem;
@@ -10,9 +11,12 @@ interface NewsCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onManageAuthors?: () => void;
+  /** Homepage updates: where the item came from, so lab-posted news and external feeds are never confused. */
+  sourceKind?: "manual" | "external";
 }
 
-export function NewsCard({ item: n, canEdit = false, canDelete = false, onEdit, onDelete, onManageAuthors }: NewsCardProps) {
+export function NewsCard({ item: n, canEdit = false, canDelete = false, onEdit, onDelete, onManageAuthors, sourceKind }: NewsCardProps) {
+  const t = useT();
   const editable = canEdit && !!onEdit;
   return (
     <article className={`card news-card${editable ? " card--editable" : ""}`}>
@@ -25,6 +29,7 @@ export function NewsCard({ item: n, canEdit = false, canDelete = false, onEdit, 
           <time className="news-card__date">{n.date}</time>
           <Badge variant="brand">{n.type}</Badge>
           <VisibilityBadge visibility={n.visibility} />
+          {sourceKind && <span className="news-card__source">{sourceKind === "manual" ? t("updates.sourceManual") : t("updates.sourceExternal")}</span>}
         </div>
       </div>
       <h3 className="card__title">{n.title}</h3>

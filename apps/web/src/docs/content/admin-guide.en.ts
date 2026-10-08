@@ -71,6 +71,15 @@ export const html = `<h1>Administrator Guide</h1>
 <li><strong>Translations</strong> (<code>/admin/translations</code>): manage Japanese overrides for translatable content.</li>
 <li><strong>Audit</strong> (<code>/admin/audit</code>): the activity log — who did what, when. Account-level events (account created/deleted, role changed, invitation created/accepted/revoked) are visible to ADMIN only; other audited actions are visible to any manager.</li>
 </ul>
+<h2>Publications discovered from ORCID, and the alumni directory</h2>
+<ul>
+<li><strong>Review discovered publications</strong> (lab managers and admins): on the Publications page choose <strong>Review discovered publications</strong>. Press <strong>Check ORCID now</strong> to read the public ORCID works of every current researcher who has an ORCID iD on their profile. Results land in <strong>Waiting for review</strong>; <strong>nothing is public until you press Approve and publish</strong>. You can correct the title, authors, venue and visibility first. Authors are required — they come from Crossref when the paper has a DOI, otherwise type them. <strong>Reject</strong> hides an item for good (it will not be proposed again). Items whose DOI is already in the lab list are filed under <strong>Already in the lab list</strong>.</li>
+<li>A check can finish as <em>partial</em>: researchers whose ORCID record could not be read (slow or unavailable service, wrong iD) are counted and the rest are still processed. Try again later. Only one check runs at a time.</li>
+<li>ORCID finds only what each person has made public on their own ORCID record, so it can miss papers; add those by hand. The site never scrapes Google Scholar or ResearchGate.</li>
+<li><strong>Alumni</strong> (<code>/alumni</code>): add former members with the <strong>Alumni</strong> category. Alumni profiles never have a login — the system refuses to create an account, link one or send an invitation for them. Untick <strong>Published</strong> to hide a profile from every public page.</li>
+<li><strong>Google sign-in:</strong> when it has been configured, the designated lab Google account can sign in with Google. Other Google accounts are refused unless an administrator has linked them. The password login keeps working either way.</li>
+<li><strong>Where does the copyright notice live?</strong> In the footer and at <code>/copyright</code>. It is general wording and not legal advice.</li>
+</ul>
 <h2>Account lifecycle, end to end</h2>
 <ol>
 <li><strong>Invite</strong> (ADMIN) → 2. <strong>Researcher accepts, chooses their own password</strong> → 3. account is active, same as any other → 4. role changes and profile linking (ADMIN) as needed → 5. <strong>delete</strong> (ADMIN) when someone leaves — their team profile and any content they created are kept, simply no longer tied to a login.</li>

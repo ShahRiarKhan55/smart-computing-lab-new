@@ -6,6 +6,7 @@ import teamRoutes from "./team.routes.js";
 import researchRoutes from "./research.routes.js";
 import publicationsRoutes from "./publications.routes.js";
 import publicationImportsRoutes from "./publicationImports.routes.js";
+import siteRoutes from "./site.routes.js";
 import newsRoutes from "./news.routes.js";
 import profileRoutes from "./profile.routes.js";
 import memberRoutes from "./member.routes.js";
@@ -27,6 +28,7 @@ import invitationsRoutes from "./invitations.routes.js";
 
 const router = Router();
 
+router.use(siteRoutes);
 router.use("/auth/google", googleAuthRoutes);
 router.use("/auth", authRoutes);
 router.use("/users", usersRoutes);

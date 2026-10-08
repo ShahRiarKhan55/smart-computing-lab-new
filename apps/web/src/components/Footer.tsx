@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { MAIN_NAV, isGroup } from "./navConfig";
 import { useT } from "../i18n/LocaleContext";
+import { useSiteConfig } from "../lib/siteConfig";
 
 // The footer repeats the public destinations from the same source as the header, so the two never drift.
 const RESEARCH = MAIN_NAV.filter(isGroup).find((g) => g.id === "research");
@@ -9,6 +10,7 @@ const COMMUNITY = MAIN_NAV.filter(isGroup).find((g) => g.id === "community");
 
 export function Footer() {
   const t = useT();
+  const { portalUrl } = useSiteConfig();
   return (
     <footer className="footer">
       <div className="footer__inner">
@@ -62,9 +64,24 @@ export function Footer() {
             <li>
               <NavLink to="/docs">{t("docs.index.title")}</NavLink>
             </li>
+            <li>
+              <NavLink to="/copyright">{t("footer.copyrightLink")}</NavLink>
+            </li>
+            {portalUrl && (
+              <li>
+                <a href={portalUrl} target="_blank" rel="noopener noreferrer">
+                  {t("footer.portal")}
+                </a>
+              </li>
+            )}
           </ul>
         </nav>
-        <div className="footer__copy">{t("footer.copyright", { year: new Date().getFullYear() })}</div>
+        <div className="footer__copy">
+          <p className="footer__disclaimer">
+            {t("footer.disclaimerShort")} <NavLink to="/copyright">{t("footer.copyrightLink")}</NavLink>
+          </p>
+          {t("footer.copyright", { year: new Date().getFullYear() })}
+        </div>
       </div>
     </footer>
   );

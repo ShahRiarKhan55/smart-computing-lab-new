@@ -113,7 +113,7 @@ export const ja: Record<keyof typeof en, string> = {
   "footer.peopleHeading": "メンバー",
   "footer.communityHeading": "コミュニティ",
   "footer.labHeading": "研究室",
-  "footer.copyright": "© {year} Smart Computing Lab. All rights reserved.",
+  "footer.copyright": "© {year} Smart Computing Lab.",
 
   // ---- home -------------------------------------------------------------------------------
   "home.badge": "島根大学研究室",
@@ -1942,4 +1942,14 @@ export const ja: Record<keyof typeof en, string> = {
   "publications.fillFromDoiDone": "DOIから入力しました。保存前に内容をご確認ください。",
   "publications.fillFromDoiFailed": "そのDOIを検索できませんでした。手動で入力できます。",
   "publications.fillFromDoiLimit": "検索回数が多すぎます。数分待つか、手動で入力してください。",
+  "footer.disclaimerShort": "特に明記されている場合を除き、研究室が作成した資料は情報提供および学術研究を目的として掲載しています。第三者の資料の権利は、それぞれの権利者に帰属します。",
+  "footer.copyrightLink": "著作権と学術利用について",
+  "footer.portal": "研究室ポータル（Google Sites）",
+  "copyright.eyebrow": "このサイトについて",
+  "copyright.pageTitle": "著作権と学術利用について",
+  "copyright.pageDescription": "このウェブサイトの資料の利用方法と、適用される権利について。",
+  "copyright.body": "特に明記されている場合を除き、スマートコンピューティング研究室が作成した文章・資料は、情報提供および学術研究を目的として掲載しています。論文、画像、ロゴ、リンク先のコンテンツなど、第三者が権利を有する資料の著作権その他の権利は、それぞれの権利者に帰属します。これらの資料には、別途ライセンス条件や利用制限が適用される場合があります。必要に応じて、各権利者から許諾を得てください。リンクや引用の掲載は、当研究室による所有または推奨を意味するものではありません。",
+  "copyright.note": "この表示は一般的なウェブサイト向けの文言であり、法的助言ではありません。学術目的であること自体が、著作物を再利用する許諾を与えるものではなく、この表示は必要な出典表示や第三者のライセンス条件に代わるものでもありません。",
+  "updates.sourceManual": "研究室が投稿",
+  "updates.sourceExternal": "外部ソースより",
 };

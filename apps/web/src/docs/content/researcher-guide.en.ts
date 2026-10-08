@@ -72,6 +72,13 @@ export const html = `<h1>Researcher / Lab Member Guide</h1>
 <li>Your private messages are visible only to you and the other participant.</li>
 <li>Your profile shows only what you or a manager chose to fill in; anything it links to is still subject to that linked item&#39;s own visibility.</li>
 </ul>
+<h2>Your profile links, photo and publications</h2>
+<ul>
+<li><strong>Research profile links.</strong> On your profile page you can add an optional <strong>Google Scholar</strong> link, <strong>ResearchGate</strong> link and <strong>ORCID iD</strong>. They appear as small links under your name on your public profile and are hidden when empty. Only your own profile URLs are accepted (Scholar and ResearchGate links must be <code>https://</code> addresses on those sites; the ORCID iD is checked for typos).</li>
+<li><strong>Profile photo.</strong> Use <strong>Upload photo</strong> to choose a JPEG, PNG or WebP file from your computer (up to 2 MB). The file is checked on the server; your previous photo is replaced only after the new one has been saved. You can also remove your photo.</li>
+<li><strong>Adding a publication.</strong> Type the <strong>DOI</strong> by itself (for example <code>10.1234/example</code>) — a <code>doi:</code> prefix or a full <code>https://doi.org/…</code> link also works and is tidied for you. <strong>Fill from DOI</strong> looks the DOI up in Crossref and pre-fills the form; always check the details before saving. You can always type everything by hand instead.</li>
+<li><strong>Suggested publications.</strong> If you enter your ORCID iD, a lab manager can check ORCID for works you have made public there. Nothing found this way appears on the site until a manager approves it. Papers that are not on your ORCID record will not be found; add them by hand.</li>
+</ul>
 <h2>Common problems</h2>
 <ul>
 <li><strong>&quot;No team profile is linked to your account yet.&quot;</strong> Your login exists but isn&#39;t connected to a researcher profile — ask your administrator to link or create one.</li>
