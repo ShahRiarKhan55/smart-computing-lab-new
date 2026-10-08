@@ -540,7 +540,7 @@ async function main() {
           last = cb.headers.get("location");
         }
         t("rate limit: repeated failed callbacks keep answering the same generic redirect (no crash, no oracle)", /google_failed/.test(last ?? ""));
-        const ok1 = await googleRoundTrip(browser(s4.base), mock, s4.base);
+        const ok1 = await googleRoundTrip(b, mock, s4.base); // the SAME client (same IP) that spent the budget
         t("rate limit: once the failure budget is spent, even a valid callback from that client is refused", denied(ok1), ok1.callbackLocation);
         t("rate limit: the server is still healthy and password login unaffected", (await browser(s4.base).passwordLogin(ADMIN)) === 200);
       } finally {

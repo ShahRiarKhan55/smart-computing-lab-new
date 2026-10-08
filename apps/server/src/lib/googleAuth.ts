@@ -1,6 +1,7 @@
 import { createHash, createPublicKey, randomBytes, verify as cryptoVerify } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
+import { isAdmin, type Role } from "@scl/shared";
 import { recordAudit } from "./audit.js";
 
 /**
@@ -328,7 +329,7 @@ export async function resolveGoogleSignIn(
     const user = await db.user.findUnique({ where: { id: linkUserId }, select: { id: true, role: true, oauthIdentities: { select: { id: true }, where: { provider: GOOGLE_PROVIDER } } } });
     if (!user || user.oauthIdentities.length > 0) throw new GoogleAuthError("not_authorized");
     // An administrator account is reachable through Google ONLY by the designated identity.
-    if (user.role === "ADMIN" && !isDesignatedAdminEmail(claims.email)) throw new GoogleAuthError("not_authorized");
+    if (isAdmin({ id: user.id, role: user.role as Role }) && !isDesignatedAdminEmail(claims.email)) throw new GoogleAuthError("not_authorized");
     await db.oAuthIdentity.create({ data: { provider: GOOGLE_PROVIDER, subject: claims.sub, userId: user.id, email: claims.email } });
     return { userId: user.id, outcome: "linked" };
   }

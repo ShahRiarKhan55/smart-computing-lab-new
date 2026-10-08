@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { getSessionUser } from "../middleware/auth.js";
@@ -19,6 +19,14 @@ import {
 } from "../lib/googleAuth.js";
 
 const router = Router();
+
+/**
+ * Persists the session BEFORE any redirect. express-session flushes a response's headers (including a redirect's
+ * Location and Set-Cookie) before the store write has finished, so a browser that follows the redirect immediately
+ * could arrive before the one-time OAuth values, or the new login, were saved ("no_pending_auth" in roughly one
+ * run in five on a local database). Saving explicitly makes the redirect wait for the write.
+ */
+const saveSession = (req: Request): Promise<void> => new Promise((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
 
 const RATE_KEY = "google-oauth";
 
@@ -57,6 +65,7 @@ router.get(
     }
     const pending = newPendingAuth(link);
     req.session.googleOAuth = pending;
+    await saveSession(req);
     res.redirect(302, buildAuthorizationUrl(cfg, pending));
   }),
 );
@@ -104,6 +113,7 @@ router.get(
         req.session.regenerate((err) => (err ? reject(err) : resolve()));
       });
       req.session.userId = user.id;
+      await saveSession(req);
       res.redirect(302, decision.outcome === "linked" ? "/profile?google=linked" : "/");
     } catch (err) {
       const reason = err instanceof GoogleAuthError ? err.reason : `internal_${(err as Error)?.name ?? "error"}`;
