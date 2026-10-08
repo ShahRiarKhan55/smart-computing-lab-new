@@ -286,7 +286,7 @@ export const ja: Record<keyof typeof en, string> = {
   "publications.authorsPlaceholder": "例：山田太郎、John Smith",
   "publications.pdfUrlLabel": "PDFのURL（任意）",
   "publications.doiUrlLabel": "DOI（任意）",
-  "publications.doiPlaceholder": "10.1234/example",
+  "publications.doiPlaceholder": "例：10.1234/example",
   "publications.doiHint": "DOIだけで構いません。https://doi.org/ のリンクは自動で付きます。",
   "publications.err.doiInvalid": "DOIの形式が正しくありません。10.1234/example のように入力してください（https://doi.org/ は省略できます）。",
   "publications.extraUrlLabel": "追加リンクのURL（任意）",
