@@ -1,4 +1,4 @@
-import { DOI_INVALID_MESSAGE, KNOWLEDGE_CATEGORIES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
+import { DOI_INVALID_MESSAGE, KNOWLEDGE_CATEGORIES, ORCID_INVALID_MESSAGE, RESEARCHGATE_INVALID_MESSAGE, RESOURCE_TYPES, SCHOLAR_INVALID_MESSAGE, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -25,6 +25,9 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "Request body must be a JSON object.": "error.requestBodyInvalid",
   "Incorrect email or password.": "auth.invalidCredentials",
   [DOI_INVALID_MESSAGE]: "publications.err.doiInvalid",
+  [SCHOLAR_INVALID_MESSAGE]: "profile.err.scholarInvalid",
+  [RESEARCHGATE_INVALID_MESSAGE]: "profile.err.researchGateInvalid",
+  [ORCID_INVALID_MESSAGE]: "profile.err.orcidInvalid",
   // Events (Phase 16): the fixed validation/permission messages the events API and the shared
   // event schema can produce, so the form and the API errors read the same in both locales.
   "Only lab managers and admins can change visibility.": "error.visibilityForbidden",

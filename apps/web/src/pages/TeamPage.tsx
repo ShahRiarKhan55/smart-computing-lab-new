@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CATEGORY_ORDER, type TeamMember } from "@scl/shared";
+import { Link } from "react-router-dom";
+import { CURRENT_CATEGORY_ORDER, type TeamMember } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch } from "../lib/api";
@@ -24,9 +25,11 @@ export function TeamPage() {
   });
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const groups = CATEGORY_ORDER.map((cat) => ({
+  // Alumni are a separate, clearly labelled directory (/alumni): this page lists CURRENT members only.
+  const current = members?.filter((m) => m.category !== "ALUMNI");
+  const groups = CURRENT_CATEGORY_ORDER.map((cat) => ({
     cat,
-    items: members?.filter((m) => m.category === cat) ?? [],
+    items: current?.filter((m) => m.category === cat) ?? [],
   })).filter((g) => g.items.length > 0);
 
   async function handleDelete(member: TeamMember) {
@@ -56,7 +59,7 @@ export function TeamPage() {
         {actionError && <ErrorState message={actionError} />}
         {loading && !members && <LoadingState label={t("team.loading")} />}
         {error && <ErrorState message={error} onRetry={reload} />}
-        {members && members.length === 0 && <EmptyState title={t("team.empty")} />}
+        {current && current.length === 0 && <EmptyState title={t("team.empty")} />}
 
         {groups.map((group) => (
           <section key={group.cat} aria-labelledby={`team-${group.cat}`}>
@@ -79,6 +82,12 @@ export function TeamPage() {
             </div>
           </section>
         ))}
+
+        <p className="team-alumni-link">
+          <Link to="/alumni" className="btn btn--secondary btn--sm">
+            {t("alumni.viewAlumni")}
+          </Link>
+        </p>
       </div>
 
       <TeamMemberFormModal
@@ -86,6 +95,7 @@ export function TeamPage() {
         title={editing.member ? t("team.editTitleFor", { name: editing.member.name }) : t("team.newTitle")}
         initial={editing.member}
         showAdminFields={policy.canManageTeamPlacement}
+        onPhotoChanged={reload}
         onClose={() => setEditing({ open: false, member: null })}
         onSubmit={async (values) => {
           if (editing.member) {

@@ -1778,3 +1778,85 @@ button.notification-item--plain {
   justify-content: space-between;
   gap: var(--space-3);
 }
+
+/* ------------------------------------------------------------
+   Researcher profile links (Google Scholar / ResearchGate / ORCID) and the photo upload field
+   ------------------------------------------------------------ */
+.profile-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 4px;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.profile-link:hover {
+  color: var(--primary-hover);
+  border-color: var(--primary);
+}
+
+.profile-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.profile-link__mark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 3px;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--success-fg);
+  background: var(--success-bg);
+  border-radius: var(--radius-pill);
+}
+
+.profile-links--left {
+  justify-content: flex-start;
+}
+
+.photo-field__label {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
+.photo-field__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.photo-field__controls {
+  flex: 1;
+  min-width: 0;
+}
+
+.photo-field__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.photo-field__note {
+  margin-top: var(--space-2);
+}

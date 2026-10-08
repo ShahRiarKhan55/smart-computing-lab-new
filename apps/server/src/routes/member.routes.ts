@@ -6,6 +6,7 @@ import {
   setPublicationLinksSchema,
   setNewsLinksSchema,
   setMemberAreasSchema,
+  isManager,
   type HistoryEntry,
   type MemberProfile,
 } from "@scl/shared";
@@ -86,6 +87,10 @@ router.get(
     });
 
     if (!member) throw new HttpError(404, "Team member not found");
+    // An unpublished profile (Phase 27) is the same 404 as a missing one for everyone but managers and its own account.
+    if (!member.isPublished && !isManager(viewer) && !(viewer && member.userId === viewer.id)) {
+      throw new HttpError(404, "Team member not found");
+    }
 
     // Events this researcher organised (the creator's public profile is the organizer) plus events of the
     // projects they belong to. Event visibility is applied to every row, and a project only counts when
@@ -131,6 +136,10 @@ router.get(
       department: member.department,
       bio: member.bio,
       photoUrl: member.photoUrl,
+      scholarUrl: member.scholarUrl,
+      researchGateUrl: member.researchGateUrl,
+      orcid: member.orcid,
+      ...(isManager(viewer) ? { isPublished: member.isPublished } : {}),
       history: member.historyEntries.map(toHistoryEntry),
       publications: await localizedPublications(publications, viewer, locale),
       news: await localizedNews(news, viewer, locale),

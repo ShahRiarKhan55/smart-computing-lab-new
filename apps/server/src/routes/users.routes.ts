@@ -8,6 +8,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { assertValidId } from "../lib/authorLinks.js";
 import { recordAudit } from "../lib/audit.js";
+import { assertProfileMayHaveAccount } from "../lib/alumni.js";
 
 const router = Router();
 
@@ -59,8 +60,9 @@ router.post(
       if (existing) throw new HttpError(409, "An account with that email already exists.");
 
       if (body.teamMemberId) {
-        const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true } });
+        const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true, category: true } });
         if (!member) throw new HttpError(400, "Selected team member does not exist.");
+        assertProfileMayHaveAccount(member);
         if (member.userId) throw new HttpError(409, "That team member already has a linked account.");
       }
 
@@ -159,8 +161,9 @@ router.put(
       }
 
       if (account.teamMember) throw new HttpError(409, "That account is already linked to a team profile. Unlink it first.");
-      const member = await tx.teamMember.findUnique({ where: { id: teamMemberId }, select: { id: true } });
+      const member = await tx.teamMember.findUnique({ where: { id: teamMemberId }, select: { id: true, category: true } });
       if (!member) throw new HttpError(400, "Selected team member does not exist.");
+      assertProfileMayHaveAccount(member);
       const linked = await tx.teamMember.updateMany({ where: { id: teamMemberId, userId: null }, data: { userId: account.id } });
       if (linked.count !== 1) throw new HttpError(409, "That team member already has a linked account.");
       await recordAudit(tx, { actor: req.user!, action: "USER_LINKED", entityType: "USER", entityId: account.id, details: { email: account.email, teamMemberId } });

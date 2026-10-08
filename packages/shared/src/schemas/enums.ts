@@ -35,12 +35,25 @@ export const localeSchema = z.enum(LOCALES, {
 });
 export type Locale = z.infer<typeof localeSchema>;
 
-export const categorySchema = z.enum(["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"], {
-  errorMap: () => ({ message: "Category must be one of FACULTY, PHD, MSC, BSC or RESEARCH." }),
+/**
+ * Team-profile categories. `ALUMNI` (Phase 27) marks a former member shown in the public alumni
+ * directory. An alumni profile NEVER has a login: it cannot be linked to an account, invited, or
+ * created together with one — see `memberCategorySchema` (the categories an account-bearing
+ * profile may have) and the server-side guards in routes/users, routes/invitations and routes/team.
+ */
+export const categorySchema = z.enum(["FACULTY", "PHD", "MSC", "BSC", "RESEARCH", "ALUMNI"], {
+  errorMap: () => ({ message: "Category must be one of FACULTY, PHD, MSC, BSC, RESEARCH or ALUMNI." }),
 });
 export type Category = z.infer<typeof categorySchema>;
 
-export const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"];
+/** The categories a profile created TOGETHER with a login may have: everything except ALUMNI. */
+export const memberCategorySchema = z.enum(["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"], {
+  errorMap: () => ({ message: "Category must be one of FACULTY, PHD, MSC, BSC or RESEARCH." }),
+});
+
+export const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH", "ALUMNI"];
+/** The categories of CURRENT members (everything but alumni), in display order. */
+export const CURRENT_CATEGORY_ORDER: Category[] = CATEGORY_ORDER.filter((c) => c !== "ALUMNI");
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   FACULTY: "Faculty",
@@ -48,4 +61,5 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   MSC: "MSc Students",
   BSC: "BSc Students",
   RESEARCH: "Research Students",
+  ALUMNI: "Alumni",
 };

@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ConversationDetail, HistoryEntry, MemberProfile, NewsItem, Publication, ResearchArea, TeamMember } from "@scl/shared";
+import { profileLinksOf, type ConversationDetail, type HistoryEntry, type MemberProfile, type NewsItem, type Publication, type ResearchArea, type TeamMember } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { AdminBar } from "../components/AdminBar";
 import { Avatar } from "../components/Avatar";
+import { Badge } from "../components/Badge";
+import { ProfileLinks } from "../components/ProfileLinks";
 import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
@@ -161,6 +163,8 @@ export function MemberPage() {
           name: profile.name,
           jobTitle: profile.role,
           worksFor: { "@type": "Organization", name: "Smart Computing Lab" },
+          // Only links this person actually entered (never guessed from their name).
+          ...(profileLinksOf(profile).length > 0 ? { sameAs: profileLinksOf(profile).map((l) => l.href) } : {}),
         }}
       />
 
@@ -291,6 +295,9 @@ export function MemberPage() {
                 <p className="profile-summary__role">{profile.role}</p>
                 {profile.department && <p className="profile-summary__dept">{profile.department}</p>}
               </div>
+              {profile.category === "ALUMNI" && <Badge variant="info">{t("team.category.ALUMNI")}</Badge>}
+              {profile.isPublished === false && <Badge variant="warn">{t("alumni.hiddenBadge")}</Badge>}
+              <ProfileLinks member={profile} />
               {profile.canMessage && (
                 <button type="button" className="btn btn--secondary btn--sm profile-summary__message" onClick={startConversation} disabled={messaging}>
                   <Icon name="message" size={14} /> {messaging ? t("member.opening") : t("member.message")}
@@ -360,6 +367,7 @@ export function MemberPage() {
         title={t("member.editProfile")}
         initial={profile as Partial<TeamMember>}
         showAdminFields={policy.canManageTeamPlacement}
+        onPhotoChanged={reload}
         onClose={() => setEditOpen(false)}
         onSubmit={async (values) => {
           await apiFetch(`/team/${profile.id}`, { method: "PUT", body: JSON.stringify(values) });

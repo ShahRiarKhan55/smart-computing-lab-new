@@ -74,6 +74,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 //     asserting its OWN specific skeleton text ("Loading documents…" / "Loading resources…") — not
 //     satisfied by the generic Suspense fallback's "Loading…" text during the added chunk-fetch hop.
 const PublicationDetailPage = lazy(() => import("./pages/PublicationDetailPage").then((m) => ({ default: m.PublicationDetailPage })));
+const AlumniPage = lazy(() => import("./pages/AlumniPage").then((m) => ({ default: m.AlumniPage })));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then((m) => ({ default: m.WorkspacePage })));
 const KnowledgeDetailPage = lazy(() => import("./pages/KnowledgeDetailPage").then((m) => ({ default: m.KnowledgeDetailPage })));
 const ResourceDetailPage = lazy(() => import("./pages/ResourceDetailPage").then((m) => ({ default: m.ResourceDetailPage })));
@@ -135,6 +136,7 @@ export default function App() {
         <Route path="/resources/:id" element={<ResourceDetailPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
+        <Route path="/alumni" element={<AlumniPage />} />
         <Route path="/publications" element={<PublicationsPage />} />
         <Route path="/publications/:id" element={<PublicationDetailPage />} />
         <Route path="/news" element={<NewsPage />} />

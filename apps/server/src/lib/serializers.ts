@@ -1,4 +1,4 @@
-import { canEditOwnProfile } from "@scl/shared";
+import { canEditOwnProfile, isManager } from "@scl/shared";
 import type {
   AreaRef,
   NewsItem,
@@ -33,6 +33,10 @@ export function toTeamMember(
     department: string;
     bio: string;
     photoUrl: string;
+    scholarUrl: string;
+    researchGateUrl: string;
+    orcid: string;
+    isPublished: boolean;
     sortOrder: number;
   },
   viewer: Viewer,
@@ -47,6 +51,11 @@ export function toTeamMember(
     department: row.department,
     bio: row.bio,
     photoUrl: row.photoUrl,
+    scholarUrl: row.scholarUrl,
+    researchGateUrl: row.researchGateUrl,
+    orcid: row.orcid,
+    // Only people who can change it learn whether a profile is hidden (a public caller never sees an unpublished row at all).
+    ...(isManager(viewer) ? { isPublished: row.isPublished } : {}),
     sortOrder: row.sortOrder,
   };
 }

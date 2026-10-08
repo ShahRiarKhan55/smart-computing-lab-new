@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { createTeamMemberSchema, type Category, type TeamMember } from "@scl/shared";
+import { CATEGORY_ORDER, CURRENT_CATEGORY_ORDER, createTeamMemberSchema, type Category, type TeamMember } from "@scl/shared";
 import { Modal } from "./Modal";
+import { ProfilePhotoField } from "./ProfilePhotoField";
 import { useT } from "../i18n/LocaleContext";
-import { apiErrorMessage } from "../i18n/errorMessages";
+import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
@@ -14,7 +15,12 @@ export interface TeamMemberFormValues {
   department: string;
   bio: string;
   photoUrl: string;
+  scholarUrl: string;
+  researchGateUrl: string;
+  orcid: string;
   category: Category;
+  /** Managers only: false hides the profile from visitors without deleting it. */
+  isPublished?: boolean;
   sortOrder: number;
   translations?: { ja: Record<string, string> };
 }
@@ -25,13 +31,17 @@ interface TeamMemberFormModalProps {
   initial?: Partial<TeamMember> | null;
   /** Category and sort order are admin-only fields, mirroring the reference's permission rules. */
   showAdminFields: boolean;
+  /** Categories offered in the select. Default: current-member categories for a NEW profile, every category (incl. alumni) when editing. */
+  categories?: Category[];
+  /** Category preselected for a new profile (the alumni page passes "ALUMNI"). */
+  defaultCategory?: Category;
+  /** Called after a photo upload/removal succeeded (those save immediately, independent of the form's Save button). */
+  onPhotoChanged?: () => void;
   onClose: () => void;
   onSubmit: (values: TeamMemberFormValues) => Promise<void>;
 }
 
-const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"];
-
-function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberFormValues, "translations"> {
+function toFormValues(initial?: Partial<TeamMember> | null, defaultCategory: Category = "BSC"): Omit<TeamMemberFormValues, "translations"> {
   return {
     name: initial?.name ?? "",
     initials: initial?.initials ?? "",
@@ -39,7 +49,11 @@ function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberForm
     department: initial?.department ?? "",
     bio: initial?.bio ?? "",
     photoUrl: initial?.photoUrl ?? "",
-    category: initial?.category ?? "BSC",
+    scholarUrl: initial?.scholarUrl ?? "",
+    researchGateUrl: initial?.researchGateUrl ?? "",
+    orcid: initial?.orcid ?? "",
+    category: initial?.category ?? defaultCategory,
+    isPublished: initial?.isPublished ?? true,
     sortOrder: initial?.sortOrder ?? 0,
   };
 }
@@ -49,18 +63,22 @@ export function TeamMemberFormModal({
   title,
   initial,
   showAdminFields,
+  categories,
+  defaultCategory,
+  onPhotoChanged,
   onClose,
   onSubmit,
 }: TeamMemberFormModalProps) {
   const t = useT();
-  const [values, setValues] = useState(() => toFormValues(initial));
+  const categoryChoices = categories ?? (initial?.id ? CATEGORY_ORDER : CURRENT_CATEGORY_ORDER);
+  const [values, setValues] = useState(() => toFormValues(initial, defaultCategory));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { values: ja, setField: setJa, base } = useEntityTranslations("TEAM_MEMBER", initial?.id, open);
 
   useEffect(() => {
     if (open) {
-      setValues(toFormValues(initial));
+      setValues(toFormValues(initial, defaultCategory));
       setError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,13 +101,15 @@ export function TeamMemberFormModal({
 
     const validation = createTeamMemberSchema.safeParse(values);
     if (!validation.success) {
-      setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
+      const first = validation.error.issues[0]?.message;
+      setError(first ? knownMessage(first, t) : t("common.checkForm"));
       return;
     }
 
     setSubmitting(true);
     try {
-      await onSubmit({ ...values, ...(initial?.id ? { translations: { ja } } : {}) });
+      const { isPublished, ...rest } = values;
+      await onSubmit({ ...rest, ...(showAdminFields ? { isPublished } : {}), ...(initial?.id ? { translations: { ja } } : {}) });
       onClose();
     } catch (err) {
       setError(apiErrorMessage(err, t));
@@ -143,7 +163,7 @@ export function TeamMemberFormModal({
               value={values.category}
               onChange={(e) => set("category", e.target.value as Category)}
             >
-              {CATEGORY_ORDER.map((cat) => (
+              {categoryChoices.map((cat) => (
                 <option key={cat} value={cat}>
                   {t(CATEGORY_LABEL_KEY[cat])}
                 </option>
@@ -157,15 +177,53 @@ export function TeamMemberFormModal({
           <textarea id="tm_bio" value={values.bio} onChange={(e) => set("bio", e.target.value)} />
         </div>
 
+        <ProfilePhotoField
+          memberId={initial?.id}
+          initials={values.initials}
+          photoUrl={values.photoUrl}
+          onChange={(url) => {
+            set("photoUrl", url);
+            onPhotoChanged?.();
+          }}
+        />
         <div className="form-group">
-          <label htmlFor="tm_photoUrl">{t("team.photoUrlLabel")}</label>
+          <label htmlFor="tm_photoUrl">{t("photo.orPasteUrl")}</label>
           <input
             id="tm_photoUrl"
             value={values.photoUrl}
             onChange={(e) => set("photoUrl", e.target.value)}
             placeholder="https://..."
+            inputMode="url"
           />
         </div>
+
+        <fieldset className="form-fieldset">
+          <legend>{t("profileLinks.heading")}</legend>
+          <div className="form-group">
+            <label htmlFor="tm_scholarUrl">{t("profile.scholarUrl")}</label>
+            <input id="tm_scholarUrl" value={values.scholarUrl} onChange={(e) => set("scholarUrl", e.target.value)} placeholder="https://scholar.google.com/citations?user=…" inputMode="url" />
+          </div>
+          <div className="form-group">
+            <label htmlFor="tm_researchGateUrl">{t("profile.researchGateUrl")}</label>
+            <input id="tm_researchGateUrl" value={values.researchGateUrl} onChange={(e) => set("researchGateUrl", e.target.value)} placeholder="https://www.researchgate.net/profile/…" inputMode="url" />
+          </div>
+          <div className="form-group">
+            <label htmlFor="tm_orcid">{t("profile.orcid")}</label>
+            <input id="tm_orcid" value={values.orcid} onChange={(e) => set("orcid", e.target.value)} placeholder="0000-0002-1825-0097" aria-describedby="tm_orcid_hint" autoCapitalize="off" spellCheck={false} />
+            <p className="form-hint" id="tm_orcid_hint">
+              {t("profile.orcidHint")}
+            </p>
+          </div>
+        </fieldset>
+
+        {showAdminFields && (
+          <div className="form-group form-group--check">
+            <label htmlFor="tm_isPublished">
+              <input id="tm_isPublished" type="checkbox" checked={values.isPublished !== false} onChange={(e) => set("isPublished", e.target.checked)} /> {t("team.publishedLabel")}
+            </label>
+            <p className="form-hint">{t("team.publishedHint")}</p>
+          </div>
+        )}
 
         {showAdminFields && (
           <div className="form-group">

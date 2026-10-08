@@ -1,7 +1,8 @@
 import multer from "multer";
-import { ALLOWED_MIME_TYPES, DEFAULT_DOCUMENT_MAX_BYTES, DEFAULT_IMAGE_MAX_BYTES, ORIGINAL_NAME_MAX, isImageMime } from "@scl/shared";
+import { ALLOWED_MIME_TYPES, DEFAULT_DOCUMENT_MAX_BYTES, DEFAULT_IMAGE_MAX_BYTES, DEFAULT_PROFILE_PHOTO_MAX_BYTES, ORIGINAL_NAME_MAX, PROFILE_PHOTO_MIME_TYPES, isImageMime } from "@scl/shared";
 import { HttpError } from "./validate.js";
 import { sniffMimeType } from "./fileSignature.js";
+import { readImageDimensions } from "./imageInfo.js";
 
 /**
  * Upload configuration + validation, reused by every upload route (Phase 13 §"upload
@@ -94,4 +95,37 @@ export function validateUpload(file: { buffer: Buffer; size: number; originalnam
 /** Extra gate for endpoints that only ever accept an image (the gallery never stores a PDF). */
 export function assertIsImage(upload: ValidatedUpload): void {
   if (!isImageMime(upload.mimeType)) throw new HttpError(400, "Only image files (JPEG, PNG, WEBP, GIF) are accepted here.");
+}
+
+// ---- profile photos (Phase 27 / P27.6) ---------------------------------------------------------
+export const PROFILE_PHOTO_MAX_BYTES = Math.min(envBytes("MAX_PROFILE_PHOTO_BYTES", DEFAULT_PROFILE_PHOTO_MAX_BYTES), PLATFORM_UPLOAD_CAP_BYTES);
+export const PROFILE_PHOTO_MAX_SIDE = 6000; // px
+export const PROFILE_PHOTO_MAX_PIXELS = 24_000_000;
+
+/** A dedicated multer for the photo route: its own (small) hard cap, so an oversized body is refused while streaming in, not after buffering 15 MB. */
+export const uploadProfilePhotoFile = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: PROFILE_PHOTO_MAX_BYTES, files: 1, fields: 5, parts: 8 },
+}).single("file");
+
+export interface ValidatedProfilePhoto extends ValidatedUpload {
+  width: number;
+  height: number;
+}
+
+/** Magic-byte type gate + size + header dimensions. Throws HttpError (400 type/malformed, 413 size). */
+export function validateProfilePhoto(file: { buffer: Buffer; size: number; originalname: string }): ValidatedProfilePhoto {
+  const sniffed = sniffMimeType(file.buffer);
+  if (!sniffed || !(PROFILE_PHOTO_MIME_TYPES as readonly string[]).includes(sniffed)) {
+    throw new HttpError(400, "Profile photos must be a JPEG, PNG or WEBP image.");
+  }
+  if (file.size > PROFILE_PHOTO_MAX_BYTES) {
+    throw new HttpError(413, `File is too large (max ${(PROFILE_PHOTO_MAX_BYTES / (1024 * 1024)).toFixed(1)} MB for a profile photo).`);
+  }
+  const dims = readImageDimensions(file.buffer, sniffed);
+  if (!dims) throw new HttpError(400, "That image file looks damaged or incomplete. Please choose a different photo.");
+  if (dims.width > PROFILE_PHOTO_MAX_SIDE || dims.height > PROFILE_PHOTO_MAX_SIDE || dims.width * dims.height > PROFILE_PHOTO_MAX_PIXELS) {
+    throw new HttpError(400, `That photo is too large in pixels (max ${PROFILE_PHOTO_MAX_SIDE} x ${PROFILE_PHOTO_MAX_SIDE}).`);
+  }
+  return { buffer: file.buffer, mimeType: sniffed, originalName: sanitizeOriginalName(file.originalname), sizeBytes: file.size, ...dims };
 }

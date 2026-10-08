@@ -42,6 +42,10 @@ export const isDocumentMime = (m: string): m is (typeof DOCUMENT_MIME_TYPES)[num
 export const DEFAULT_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 export const DEFAULT_DOCUMENT_MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
+/** Profile photos (Phase 27): GIF is excluded (no animated avatars); SVG/HTML never pass the magic-byte gate at all. */
+export const PROFILE_PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const DEFAULT_PROFILE_PHOTO_MAX_BYTES = 2 * 1024 * 1024; // 2 MB (the server may lower it further, e.g. under Vercel's 4.5 MB body cap)
+
 export const ORIGINAL_NAME_MAX = 255;
 export const CAPTION_MAX = 300;
 
@@ -54,7 +58,7 @@ export const CAPTION_MAX = 300;
  *  a simple visibility lookup cannot express, so that integration must fail closed until a
  *  future phase implements it properly — never silently "work" via the generic path.
  */
-export const FILE_ENTITY_TYPES = ["PUBLICATION", "RESEARCH_PROJECT", "EVENT", "FORUM_POST", "FORUM_COMMENT", "MESSAGE"] as const;
+export const FILE_ENTITY_TYPES = ["PUBLICATION", "RESEARCH_PROJECT", "EVENT", "FORUM_POST", "FORUM_COMMENT", "MESSAGE", "TEAM_MEMBER_PHOTO"] as const;
 export type FileEntityType = (typeof FILE_ENTITY_TYPES)[number];
 
 export const GALLERY_CATEGORIES = ["LAB_LIFE", "EVENT", "RESEARCH", "OTHER"] as const;

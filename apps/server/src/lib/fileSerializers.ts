@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { canDeleteGalleryItem, canEditGalleryItem, isAdmin, isImageMime, type GalleryItem, type StoredFileRef } from "@scl/shared";
+import { canDeleteGalleryItem, canEditGalleryItem, isAdmin, isImageMime, isManager, type GalleryItem, type StoredFileRef } from "@scl/shared";
 import { asProjectStatus } from "./serializers.js";
 import { canView, visibilityField, type Viewer } from "./visibility.js";
 
@@ -88,6 +88,11 @@ async function canViewParent(db: FileDb, viewer: Viewer, entityType: string, ent
         select: { status: true, post: { select: { status: true, category: { select: { visibility: true } } } } },
       });
       return Boolean(row && row.status !== "DELETED" && row.post.status !== "DELETED" && canView(viewer, row.post.category.visibility));
+    }
+    case "TEAM_MEMBER_PHOTO": {
+      // A profile photo is as public as the profile it belongs to: visible unless the profile is unpublished (then only managers/the owner).
+      const row = await db.teamMember.findUnique({ where: { id: entityId }, select: { isPublished: true, userId: true } });
+      return Boolean(row && (row.isPublished || (viewer && (isManager(viewer) || viewer.id === row.userId))));
     }
     default:
       // MESSAGE and any unrecognised value: no generic rule can safely resolve this — fail closed.

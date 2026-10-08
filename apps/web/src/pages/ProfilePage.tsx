@@ -5,9 +5,11 @@ import { updateOwnProfileSchema, changePasswordSchema, type TeamMember } from "@
 import { useAuth } from "../auth/AuthContext";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
-import { apiErrorMessage } from "../i18n/errorMessages";
+import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { PageHeader } from "../components/PageHeader";
 import { Avatar } from "../components/Avatar";
+import { ProfileLinks } from "../components/ProfileLinks";
+import { ProfilePhotoField } from "../components/ProfilePhotoField";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import { LoadingState } from "../components/LoadingState";
@@ -22,6 +24,9 @@ interface ProfileValues {
   department: string;
   bio: string;
   photoUrl: string;
+  scholarUrl: string;
+  researchGateUrl: string;
+  orcid: string;
 }
 
 type FieldErrors = Partial<Record<keyof ProfileValues, string>>;
@@ -34,6 +39,9 @@ function toValues(member: TeamMember): ProfileValues {
     department: member.department,
     bio: member.bio,
     photoUrl: member.photoUrl,
+    scholarUrl: member.scholarUrl,
+    researchGateUrl: member.researchGateUrl,
+    orcid: member.orcid,
   };
 }
 
@@ -176,7 +184,7 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
       for (const issue of parsed.error.issues) {
         const key = issue.path[0] as keyof ProfileValues | undefined;
         if (key === undefined) setFormError(issue.message);
-        else if (!errors[key]) errors[key] = issue.message;
+        else if (!errors[key]) errors[key] = knownMessage(issue.message, t);
       }
       setFieldErrors(errors);
       return;
@@ -261,11 +269,42 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
             <textarea {...field("bio")} maxLength={2000} />
             {fieldError("bio")}
           </div>
+          <ProfilePhotoField
+            memberId={saved.id}
+            initials={values.initials || saved.initials}
+            photoUrl={saved.photoUrl}
+            onChange={(photoUrl) => {
+              // The upload/removal is already saved on the server: keep both copies in step so the form isn't "dirty" because of it.
+              setSaved((s) => ({ ...s, photoUrl }));
+              setValues((v) => ({ ...v, photoUrl }));
+            }}
+          />
           <div className="form-group">
-            <label htmlFor="f_photoUrl">{t("profile.photoUrl")}</label>
+            <label htmlFor="f_photoUrl">{t("photo.orPasteUrl")}</label>
             <input {...field("photoUrl")} placeholder="https://..." inputMode="url" />
             {fieldError("photoUrl")}
           </div>
+
+          <fieldset className="form-fieldset">
+            <legend>{t("profileLinks.heading")}</legend>
+            <p className="form-hint">{t("profile.linksHint")}</p>
+            <div className="form-group">
+              <label htmlFor="f_scholarUrl">{t("profile.scholarUrl")}</label>
+              <input {...field("scholarUrl")} placeholder="https://scholar.google.com/citations?user=…" inputMode="url" />
+              {fieldError("scholarUrl")}
+            </div>
+            <div className="form-group">
+              <label htmlFor="f_researchGateUrl">{t("profile.researchGateUrl")}</label>
+              <input {...field("researchGateUrl")} placeholder="https://www.researchgate.net/profile/…" inputMode="url" />
+              {fieldError("researchGateUrl")}
+            </div>
+            <div className="form-group">
+              <label htmlFor="f_orcid">{t("profile.orcid")}</label>
+              <input {...field("orcid")} placeholder="0000-0002-1825-0097" autoCapitalize="off" spellCheck={false} />
+              <p className="form-hint">{t("profile.orcidHint")}</p>
+              {fieldError("orcid")}
+            </div>
+          </fieldset>
 
           <div className="form-actions">
             <button className="btn btn--primary form-submit" type="submit" disabled={saving || !dirty} aria-busy={saving}>
@@ -285,6 +324,7 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
             <p className="profile-summary__role">{values.name || saved.name}</p>
             <p className="profile-summary__dept">{values.role}</p>
           </div>
+          <ProfileLinks member={{ name: saved.name, scholarUrl: saved.scholarUrl, researchGateUrl: saved.researchGateUrl, orcid: saved.orcid }} />
           <p className="card-note">{t("profile.categoryNote", { category: t(CATEGORY_LABEL_KEY[saved.category]) })}</p>
           <Link to={`/team/${saved.id}`} className="btn btn--secondary btn--sm">
             {t("profile.viewPublic")} <Icon name="arrow-right" size={14} />

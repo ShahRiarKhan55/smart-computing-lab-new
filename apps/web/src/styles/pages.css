@@ -2293,3 +2293,8 @@ a.tag:hover {
   border-radius: var(--radius-md);
   font-family: var(--font-heading);
 }
+
+.team-alumni-link {
+  margin: var(--space-8) 0 0;
+  text-align: center;
+}

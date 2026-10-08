@@ -85,6 +85,7 @@ model User {
   conversations      ConversationParticipant[]
   sentMessages       Message[]
   invitationsSent    AccountInvitation[]
+  oauthIdentities    OAuthIdentity[]
 
   @@index([role])
 }
@@ -99,6 +100,14 @@ model TeamMember {
   department String   @default("")
   bio        String   @default("")
   photoUrl   String   @default("")
+  // Phase 27: optional researcher profile links. "" = not set. `orcid` is the bare checksum-valid
+  // iD (0000-0002-1825-0097); the two URLs are validated per service host in @scl/shared.
+  scholarUrl      String @default("")
+  researchGateUrl String @default("")
+  orcid           String @default("")
+  // Phase 27: false hides the profile from everyone but lab managers/admins (used to unpublish an
+  // alumni entry without deleting it). Existing rows default to published.
+  isPublished     Boolean @default(true)
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -114,6 +123,9 @@ model TeamMember {
   groupLinks    GroupMember[]
   knowledgeDocs KnowledgeDoc[]
   labResources  LabResource[]
+
+  // Phase 27 back-relation
+  candidateLinks PublicationCandidateResearcher[]
 
   @@index([category, sortOrder])
 }
@@ -148,6 +160,80 @@ model AccountInvitation {
 
   @@index([email])
   @@index([expiresAt])
+}
+
+/// A third-party (Google / OpenID Connect) identity linked to exactly one account (Phase 27). It is
+/// keyed by the provider's stable subject id (`sub`), NEVER by email: an email can change hands, a
+/// `sub` cannot. A row exists only after the identity was authenticated by Google AND an explicit
+/// policy allowed it (see src/lib/googleAuth.ts) — it is never created from a client-supplied value.
+model OAuthIdentity {
+  id          String   @id @default(cuid())
+  provider    String // "google"
+  subject     String
+  userId      String
+  email       String // the verified email at last sign-in (informational only)
+  createdAt   DateTime @default(now())
+  lastLoginAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId])
+}
+
+/// A publication discovered by an importer (Phase 27), waiting for an editor's review. It is a
+/// STAGING row: nothing here is public, and a sync never writes to `Publication` — only an explicit
+/// approval creates a real (then fully editable) publication, so a later sync can never overwrite a
+/// manual correction. `(provider, externalId)` makes re-syncing idempotent; `externalId` is
+/// `doi:<lower-cased DOI>` when the work has a DOI (so co-authors' feeds collapse to one candidate),
+/// else `orcid:<iD>:<put-code>`.
+model PublicationCandidate {
+  id            String    @id @default(cuid())
+  provider      String // "ORCID"
+  externalId    String
+  doi           String    @default("") // lower-cased bare DOI, "" when unknown
+  title         String
+  authors       String    @default("")
+  year          Int
+  venue         String    @default("")
+  url           String    @default("") // canonical external link (doi.org when a DOI exists)
+  workType      String    @default("")
+  status        String    @default("PENDING") // PENDING | APPROVED | REJECTED | DUPLICATE
+  publicationId String? // the publication this was approved into / matched as a duplicate of
+  firstSeenAt   DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+
+  publication Publication?                     @relation(fields: [publicationId], references: [id], onDelete: SetNull)
+  researchers PublicationCandidateResearcher[]
+
+  @@unique([provider, externalId])
+  @@index([status])
+  @@index([doi])
+}
+
+/// Which lab researchers' feeds listed a candidate (pre-fills the author links on approval).
+model PublicationCandidateResearcher {
+  candidateId  String
+  teamMemberId String
+
+  candidate  PublicationCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  teamMember TeamMember           @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, teamMemberId])
+  @@index([teamMemberId])
+}
+
+/// A tiny named lock + last-run record for background-style jobs (Phase 27: publication sync), so two
+/// concurrent requests cannot run the same import twice and an editor can see when it last ran.
+/// Acquired with a conditional UPDATE (see src/lib/syncLock.ts), which is atomic in SQLite/libSQL.
+model SyncState {
+  name        String    @id
+  lockedUntil DateTime?
+  lastRunAt   DateTime?
+  lastStatus  String    @default("") // OK | PARTIAL | FAILED
+  lastSummary String    @default("") // small JSON, counts only
 }
 
 model HistoryEntry {
@@ -187,6 +273,7 @@ model Publication {
   authorLinks  PublicationAuthor[]
   projectLinks ProjectPublication[]
   labResources LabResource[]
+  candidates   PublicationCandidate[]
 
   @@index([year])
 }

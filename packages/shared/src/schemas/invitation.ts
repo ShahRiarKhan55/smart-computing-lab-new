@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { roleSchema, categorySchema } from "./enums.js";
+import { roleSchema, memberCategorySchema } from "./enums.js";
 import { idSchema } from "./common.js";
 import { teamMemberFields } from "./team.js";
 import { emailField, newPasswordField } from "./user.js";
@@ -21,7 +21,7 @@ export const createInvitationSchema = z
     name: teamMemberFields.name.optional(),
     initials: teamMemberFields.initials.optional(),
     memberRole: teamMemberFields.role.optional(),
-    category: categorySchema.optional(),
+    category: memberCategorySchema.optional(),
   })
   .superRefine((data, ctx) => {
     const newFieldsGiven = [data.name, data.initials, data.memberRole, data.category].filter((v) => v !== undefined).length;

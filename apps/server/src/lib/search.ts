@@ -3,6 +3,7 @@ import {
   DEFAULT_LOCALE,
   PROJECT_STATUS_LABELS,
   SEARCH_TYPES,
+  isManager,
   plainTextForumBody,
   translatableFieldsOf,
   type Locale,
@@ -274,7 +275,8 @@ const sources = [
     }),
   }),
 
-  // TeamMember has no `visibility` column: every profile is already public in /api/team.
+  // TeamMember has no `visibility` column: a profile is public unless a manager unpublished it
+  // (`isPublished`, Phase 27), in which case only managers/admins find it — the same rule /api/team applies.
   // Never selected or searched: userId, the linked account, its email.
   defineSource<Prisma.TeamMemberWhereInput, { id: string; name: string; role: string; department: string; bio: string }>({
     type: "researcher",
@@ -282,7 +284,7 @@ const sources = [
     fields: ["role", "department", "bio"],
     extra: (term) => [{ historyEntries: { some: { OR: [{ title: { contains: term } }, { description: { contains: term } }] } } }],
     translatable: "TEAM_MEMBER",
-    base: () => ({}),
+    base: (viewer) => (isManager(viewer) ? {} : { isPublished: true }),
     count: (where) => prisma.teamMember.count({ where }),
     find: (where, skip, take) =>
       prisma.teamMember.findMany({

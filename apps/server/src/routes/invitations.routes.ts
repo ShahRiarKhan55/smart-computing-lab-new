@@ -14,6 +14,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { assertValidId } from "../lib/authorLinks.js";
 import { recordAudit } from "../lib/audit.js";
+import { assertProfileMayHaveAccount } from "../lib/alumni.js";
 import { generateInvitationToken, hashInvitationToken } from "../lib/invitationToken.js";
 import { isInvitationRateLimited, recordInvitationAttempt } from "../lib/invitationRateLimit.js";
 import { normalizeBaseUrl } from "../lib/sitemap.js";
@@ -102,8 +103,9 @@ router.post(
       if (existingPending) throw new HttpError(409, "There is already a pending invitation for that email. Revoke it before sending a new one.");
 
       if (body.teamMemberId) {
-        const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true } });
+        const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true, category: true } });
         if (!member) throw new HttpError(400, "Selected team member does not exist.");
+        assertProfileMayHaveAccount(member);
         if (member.userId) throw new HttpError(409, "That team member already has a linked account.");
       }
 
@@ -246,8 +248,8 @@ router.post(
       if (existingUser) throw new HttpError(409, "An account with that email already exists. Please log in instead.");
 
       if (current.teamMemberId) {
-        const member = await tx.teamMember.findUnique({ where: { id: current.teamMemberId }, select: { userId: true } });
-        if (!member || member.userId) throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
+        const member = await tx.teamMember.findUnique({ where: { id: current.teamMemberId }, select: { userId: true, category: true } });
+        if (!member || member.userId || member.category === "ALUMNI") throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
       }
 
       const claimed = await tx.accountInvitation.updateMany({

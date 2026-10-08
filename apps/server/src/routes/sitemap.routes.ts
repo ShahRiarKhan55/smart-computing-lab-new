@@ -46,7 +46,7 @@ async function collectPublicEntries(): Promise<SitemapEntry[]> {
     prisma.researchArea.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.researchProject.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.researchGroup.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
-    prisma.teamMember.findMany({ select: { id: true, updatedAt: true } }),
+    prisma.teamMember.findMany({ where: { isPublished: true }, select: { id: true, updatedAt: true } }),
     prisma.publication.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.event.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.knowledgeDoc.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),

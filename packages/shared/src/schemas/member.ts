@@ -22,6 +22,11 @@ export const memberProfileSchema = z.object({
   department: z.string(),
   bio: z.string(),
   photoUrl: z.string(),
+  scholarUrl: z.string(),
+  researchGateUrl: z.string(),
+  orcid: z.string(),
+  /** Sent only to lab managers/admins. */
+  isPublished: z.boolean().optional(),
   history: z.array(historyEntrySchema),
   publications: z.array(publicationSchema),
   news: z.array(newsItemSchema),

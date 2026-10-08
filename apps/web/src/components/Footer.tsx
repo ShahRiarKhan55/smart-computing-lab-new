@@ -54,6 +54,9 @@ export function Footer() {
               <NavLink to="/contact">{t("nav.contact")}</NavLink>
             </li>
             <li>
+              <NavLink to="/alumni">{t("footer.alumni")}</NavLink>
+            </li>
+            <li>
               <NavLink to="/search">{t("search.pageTitle")}</NavLink>
             </li>
             <li>

@@ -39,7 +39,9 @@ export function HomePage() {
   const areas = useApiResource<ResearchArea[]>("/research");
   const projects = useApiResource<ProjectSummary[]>("/projects");
   const publications = useApiResource<Publication[]>("/publications");
-  const team = useApiResource<TeamMember[]>("/team");
+  const teamAll = useApiResource<TeamMember[]>("/team");
+  // The lab-at-a-glance counts and the featured researchers are CURRENT members; alumni have their own page.
+  const team = { ...teamAll, data: teamAll.data ? teamAll.data.filter((m) => m.category !== "ALUMNI") : teamAll.data };
   const news = useApiResource<NewsItem[]>("/news");
   const events = useApiResource<LabEvent[]>(`/events?scope=upcoming&limit=${NEXT_EVENTS}`);
   const resources = useApiResource<ResourceListResponse>(`/resources?limit=${FEATURED_RESOURCES}`);
