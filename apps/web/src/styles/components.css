@@ -1835,6 +1835,7 @@ button.notification-item--plain {
 }
 
 .photo-field__label {
+  display: block;
   margin: 0 0 var(--space-2);
   font-weight: 600;
 }
@@ -1848,6 +1849,15 @@ button.notification-item--plain {
 .photo-field__controls {
   flex: 1;
   min-width: 0;
+}
+
+.photo-field__controls input[type="file"] {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.photo-field__row {
+  flex-wrap: wrap;
 }
 
 .photo-field__actions {
@@ -1869,4 +1879,9 @@ button.notification-item--plain {
 .footer__disclaimer {
   margin: 0 0 var(--space-2, 0.5rem);
   max-width: 70ch;
+  color: var(--green-200);
+}
+.footer__disclaimer a {
+  color: #fff;
+  text-decoration: underline;
 }

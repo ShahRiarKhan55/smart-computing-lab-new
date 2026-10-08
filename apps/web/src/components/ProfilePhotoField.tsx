@@ -97,9 +97,15 @@ export function ProfilePhotoField({ memberId, initials, photoUrl, onChange }: Pr
 
   return (
     <div className="photo-field">
-      <p className="photo-field__label" id="photo_field_label">
-        {t("photo.label")}
-      </p>
+      {memberId ? (
+        <label className="photo-field__label" id="photo_field_label" htmlFor="photo_file">
+          {t("photo.label")}
+        </label>
+      ) : (
+        <p className="photo-field__label" id="photo_field_label">
+          {t("photo.label")}
+        </p>
+      )}
       <div className="photo-field__row">
         <Avatar size="lg" initials={initials} photoUrl={preview ?? (photoUrl || undefined)} />
         <div className="photo-field__controls">
