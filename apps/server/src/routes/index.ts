@@ -1,5 +1,6 @@
 import { Router } from "express";
 import authRoutes from "./auth.routes.js";
+import googleAuthRoutes from "./googleAuth.routes.js";
 import usersRoutes from "./users.routes.js";
 import teamRoutes from "./team.routes.js";
 import researchRoutes from "./research.routes.js";
@@ -25,6 +26,7 @@ import invitationsRoutes from "./invitations.routes.js";
 
 const router = Router();
 
+router.use("/auth/google", googleAuthRoutes);
 router.use("/auth", authRoutes);
 router.use("/users", usersRoutes);
 router.use("/team", teamRoutes);

@@ -19,6 +19,9 @@ export type AuditAction =
   | "USER_LINKED"
   | "USER_UNLINKED"
   | "PASSWORD_CHANGED"
+  // Google sign-in (Phase 27)
+  | "GOOGLE_LOGIN"
+  | "GOOGLE_LINKED"
   // researcher onboarding invitations
   | "INVITATION_CREATED"
   | "INVITATION_REVOKED"

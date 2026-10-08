@@ -993,6 +993,16 @@ export const en = {
   "team.publishedLabel": "Show this profile publicly",
   "team.publishedHint": "Untick to hide the profile from visitors without deleting it.",
   "footer.alumni": "Alumni",
+  // ---- Phase 27: Google sign-in ----
+  "auth.google.signIn": "Sign in with Google",
+  "auth.google.or": "or",
+  "auth.google.failed": "Google sign-in didn't work. That Google account may not be authorised for this site — use your email and password, or ask the site administrator.",
+  "auth.google.denied": "Google sign-in was cancelled.",
+  "auth.google.unconfigured": "Google sign-in isn't available on this site right now.",
+  "profile.google.heading": "Google sign-in",
+  "profile.google.description": "Connect your Google account to sign in with it next time. Your password keeps working.",
+  "profile.google.connect": "Connect Google account",
+  "profile.google.linked": "Your Google account is connected.",
 
   // ---- gallery category labels (Phase 15) -------------------------------------------------
   "gallery.category.LAB_LIFE": "Lab life",

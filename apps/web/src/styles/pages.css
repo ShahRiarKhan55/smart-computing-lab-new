@@ -2298,3 +2298,14 @@ a.tag:hover {
   margin: var(--space-8) 0 0;
   text-align: center;
 }
+
+.auth-card__alt {
+  margin-top: var(--space-5);
+}
+
+.auth-card__or {
+  margin: 0 0 var(--space-3);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}

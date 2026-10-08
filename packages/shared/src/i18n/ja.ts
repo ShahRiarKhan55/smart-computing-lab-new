@@ -981,6 +981,16 @@ export const ja: Record<keyof typeof en, string> = {
   "team.publishedLabel": "このプロフィールを公開する",
   "team.publishedHint": "チェックを外すと、削除せずに訪問者から非表示にできます。",
   "footer.alumni": "卒業生",
+  // ---- Phase 27: Google sign-in ----
+  "auth.google.signIn": "Googleでログイン",
+  "auth.google.or": "または",
+  "auth.google.failed": "Googleでログインできませんでした。このGoogleアカウントはこのサイトで許可されていない可能性があります。メールアドレスとパスワードでログインするか、サイト管理者にお問い合わせください。",
+  "auth.google.denied": "Googleでのログインがキャンセルされました。",
+  "auth.google.unconfigured": "現在、このサイトではGoogleでのログインをご利用いただけません。",
+  "profile.google.heading": "Googleでのログイン",
+  "profile.google.description": "Googleアカウントを連携すると、次回からGoogleでログインできます。パスワードでのログインも引き続き使えます。",
+  "profile.google.connect": "Googleアカウントを連携",
+  "profile.google.linked": "Googleアカウントを連携しました。",
 
   // ---- gallery category labels (Phase 15) -------------------------------------------------
   "gallery.category.LAB_LIFE": "ラボの日常",

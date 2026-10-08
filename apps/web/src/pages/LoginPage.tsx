@@ -1,12 +1,21 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import type { TranslationKey } from "@scl/shared";
 import { isSafeRedirectPath } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorState } from "../components/ErrorState";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { useApiResource } from "../hooks/useApiResource";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
+
+/** The only `?error=` values the Google callback ever sends; anything else is ignored (never echoed). */
+const GOOGLE_ERROR_KEY: Record<string, TranslationKey> = {
+  google_failed: "auth.google.failed",
+  google_denied: "auth.google.denied",
+  google_unconfigured: "auth.google.unconfigured",
+};
 
 export function LoginPage() {
   const t = useT();
@@ -18,6 +27,9 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Offered only when the server says Google sign-in is configured; while loading / on error nothing changes.
+  const google = useApiResource<{ enabled: boolean }>("/auth/google/config");
+  const googleErrorKey = GOOGLE_ERROR_KEY[new URLSearchParams(location.search).get("error") ?? ""];
 
   const requestedFrom = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
   // Phase 25 open-redirect guard: `requestedFrom` traces back to ProtectedRoute's `location.pathname`,
@@ -51,6 +63,7 @@ export function LoginPage() {
         <p className="sub">{t("auth.subtitle")}</p>
 
         {error && <ErrorState message={error} />}
+        {googleErrorKey && <ErrorState message={t(googleErrorKey)} />}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -65,6 +78,18 @@ export function LoginPage() {
             {submitting ? t("auth.loggingIn") : t("auth.login")}
           </button>
         </form>
+
+        {google.data?.enabled && (
+          <div className="auth-card__alt">
+            <p className="auth-card__or" aria-hidden="true">
+              {t("auth.google.or")}
+            </p>
+            {/* A plain link (full-page navigation): the server starts the OpenID Connect flow and Google redirects back to it. */}
+            <a className="btn btn--secondary btn--lg btn--block" href="/api/auth/google/start">
+              {t("auth.google.signIn")}
+            </a>
+          </div>
+        )}
 
         <p className="auth-card__foot">
           {t("auth.noAccount")}{" "}

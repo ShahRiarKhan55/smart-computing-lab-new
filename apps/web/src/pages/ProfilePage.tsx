@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { updateOwnProfileSchema, changePasswordSchema, type TeamMember } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useApiResource } from "../hooks/useApiResource";
@@ -63,8 +63,31 @@ export function ProfilePage() {
             is always available here even when this account has no linked team profile yet
             (status === 404 above) — see apps/server/src/routes/auth.routes.ts POST /auth/password. */}
         <PasswordChangeSection />
+        <GoogleLinkSection />
       </div>
     </>
+  );
+}
+
+/** "Connect Google account": offered only when the server has Google sign-in configured. Linking is an explicit, signed-in action. */
+function GoogleLinkSection() {
+  const t = useT();
+  const google = useApiResource<{ enabled: boolean }>("/auth/google/config");
+  const [params] = useSearchParams();
+  if (!google.data?.enabled) return null;
+  return (
+    <section className="detail-section" aria-labelledby="profile-google">
+      <h2 id="profile-google">{t("profile.google.heading")}</h2>
+      <p className="sub">{t("profile.google.description")}</p>
+      {params.get("google") === "linked" && (
+        <div className="form-success" role="status">
+          <Icon name="check" size={16} /> {t("profile.google.linked")}
+        </div>
+      )}
+      <a className="btn btn--secondary" href="/api/auth/google/start?link=1">
+        {t("profile.google.connect")}
+      </a>
+    </section>
   );
 }
 
