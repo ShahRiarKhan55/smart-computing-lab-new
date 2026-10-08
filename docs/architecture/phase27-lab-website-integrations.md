@@ -10,13 +10,26 @@ not verified.
    `apps/server/prisma/migrations/20261008090552_phase27_integrations/` adds four columns to `TeamMember`
    (`scholarUrl`, `researchGateUrl`, `orcid`, `isPublished`) and four tables (`OAuthIdentity`, `PublicationCandidate`,
    `PublicationCandidateResearcher`, `SyncState`). Prisma selects every column of a model it reads, so the new code
-   reading `TeamMember` against an un-migrated database fails (`no such column`). Consequences:
-   - **Vercel Preview deployments of this branch share the production database** (per the project's configuration), so
-     a Preview of this branch will break `/api/team`, `/api/profile` and the home page until the migration is applied.
-     Do not apply it just to make a Preview work — that is a production change that needs its own explicit approval.
-   - `vercel.json`'s build command does **not** run migrations (only builds `packages/shared` and `apps/web`); nothing
-     applies this migration automatically.
-2. The migration is additive only. It was reviewed by hand: the `TeamMember` changes are plain
+   reading `TeamMember` against an un-migrated database cannot work.
+   **Compatibility verdict: full backward compatibility with the old schema is not practical** (TeamMember is read in
+   ~50 places, many through relations; making each query column-explicit would be a large, risky rewrite of unrelated
+   code, and the new features themselves need the new tables). Instead:
+   - A **deploy-order guard** (`lib/schemaGuard.ts`, mounted on `/api` and `/sitemap.xml`) probes for the Phase 27
+     columns/tables. If (and only if) SQLite reports "no such column/table", every API route answers a clean, secret-free
+     **503 `DB_SCHEMA_BEHIND`** (and logs one actionable line); `/api/health` keeps answering. It never writes. Any other
+     probe failure is treated as "unknown" and requests proceed exactly as before (fail-open). Tested against a real
+     pre-Phase-27 database file (`scripts/schema-compat-regression.mjs`).
+   - **Rollback is safe**: the unmodified `origin/master` code runs against the migrated schema (master's
+     `api-regression` passed 570/570 on it), because the migration only adds.
+   - **Vercel Preview shares the production database**, so a Preview of this branch answers `DB_SCHEMA_BEHIND` until the
+     migration is applied. The only ways to get a *working* Preview are (a) an explicitly approved production migration, or
+     (b) an isolated Preview database (a separate Turso database + Preview-scoped `TURSO_*` variables, migrated there).
+     Both are configuration/production decisions outside this PR; nothing here changes environment variables.
+   - `vercel.json`'s build command does **not** run migrations; nothing applies this migration automatically.
+2. The migration is additive only (proved by `schema-compat-regression.mjs`: applied with `prisma migrate deploy` to a
+   copy of the pre-Phase-27 database, every existing table has identical row content, no foreign-key violation, the four
+   new tables start empty, new TeamMember columns take their defaults, and the SQL contains no DROP/RENAME/DELETE/UPDATE/
+   table rebuild). It was also reviewed by hand: the `TeamMember` changes are plain
    `ALTER TABLE … ADD COLUMN` statements (not Prisma's default "RedefineTables" copy/drop/rename, which is unsafe on
    Turso because `PRAGMA foreign_keys=OFF` has no effect inside a transaction and the drop would cascade-delete child
    rows). It was applied only to a disposable local SQLite file; `prisma migrate diff` against the schema shows no drift.

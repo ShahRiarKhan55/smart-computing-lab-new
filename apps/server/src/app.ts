@@ -7,6 +7,8 @@ import { multerErrorMessage } from "./lib/fileService.js";
 import { StorageUnavailableError } from "./lib/storage.js";
 import { resolveTrustProxy } from "./lib/trustProxy.js";
 import { securityHeaders } from "./lib/security.js";
+import { requireCurrentSchema } from "./lib/schemaGuard.js";
+import { prisma } from "./lib/prisma.js";
 import apiRoutes from "./routes/index.js";
 import sitemapRoutes from "./routes/sitemap.routes.js";
 
@@ -35,6 +37,9 @@ export function createApp() {
   // robots.txt / sitemap.xml (Phase 26 §14): served at the root, not under /api, because search
   // engines fetch them from the document root by convention. See routes/sitemap.routes.ts and the
   // deployment topology note there for what a reverse proxy needs to route here.
+  // Phase 27 deploy-order guard: a clear 503 (never a write) while the database lacks the Phase 27 migration.
+  const schemaGuard = requireCurrentSchema(prisma);
+  app.use(["/api", "/sitemap.xml"], schemaGuard);
   app.use(sitemapRoutes);
 
   app.use("/api", (_req, res, next) => {

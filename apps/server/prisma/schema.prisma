@@ -227,7 +227,7 @@ model PublicationCandidateResearcher {
 
 /// A tiny named lock + last-run record for background-style jobs (Phase 27: publication sync), so two
 /// concurrent requests cannot run the same import twice and an editor can see when it last ran.
-/// Acquired with a conditional UPDATE (see src/lib/syncLock.ts), which is atomic in SQLite/libSQL.
+/// Acquired with a conditional UPDATE (see src/lib/publications/sync.ts), which is atomic in SQLite/libSQL.
 model SyncState {
   name        String    @id
   lockedUntil DateTime?
