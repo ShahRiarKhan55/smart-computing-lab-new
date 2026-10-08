@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { createPublicationSchema, doiFromUrl, type Publication, type Visibility } from "@scl/shared";
+import { createPublicationSchema, doiFromUrl, normalizeDoi, type DoiLookupResult, type Publication, type Visibility } from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { useT } from "../i18n/LocaleContext";
+import { apiFetch, ApiError } from "../lib/api";
 
 /** What the form hands to the page: the validated, trimmed publication fields. */
 export interface PublicationFormFields {
@@ -75,6 +76,7 @@ export function PublicationFormModal({
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "PUBLIC");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [lookup, setLookup] = useState<{ busy: boolean; message: string | null; failed: boolean }>({ busy: false, message: null, failed: false });
   const { values: ja, setField: setJa, base } = useEntityTranslations("PUBLICATION", initial?.id, open);
 
   useEffect(() => {
@@ -83,6 +85,7 @@ export function PublicationFormModal({
       setLinkSelf(false);
       setVisibility(initial?.visibility ?? "PUBLIC");
       setError(null);
+      setLookup({ busy: false, message: null, failed: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
@@ -96,6 +99,30 @@ export function PublicationFormModal({
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  // "Fill from DOI": suggestions only, never saved; the person reviews and edits before pressing Save. Manual entry is unchanged.
+  async function fillFromDoi() {
+    const doi = normalizeDoi(values.doiUrl);
+    if (!doi) {
+      setLookup({ busy: false, message: t("publications.fillFromDoiNeedDoi"), failed: true });
+      return;
+    }
+    setLookup({ busy: true, message: null, failed: false });
+    try {
+      const r = await apiFetch<DoiLookupResult>(`/publication-imports/lookup?doi=${encodeURIComponent(doi)}`);
+      setValues((v) => ({
+        ...v,
+        doiUrl: r.doi,
+        title: r.title || v.title,
+        authors: r.authors || v.authors,
+        venue: r.venue || v.venue,
+        year: r.year ? String(r.year) : v.year,
+      }));
+      setLookup({ busy: false, message: t("publications.fillFromDoiDone"), failed: false });
+    } catch (err) {
+      setLookup({ busy: false, message: err instanceof ApiError && err.status === 429 ? t("publications.fillFromDoiLimit") : t("publications.fillFromDoiFailed"), failed: true });
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -191,6 +218,14 @@ export function PublicationFormModal({
             <p className="form-hint" id="pub_doiUrl_hint">
               {t("publications.doiHint")}
             </p>
+            <button className="btn btn--secondary btn--sm" type="button" onClick={fillFromDoi} disabled={lookup.busy || submitting}>
+              {lookup.busy ? t("publications.fillFromDoiBusy") : t("publications.fillFromDoi")}
+            </button>
+            {lookup.message && (
+              <p className={lookup.failed ? "form-hint form-hint--error" : "form-hint"} role="status">
+                {lookup.message}
+              </p>
+            )}
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
-import { canAccessAdmin, canManageUsers, isAdmin } from "@scl/shared";
+import { canAccessAdmin, canManageUsers, canReviewPublicationImports, isAdmin } from "@scl/shared";
 import { Nav } from "./components/Nav";
 import { Footer } from "./components/Footer";
 import { LoadingState } from "./components/LoadingState";
@@ -74,6 +74,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 //     asserting its OWN specific skeleton text ("Loading documents…" / "Loading resources…") — not
 //     satisfied by the generic Suspense fallback's "Loading…" text during the added chunk-fetch hop.
 const PublicationDetailPage = lazy(() => import("./pages/PublicationDetailPage").then((m) => ({ default: m.PublicationDetailPage })));
+const PublicationImportsPage = lazy(() => import("./pages/PublicationImportsPage").then((m) => ({ default: m.PublicationImportsPage })));
 const AlumniPage = lazy(() => import("./pages/AlumniPage").then((m) => ({ default: m.AlumniPage })));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then((m) => ({ default: m.WorkspacePage })));
 const KnowledgeDetailPage = lazy(() => import("./pages/KnowledgeDetailPage").then((m) => ({ default: m.KnowledgeDetailPage })));
@@ -138,6 +139,14 @@ export default function App() {
         <Route path="/team/:id" element={<MemberPage />} />
         <Route path="/alumni" element={<AlumniPage />} />
         <Route path="/publications" element={<PublicationsPage />} />
+        <Route
+          path="/publications/review"
+          element={
+            <ProtectedRoute allow={canReviewPublicationImports}>
+              <PublicationImportsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/publications/:id" element={<PublicationDetailPage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/search" element={<SearchPage />} />

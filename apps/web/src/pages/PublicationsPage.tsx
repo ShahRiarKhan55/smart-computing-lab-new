@@ -252,6 +252,25 @@ export function PublicationsPage() {
               setActionError(null);
               setFormModal({ open: true, pub: null });
             }}
+            actions={
+              policy.isManager ? (
+                <>
+                  <Link className="btn btn--secondary btn--sm" to="/publications/review">
+                    {t("pubimport.link")}
+                  </Link>
+                  <button
+                    className="btn btn--primary btn--sm"
+                    type="button"
+                    onClick={() => {
+                      setActionError(null);
+                      setFormModal({ open: true, pub: null });
+                    }}
+                  >
+                    + {t("publications.addNew")}
+                  </button>
+                </>
+              ) : undefined
+            }
           />
         )}
 

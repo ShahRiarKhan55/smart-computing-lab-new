@@ -22,6 +22,10 @@ export type AuditAction =
   // Google sign-in (Phase 27)
   | "GOOGLE_LOGIN"
   | "GOOGLE_LINKED"
+  // publication discovery (Phase 27): the sync run itself, and each editorial decision on a discovered candidate
+  | "PUBLICATION_SYNC_RUN"
+  | "PUBLICATION_IMPORT_APPROVED"
+  | "PUBLICATION_IMPORT_REJECTED"
   // researcher onboarding invitations
   | "INVITATION_CREATED"
   | "INVITATION_REVOKED"
@@ -115,7 +119,9 @@ export type AuditEntityType =
   | "GALLERY_ITEM"
   | "EVENT"
   | "KNOWLEDGE_DOC"
-  | "LAB_RESOURCE";
+  | "LAB_RESOURCE"
+  | "PUBLICATION_CANDIDATE"
+  | "PUBLICATION_SYNC";
 
 type AuditDb = Prisma.TransactionClient | PrismaClient;
 type AuditDetails = Record<string, string | number | boolean | null>;

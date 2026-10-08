@@ -21,6 +21,7 @@ export * from "./schemas/event.js";
 export * from "./schemas/knowledge.js";
 export * from "./schemas/resource.js";
 export * from "./schemas/invitation.js";
+export * from "./schemas/publicationImport.js";
 export * from "./permissions.js";
 export * from "./i18n/index.js";
 

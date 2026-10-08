@@ -56,6 +56,8 @@ export const canChangeVisibility = isManager;
 export const canEditContent = isMember;
 /** Delete. */
 export const canDeleteContent = isManager;
+/** Reviewing discovered publications and running the ORCID sync (Phase 27). */
+export const canReviewPublicationImports = isManager;
 /** Broader management, e.g. sort order and category on team profiles. */
 export const canManageContent = isManager;
 /** Forum moderation (used by a later phase; defined here so the matrix lives in one place). */
