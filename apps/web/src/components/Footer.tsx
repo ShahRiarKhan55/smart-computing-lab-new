@@ -77,8 +77,9 @@ export function Footer() {
           </ul>
         </nav>
         <div className="footer__copy">
+          <p className="footer__disclaimer">{t("footer.disclaimerShort")}</p>
           <p className="footer__disclaimer">
-            {t("footer.disclaimerShort")} <NavLink to="/copyright">{t("footer.copyrightLink")}</NavLink>
+            <NavLink to="/copyright">{t("footer.copyrightLink")}</NavLink>
           </p>
           {t("footer.copyright", { year: new Date().getFullYear() })}
         </div>
