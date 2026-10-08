@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ID_PATTERN, optionalHttpUrl, requiredText, teamMemberIdListSchema } from "./common.js";
+import { DOI_INVALID_MESSAGE, doiToUrl, normalizeDoi } from "../doi.js";
 import { visibilitySchema } from "./enums.js";
 import type { LabEvent } from "./event.js";
 import type { NewsItem } from "./news.js";
@@ -39,13 +40,33 @@ const yearField = z.preprocess(
     .max(MAX_PUBLICATION_YEAR, `Year must be between ${MIN_PUBLICATION_YEAR} and ${MAX_PUBLICATION_YEAR}.`),
 );
 
+/**
+ * The DOI field keeps its historical API name and shape (`doiUrl`, a link) so existing clients and
+ * stored rows are unaffected, but WRITES accept a bare DOI (`10.1234/example`), a `doi:` label or a
+ * doi.org link and always store the one canonical link `https://doi.org/<doi>`. "" clears it.
+ * Any other URL is refused: it is not a DOI.
+ */
+const doiField = z
+  .string({ invalid_type_error: "DOI must be text." })
+  .trim()
+  .max(2048, DOI_INVALID_MESSAGE)
+  .transform((value, ctx) => {
+    if (value === "") return "";
+    const doi = normalizeDoi(value);
+    if (!doi) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: DOI_INVALID_MESSAGE });
+      return z.NEVER;
+    }
+    return doiToUrl(doi);
+  });
+
 const publicationFields = {
   year: yearField,
   title: requiredText("Title", 500),
   authors: requiredText("Authors", 1000),
   venue: requiredText("Venue", 500),
   pdfUrl: optionalHttpUrl("PDF URL"),
-  doiUrl: optionalHttpUrl("DOI URL"),
+  doiUrl: doiField,
   extraUrl: optionalHttpUrl("Extra link URL"),
   extraLabel: z.string().trim().max(60, "Extra link label must be at most 60 characters."),
 };

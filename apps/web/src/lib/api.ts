@@ -2,11 +2,14 @@ import { currentStoredLocale } from "../i18n/LocaleContext";
 
 export class ApiError extends Error {
   status: number;
+  /** Stable machine code from the server (e.g. "STORAGE_UNAVAILABLE"), when it sent one. */
+  code?: string;
   /** The raw server message (English, or whatever the server sent) — kept for logging/debugging.
    * UI code should localize via `apiErrorMessage()` (i18n/errorMessages.ts) rather than reading this directly. */
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -30,7 +33,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.error || "Request failed", res.status);
+    throw new ApiError(data?.error || "Request failed", res.status, typeof data?.code === "string" ? data.code : undefined);
   }
 
   return data as T;
@@ -50,7 +53,7 @@ export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data?.error || "Upload failed", res.status);
+    throw new ApiError(data?.error || "Upload failed", res.status, typeof data?.code === "string" ? data.code : undefined);
   }
   return data as T;
 }

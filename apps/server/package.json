@@ -28,6 +28,7 @@
     "test:messages": "node scripts/messages-regression.mjs",
     "test:files": "node scripts/files-regression.mjs",
     "test:gallery": "node scripts/gallery-regression.mjs",
+    "test:gallery-upload": "node scripts/gallery-upload-regression.mjs",
     "test:events": "node scripts/events-regression.mjs",
     "test:admin": "node scripts/admin-regression.mjs",
     "test:research": "node scripts/research-regression.mjs",
@@ -41,7 +42,7 @@
     "test:knowledge-cost": "tsx scripts/knowledge-queries.test.ts",
     "test:resources": "node scripts/resources-regression.mjs",
     "test:resources-cost": "tsx scripts/resources-queries.test.ts",
-    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts && tsx scripts/unit-discovery.test.ts && tsx scripts/unit-workspace.test.ts && tsx scripts/unit-knowledge.test.ts && tsx scripts/unit-resources.test.ts && tsx scripts/unit-seo.test.ts && tsx scripts/unit-redirect.test.ts && tsx scripts/unit-session-startup.test.ts && tsx scripts/unit-trust-proxy-startup.test.ts && tsx scripts/unit-turso-env-isolation.test.ts && tsx scripts/unit-storage-reconcile.test.ts && tsx scripts/unit-sitemap.test.ts"
+    "test:unit": "tsx scripts/unit-policy.test.ts && tsx scripts/unit-search.test.ts && tsx scripts/unit-messages.test.ts && tsx scripts/unit-files.test.ts && tsx scripts/unit-i18n.test.ts && tsx scripts/unit-events.test.ts && tsx scripts/unit-admin.test.ts && tsx scripts/unit-research.test.ts && tsx scripts/unit-publication.test.ts && tsx scripts/unit-discovery.test.ts && tsx scripts/unit-workspace.test.ts && tsx scripts/unit-knowledge.test.ts && tsx scripts/unit-resources.test.ts && tsx scripts/unit-seo.test.ts && tsx scripts/unit-redirect.test.ts && tsx scripts/unit-session-startup.test.ts && tsx scripts/unit-trust-proxy-startup.test.ts && tsx scripts/unit-turso-env-isolation.test.ts && tsx scripts/unit-doi.test.ts && tsx scripts/unit-storage.test.ts && tsx scripts/unit-storage-reconcile.test.ts && tsx scripts/unit-sitemap.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

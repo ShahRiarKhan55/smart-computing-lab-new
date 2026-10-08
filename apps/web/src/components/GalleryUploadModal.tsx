@@ -3,7 +3,8 @@ import type { FormEvent } from "react";
 import { CAPTION_MAX, DEFAULT_IMAGE_MAX_BYTES, GALLERY_CATEGORIES, IMAGE_MIME_TYPES, type GalleryCategory, type GalleryItem, type Visibility } from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
-import { apiUpload, ApiError } from "../lib/api";
+import { apiUpload } from "../lib/api";
+import { uploadErrorMessage } from "../lib/uploadErrors";
 import { formatBytes } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
 import { GALLERY_CATEGORY_LABEL_KEY } from "../i18n/labels";
@@ -80,7 +81,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       onUploaded(item);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("gallery.uploadFailed"));
+      setError(uploadErrorMessage(err, t, formatBytes(DEFAULT_IMAGE_MAX_BYTES, locale)));
     } finally {
       setSubmitting(false);
     }

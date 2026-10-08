@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { canUploadFile, createGalleryItemFieldsSchema, isManager } from "@scl/shared";
+import { canUploadFile, createGalleryItemFieldsSchema, isAdmin, isManager } from "@scl/shared";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { HttpError } from "../lib/validate.js";
@@ -8,7 +8,7 @@ import { assertValidId } from "../lib/authorLinks.js";
 import { assertMayChangeVisibility } from "../lib/visibility.js";
 import { canAccessFile, toStoredFileRef } from "../lib/fileSerializers.js";
 import { uploadSingleFile, validateUpload } from "../lib/fileService.js";
-import { openReadStream, removeFile, saveFile } from "../lib/storage.js";
+import { getStorageStatus, openReadStream, probeStorage, removeFile, saveFile } from "../lib/storage.js";
 import { recordAudit } from "../lib/audit.js";
 
 const router = Router();
@@ -69,6 +69,19 @@ router.post(
       await removeFile(storageKey).catch((cleanupErr) => console.error(`[files] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
       throw err;
     }
+  }),
+);
+
+// GET /api/files/storage-status[?probe=1] -> ADMIN-only diagnostic for "uploads fail with 500/503".
+// Reports which backend is active and whether it is configured (never a token or URL); with
+// `probe=1` it writes and deletes a single byte to prove the backend really accepts writes.
+// Registered BEFORE `/:id` so the literal path is never mistaken for a file id.
+router.get(
+  "/storage-status",
+  requireCan(isAdmin),
+  asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(req.query.probe === "1" ? await probeStorage() : getStorageStatus());
   }),
 );
 

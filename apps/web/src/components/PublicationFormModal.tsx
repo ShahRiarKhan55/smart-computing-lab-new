@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { createPublicationSchema, type Publication, type Visibility } from "@scl/shared";
+import { createPublicationSchema, doiFromUrl, type Publication, type Visibility } from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
-import { apiErrorMessage } from "../i18n/errorMessages";
+import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { useT } from "../i18n/LocaleContext";
 
@@ -53,7 +53,8 @@ function toFormState(initial?: Publication | null): FormState {
     authors: initial?.authors ?? "",
     venue: initial?.venue ?? "",
     pdfUrl: initial?.pdfUrl ?? "",
-    doiUrl: initial?.doiUrl ?? "",
+    // Shown as the bare DOI the person would type; the server stores the canonical doi.org link.
+    doiUrl: initial?.doiUrl ? (doiFromUrl(initial.doiUrl) ?? initial.doiUrl) : "",
     extraUrl: initial?.extraUrl ?? "",
     extraLabel: initial?.extraLabel ?? "",
   };
@@ -103,7 +104,8 @@ export function PublicationFormModal({
 
     const validation = createPublicationSchema.safeParse(values);
     if (!validation.success) {
-      setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
+      const first = validation.error.issues[0]?.message;
+      setError(first ? knownMessage(first, t) : t("common.checkForm"));
       return;
     }
     const { teamMemberIds: _unused, translations: _tr, ...fields } = validation.data;
@@ -181,8 +183,14 @@ export function PublicationFormModal({
               id="pub_doiUrl"
               value={values.doiUrl}
               onChange={(e) => set("doiUrl", e.target.value)}
-              placeholder="https://doi.org/..."
+              placeholder={t("publications.doiPlaceholder")}
+              aria-describedby="pub_doiUrl_hint"
+              autoCapitalize="off"
+              spellCheck={false}
             />
+            <p className="form-hint" id="pub_doiUrl_hint">
+              {t("publications.doiHint")}
+            </p>
           </div>
         </div>
 

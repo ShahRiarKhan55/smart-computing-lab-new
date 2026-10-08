@@ -13,7 +13,7 @@ import { del, get, head, put } from "@vercel/blob";
  * URL to a caller; every function here returns/accepts only the same opaque server-generated key
  * (`generateStorageKey`, a v4 UUID) regardless of which backend is active.
  *
- * TWO BACKENDS, selected once at module load by whether `BLOB_READ_WRITE_TOKEN` is set (the same
+ * TWO BACKENDS, selected by whether `BLOB_READ_WRITE_TOKEN` is set (read at call time via `useBlob()`) (the same
  * env var Vercel itself sets automatically when Blob storage is attached to a project, and the
  * same one `@vercel/blob`'s own functions read by default — this module doesn't invent a second
  * flag to mean the same thing):
@@ -42,12 +42,85 @@ import { del, get, head, put } from "@vercel/blob";
 const DEFAULT_ROOT = path.join(process.cwd(), "storage", "files");
 export const STORAGE_ROOT = path.resolve(process.env.STORAGE_DIR || DEFAULT_ROOT);
 
-const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
+/** Read at call time (not module load) so the backend choice is testable; the value never changes in a real process. */
+const useBlob = (): boolean => !!process.env.BLOB_READ_WRITE_TOKEN;
+
+/**
+ * Raised when the storage backend cannot accept a write: not configured for this deployment, or
+ * the backend refused/failed. It carries NO provider message (those can echo request details), only
+ * a stable `code` and a sanitized `detail` (error class + errno/HTTP status) that is safe to log.
+ * The error handler in app.ts turns it into a structured 503 instead of an opaque 500.
+ */
+export class StorageUnavailableError extends Error {
+  readonly code: "STORAGE_NOT_CONFIGURED" | "STORAGE_UNAVAILABLE";
+  readonly detail: string;
+  constructor(code: StorageUnavailableError["code"], detail: string) {
+    super(code === "STORAGE_NOT_CONFIGURED" ? "Upload storage is not configured." : "Upload storage is temporarily unavailable.");
+    this.name = "StorageUnavailableError";
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+function describeStorageFailure(err: unknown): string {
+  const e = err as { name?: string; code?: string; status?: number; statusCode?: number } | null;
+  const parts = [e?.name ?? "Error"];
+  if (e?.code) parts.push(`code=${e.code}`);
+  const status = e?.status ?? e?.statusCode;
+  if (status) parts.push(`status=${status}`);
+  return parts.join(" ");
+}
+
+export interface StorageStatus {
+  backend: "blob" | "local";
+  configured: boolean;
+  /** Human-readable, secret-free reason when `configured` is false. */
+  issue: string | null;
+}
+
+/**
+ * Whether writes can possibly succeed in this deployment. On Vercel the function filesystem is
+ * read-only and per-instance, so the local-filesystem backend can never durably store a file there:
+ * without `BLOB_READ_WRITE_TOKEN` every upload would fail deep inside `mkdir`/`open`. Reporting that
+ * up front (and refusing before touching the disk) turns an opaque 500 into an actionable 503.
+ */
+export function getStorageStatus(): StorageStatus {
+  if (useBlob()) return { backend: "blob", configured: true, issue: null };
+  if (process.env.VERCEL) {
+    return {
+      backend: "local",
+      configured: false,
+      issue: "BLOB_READ_WRITE_TOKEN is not set. Vercel Functions have a read-only, non-persistent filesystem, so uploads need Vercel Blob storage attached to this project.",
+    };
+  }
+  return { backend: "local", configured: true, issue: null };
+}
+
+/**
+ * Admin diagnostic: writes and deletes a one-byte object to prove the active backend accepts writes.
+ * Never returns provider error text — only the sanitized detail.
+ */
+export async function probeStorage(): Promise<StorageStatus & { writable: boolean; detail: string | null }> {
+  const status = getStorageStatus();
+  if (!status.configured) return { ...status, writable: false, detail: status.issue };
+  try {
+    const key = await saveFile(Buffer.from([0]));
+    await removeFile(key);
+    return { ...status, writable: true, detail: null };
+  } catch (err) {
+    return { ...status, writable: false, detail: err instanceof StorageUnavailableError ? `${err.code}: ${err.detail}` : describeStorageFailure(err) };
+  }
+}
 
 let rootReady: Promise<void> | null = null;
 async function ensureRoot(): Promise<void> {
   if (!rootReady) rootReady = mkdir(STORAGE_ROOT, { recursive: true }).then(() => undefined);
-  await rootReady;
+  try {
+    await rootReady;
+  } catch (err) {
+    rootReady = null; // never cache a failure: a fixed/remounted root must be retried
+    throw err;
+  }
 }
 
 const KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -80,21 +153,29 @@ function pathFor(storageKey: string): string {
  * for the identical reason — `put()` throws rather than overwrites on a collision.
  */
 export async function saveFile(bytes: Buffer): Promise<string> {
+  const status = getStorageStatus();
+  if (!status.configured) throw new StorageUnavailableError("STORAGE_NOT_CONFIGURED", status.issue ?? "storage not configured");
+
   const key = generateStorageKey();
-
-  if (USE_BLOB) {
-    await put(key, bytes, { access: "private", addRandomSuffix: false });
-    return key;
-  }
-
-  await ensureRoot();
-  const handle = await open(pathFor(key), "wx");
   try {
-    await handle.writeFile(bytes);
-  } finally {
-    await handle.close();
+    if (status.backend === "blob") {
+      await put(key, bytes, { access: "private", addRandomSuffix: false });
+      return key;
+    }
+
+    await ensureRoot();
+    const handle = await open(pathFor(key), "wx");
+    try {
+      await handle.writeFile(bytes);
+    } finally {
+      await handle.close();
+    }
+    return key;
+  } catch (err) {
+    // Any backend failure (EROFS/EACCES/ENOSPC on disk; a Blob auth, access-mode or network error)
+    // becomes one classified error with a sanitized detail — never the provider's own message.
+    throw new StorageUnavailableError("STORAGE_UNAVAILABLE", `${status.backend} write failed: ${describeStorageFailure(err)}`);
   }
-  return key;
 }
 
 /**
@@ -108,7 +189,7 @@ export async function saveFile(bytes: Buffer): Promise<string> {
  * local backend means one `await openReadStream(...)` at the call site works for both.
  */
 export async function openReadStream(storageKey: string): Promise<Readable> {
-  if (USE_BLOB) {
+  if (useBlob()) {
     // statusCode 200 vs 304 is a discriminated union in the SDK's types (304 -> stream: null),
     // relevant only when a caller passes `ifNoneMatch` — this call never does, so 200 is the only
     // reachable branch; the explicit check narrows the type rather than asserting past it.
@@ -127,7 +208,7 @@ export async function openReadStream(storageKey: string): Promise<Readable> {
 }
 
 export async function fileExists(storageKey: string): Promise<boolean> {
-  if (USE_BLOB) {
+  if (useBlob()) {
     try {
       await head(storageKey);
       return true;
@@ -145,7 +226,7 @@ export async function fileExists(storageKey: string): Promise<boolean> {
 
 /** Best-effort delete: a blob that is already gone is not an error, on either backend. */
 export async function removeFile(storageKey: string): Promise<void> {
-  if (USE_BLOB) {
+  if (useBlob()) {
     try {
       await del(storageKey);
     } catch {

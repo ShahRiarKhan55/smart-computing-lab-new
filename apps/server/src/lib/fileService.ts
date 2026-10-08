@@ -15,8 +15,15 @@ function envBytes(name: string, fallback: number): number {
   const raw = Number(process.env[name]);
   return Number.isFinite(raw) && raw > 0 ? raw : fallback;
 }
-export const IMAGE_MAX_BYTES = envBytes("MAX_IMAGE_BYTES", DEFAULT_IMAGE_MAX_BYTES);
-export const DOCUMENT_MAX_BYTES = envBytes("MAX_DOCUMENT_BYTES", DEFAULT_DOCUMENT_MAX_BYTES);
+/**
+ * Vercel Functions reject any request body over 4.5 MB at the platform edge, BEFORE this app runs,
+ * with a plain-text (non-JSON) 413. Capping our own limit just below it means an oversized upload
+ * gets this app's clean JSON 413 and message instead of an opaque platform error. Elsewhere there is
+ * no such cap, so the documented defaults apply unchanged.
+ */
+export const PLATFORM_UPLOAD_CAP_BYTES = process.env.VERCEL ? 4 * 1024 * 1024 : Number.POSITIVE_INFINITY;
+export const IMAGE_MAX_BYTES = Math.min(envBytes("MAX_IMAGE_BYTES", DEFAULT_IMAGE_MAX_BYTES), PLATFORM_UPLOAD_CAP_BYTES);
+export const DOCUMENT_MAX_BYTES = Math.min(envBytes("MAX_DOCUMENT_BYTES", DEFAULT_DOCUMENT_MAX_BYTES), PLATFORM_UPLOAD_CAP_BYTES);
 const HARD_CAP_BYTES = Math.max(IMAGE_MAX_BYTES, DOCUMENT_MAX_BYTES);
 
 /**

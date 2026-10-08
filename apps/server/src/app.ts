@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { createSessionMiddleware } from "./lib/session.js";
 import { ValidationError, HttpError } from "./lib/validate.js";
 import { multerErrorMessage } from "./lib/fileService.js";
+import { StorageUnavailableError } from "./lib/storage.js";
 import { resolveTrustProxy } from "./lib/trustProxy.js";
 import { securityHeaders } from "./lib/security.js";
 import apiRoutes from "./routes/index.js";
@@ -68,6 +69,13 @@ export function createApp() {
     const multerMessage = multerErrorMessage(err);
     if (multerMessage) {
       res.status(multerMessage === "File is too large." ? 413 : 400).json({ error: multerMessage });
+      return;
+    }
+    // Upload storage not configured / refusing writes: a classified 503 with a safe, actionable
+    // message (never the provider's own text), logged with only the sanitized detail.
+    if (err instanceof StorageUnavailableError) {
+      console.error(`[storage] ${err.code}: ${err.detail}`);
+      res.status(503).json({ error: err.message, code: err.code });
       return;
     }
     // Rows removed/created concurrently between our check and the write.
