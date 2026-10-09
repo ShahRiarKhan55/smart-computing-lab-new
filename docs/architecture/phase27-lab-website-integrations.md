@@ -424,3 +424,23 @@ original status is kept verbatim in `rawFields` and in `normalized.statusVerbati
 `publication-visibility-regression.mjs` (47 checks) imports a synthetic manifest through the real importer and asks the list, browse (query/year/researcher/project/area/group/sort),
 detail, authors, search, profile, project, group, research-area, resource, workspace and sitemap endpoints as guest, member and manager (a mutation that drops the filter fails it).
 Signed-in lab members see `LAB_ONLY` records by the existing rule; guests never do.
+
+### 17a. Dependency and deploy order (this branch is STACKED on Phase 27 — read before merging)
+`feat/publication-source-provenance` is based on the Phase 27 branch at `fde25fc` and **needs** its schema guard (`lib/schemaGuard.ts`), its migration
+`20261008090552_phase27_integrations` and its design doc. Its pull request therefore targets `feat/phase-27-lab-website-integrations`, **not** `master`
+(against `master` it would also contain all of Phase 27 and look mergeable on its own). Rules:
+1. Never deploy this branch without the Phase 27 migration applied first, then `20261009100000_publication_source_provenance`; the guard probes both, and until both exist every API route answers `DB_SCHEMA_BEHIND` (503) instead of failing with 500s.
+2. Neither migration is applied to Production, a shared database or Preview by anyone but an authorised operator, as a separate approved step.
+3. The importer only ever writes to a marked, disposable local database. A live import is a separate decision, with its own target verification and approval.
+4. The branches touch disjoint files (privacy work on the Phase 27 branch; migration/importer here), so merge order does not matter for conflicts, but release order does: Phase 27 migration → provenance migration → code.
+
+### 17b. Making `year` nullable: scope and risk (NOT done; deferred by decision)
+*Why it is not additive:* SQLite cannot drop `NOT NULL`, so Prisma emits `RedefineTables` (create `new_Publication`, copy, `DROP TABLE "Publication"`, rename, recreate indexes) with
+`PRAGMA foreign_keys=OFF`. Four tables reference `Publication` (`PublicationAuthor`, `ProjectPublication`, `LabResource`, `PublicationCandidate`, plus the provenance table), and
+an HTTP migration to Turso cannot rely on that `PRAGMA` inside a transaction — a mistake would orphan or cascade-delete link rows. It needs a tested, rehearsed rollback and a verified disposable remote database first.
+*Code that assumes a year:* server — `routes/publicationImports.routes.ts` (9 uses), `lib/publicationHub.ts` (7: sorting, year filter, years facet), `routes/member.routes.ts` (5),
+`lib/search.ts` (5: year match and result meta), `routes/publications.routes.ts` (3), `lib/serializers.ts` (2), `lib/publications/{crossref,orcid,sync,types}.ts` (5), `routes/projects.routes.ts`,
+`lib/workspace.ts`, `lib/researchGraph.ts`, `lib/adminContent.ts` (1 each); web — `PublicationsPage` (5), `PublicationDetailPage` (3), `PublicationFormModal` (3), `MemberPage` (2), `PublicationItem`,
+`ProjectDetailPage`, `PublicationImportsPage`, `useResourceOptions` (1 each); shared — `schemas/publication.ts` (required year 1900–2100, query filters), `publicationImport.ts`, `admin.ts`.
+*Behaviour decisions it would force:* where undated items sort (SQLite sorts NULL first ascending, last descending), how the year facet and `?year=` treat them, what the list/detail/search show instead of a year,
+whether an editor may save an undated record, and the Publication candidate queue (`PublicationCandidate.year` is also required). Nothing here was changed.

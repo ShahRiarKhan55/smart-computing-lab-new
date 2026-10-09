@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { MARKER_TABLE, checkTargetPath, runImport, sourceKeyOf, titleSimilarity, visibilityFor, type Manifest, type ManifestRecord } from "./publication-source-import.js";
+import { MARKER_TABLE, checkTargetPath, runImport, sourceKeyOf, titleSimilarity, visibilityFor, describeDifferences, type Manifest, type ManifestRecord } from "./publication-source-import.js";
 
 let ok = 0;
 const failures: string[] = [];
@@ -70,7 +70,7 @@ async function main() {
       rec(7, { year: 2020, doi: "10.9999/zz.one", title: "ZZ another title seven" }), //     -> POSSIBLE_DUPLICATE of #1 (same DOI, case-insensitive)
       rec(8, { year: 2020, status: "投稿中", doi: "not a doi" }), //                     -> IMPORTED, bad DOI noted & not used
       rec(9, { year: null, doi: seedDoi.doiUrl }),
-      rec(10, { year: 2017, status: null, title: "ZZ blank status title ten" }), // -> IMPORTED as LAB_ONLY, flagged ambiguous //                                          -> STAGED_NO_YEAR with duplicate note
+      rec(10, { year: 2017, status: null, doi: "10.9999/zz.published.looking", title: "ZZ blank status title ten" }), // -> IMPORTED as LAB_ONLY, flagged ambiguous //                                          -> STAGED_NO_YEAR with duplicate note
     ];
     const m = manifest(records);
 
@@ -93,11 +93,13 @@ async function main() {
     t("apply: sourceOrder holds the source position and reproduces the source order", imported.map((p) => p.sourceOrder).join() === "1,6,8,10");
     t("apply: DOI stored canonically; an invalid DOI is not used", imported[0].doiUrl === "https://doi.org/10.9999/ZZ.One" && imported[2].doiUrl === "" && /not a valid DOI/.test(by[8].note));
     t("apply: whitespace/line breaks normalised, original kept verbatim in rawFields", imported[1].venue === "ZZ Journal / CONF 2024" && imported[1].title === "ZZ spaced title six" && (await prisma.publicationSourceRecord.findUnique({ where: { sourceKey: sourceKeyOf(m, records[5]) } }))?.rawFields.includes("Author 6") === true);
-    t("apply: visibility comes from the status only (出版 -> PUBLIC, 投稿中 -> LAB_ONLY)", imported[2].visibility === "LAB_ONLY" && imported[0].visibility === "PUBLIC" && imported[3].visibility === "LAB_ONLY" && /needs review/.test(by[10].note));
+    t("apply: visibility comes from the status only (出版 -> PUBLIC, 投稿中 -> LAB_ONLY)", imported[2].visibility === "LAB_ONLY" && imported[0].visibility === "PUBLIC" && imported[3].visibility === "LAB_ONLY" && /needs review/.test(by[10].note) && imported[3].doiUrl !== "", "a DOI, a year and a venue never turn a blank status into PUBLIC");
     t("apply: the verbatim status is kept in provenance", JSON.parse((await prisma.publicationSourceRecord.findUnique({ where: { sourceKey: sourceKeyOf(m, records[7]) } }))!.normalized).statusVerbatim === "投稿中");
     const listed = await prisma.publication.findMany({ where: { sourceOrder: { in: [6, 8] } }, orderBy: [{ year: "desc" }, { createdAt: "desc" }, { id: "asc" }] });
     t("apply: within one year the DEFAULT public order (year desc, createdAt desc) shows imported rows in source order", listed.map((p) => p.sourceOrder).join() === "6,8", listed.map((p) => `${p.year}/${p.sourceOrder}`).join());
     t("apply: a duplicate is linked to the EXISTING row (not inserted)", by[3].publicationId === seedDoi.id && by[4].publicationId === seeded[0].id);
+    t("apply: a duplicate's note lists the field-level differences (here the year and title) and changes nothing", /differences for review: year \(existing \d+, source 2022\) — investigate/.test(by[3].note) && /title/.test(by[3].note), by[3].note);
+    t("apply: an unchanged-after-normalisation duplicate says so", describeDifferences({ year: 2020, title: "A  b", authors: "X, Y.", venue: "V" }, { year: 2020, title: "a b", authors: "x y", venue: "v" }).startsWith("no field differs"));
     t("apply: a within-file duplicate is linked to the earlier imported row", by[7].publicationId === imported[0].id);
     t("apply: a no-year block keeps its duplicate hint but creates nothing", by[9].publicationId === seedDoi.id && /possible duplicate/.test(by[9].note));
     t("apply: every block has a unique source key", new Set((await prisma.publicationSourceRecord.findMany({ select: { sourceKey: true } })).map((r) => r.sourceKey)).size === 10);

@@ -23,6 +23,7 @@ async function main() {
   t("the real P2010 messages of both engines are recognised", (await checkSchema(dbThatFailsWith("Invalid `prisma.$queryRawUnsafe()` invocation: Raw query failed. Code: `1`. Message: `SQLITE_ERROR: no such column: TeamMember.scholarUrl`"))) === "behind" && (await checkSchema(dbThatFailsWith("Raw query failed. Code: `1`. Message: `no such table: OAuthIdentity`"))) === "behind");
   t("a lookalike that is NOT a missing-schema error is unknown", (await checkSchema(dbThatFailsWith("Raw query failed. Code: `5`. Message: `database is locked`"))) === "unknown" && (await checkSchema(dbThatFailsWith("SQLITE_NOTADB: file is not a database"))) === "unknown");
   t("probes cover every Phase 27 column and table", ["scholarUrl", "researchGateUrl", "orcid", "isPublished", "OAuthIdentity", "PublicationCandidate", "PublicationCandidateResearcher", "SyncState"].every((n) => PHASE27_PROBES.some((p) => p.includes(n))));
+  t("probes also cover the publication-provenance migration (Publication.sourceOrder and PublicationSourceRecord), so code without it answers DB_SCHEMA_BEHIND instead of 500", ["sourceOrder", "PublicationSourceRecord"].every((n) => PHASE27_PROBES.some((p) => p.includes(n))));
   t("a healthy database is ok", (await checkSchema(healthyDb)) === "ok");
   t("'no such column' means behind", (await checkSchema(dbThatFailsWith("Raw query failed. Code: `1`. Message: `no such column: scholarUrl`"))) === "behind");
   t("'no such table' means behind", (await checkSchema(dbThatFailsWith("no such table: main.OAuthIdentity"))) === "behind");

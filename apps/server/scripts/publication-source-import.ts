@@ -106,6 +106,16 @@ export function titleSimilarity(a: string, b: string): number {
   return (2 * hit) / (x.length - 1 + (y.length - 1));
 }
 
+/** Field-level differences between a source block and the existing record it may duplicate — for a human to review; nothing is changed. */
+export function describeDifferences(existing: { year: number; title: string; authors: string; venue: string }, src: { year: number | null; title: string; authors: string; venue: string }): string {
+  const norm = (x: string) => x.toLowerCase().replace(/[\s,;.]+/g, " ").trim();
+  const out: string[] = [];
+  if (src.year === null) out.push(`year (existing ${existing.year}, source none)`);
+  else if (existing.year !== src.year) out.push(`year (existing ${existing.year}, source ${src.year}) — investigate`);
+  for (const k of ["title", "authors", "venue"] as const) if (norm(existing[k]) !== norm(src[k])) out.push(`${k} (existing ${JSON.stringify(existing[k])}, source ${JSON.stringify(src[k])})`);
+  return out.length ? `differences for review: ${out.join("; ")}` : "no field differs (after case/whitespace/punctuation normalisation)";
+}
+
 export const sourceKeyOf = (m: Pick<Manifest, "sourceSha256">, r: Pick<ManifestRecord, "sheet" | "rowStart">) => `${m.sourceSha256.slice(0, 16)}:${r.sheet}:${r.rowStart}`;
 
 export interface TargetCheck {
@@ -152,7 +162,7 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
 
   const body = async (tx: Pick<PrismaClient, "publication" | "publicationSourceRecord" | "auditLog">, write: boolean) => {
     const existingKeys = new Set((await tx.publicationSourceRecord.findMany({ where: { sourceKey: { in: keys } }, select: { sourceKey: true } })).map((r) => r.sourceKey));
-    const pubs = (await tx.publication.findMany({ select: { id: true, title: true, doiUrl: true, year: true } })).map((p) => ({ id: p.id, title: p.title, doiKey: doiKey(normalizeDoi(p.doiUrl) ?? "") || null, year: p.year }));
+    const pubs: { id: string; title: string; doiKey: string | null; year: number; authors: string; venue: string }[] = (await tx.publication.findMany({ select: { id: true, title: true, doiUrl: true, year: true, authors: true, venue: true } })).map((p) => ({ id: p.id, title: p.title, doiKey: doiKey(normalizeDoi(p.doiUrl) ?? "") || null, year: p.year, authors: p.authors, venue: p.venue }));
 
     for (const rec of manifest.records.slice().sort((a, b) => a.seq - b.seq)) {
       const sourceKey = sourceKeyOf(manifest, rec);
@@ -172,14 +182,14 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
       if (changes.length) notes.push(`whitespace/line breaks normalised in: ${changes.join(", ")} (originals kept in rawFields)`);
 
       // duplicates: exact DOI or exact normalised title (and, for information only, a near-identical title)
-      let dupOf: { id: string; why: string } | null = null;
+      let dupOf: { id: string; why: string; diff: string } | null = null;
       const near: string[] = [];
       for (const e of pubs) {
-        if (doi && e.doiKey && e.doiKey === doiKey(doi)) dupOf ??= { id: e.id, why: `same DOI as ${e.id}${e.year !== p.year ? ` (existing year ${e.year}, source year ${p.year ?? "none"})` : ""}` };
-        else if (normTitle(e.title) === normTitle(cleaned.title)) dupOf ??= { id: e.id, why: `identical title to ${e.id} (existing year ${e.year}, source year ${p.year ?? "none"})` };
+        if (doi && e.doiKey && e.doiKey === doiKey(doi)) dupOf ??= { id: e.id, why: `same DOI as ${e.id}`, diff: describeDifferences(e, { year: p.year, ...cleaned }) };
+        else if (normTitle(e.title) === normTitle(cleaned.title)) dupOf ??= { id: e.id, why: `identical title to ${e.id}`, diff: describeDifferences(e, { year: p.year, ...cleaned }) };
         else if (titleSimilarity(e.title, cleaned.title) >= 0.8) near.push(`${e.id} (${titleSimilarity(e.title, cleaned.title).toFixed(2)})`);
       }
-      if (near.length) notes.push(`similar title to existing: ${near.join(", ")}`);
+      if (near.length) notes.push(`similar title to existing: ${near.join(", ")} — needs manual review, not merged and not discarded`);
 
       let disposition: Disposition;
       let publicationId: string | null = null;
@@ -190,13 +200,13 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
         disposition = "STAGED_NO_YEAR";
         notes.unshift("no year in the source; none invented — kept in the provenance table until a year is supplied");
         if (dupOf) {
-          notes.push(`possible duplicate: ${dupOf.why}`);
+          notes.push(`possible duplicate: ${dupOf.why}; ${dupOf.diff}`);
           publicationId = dupOf.id;
         }
       } else if (dupOf) {
         disposition = "POSSIBLE_DUPLICATE";
         publicationId = dupOf.id;
-        notes.unshift(`possible duplicate: ${dupOf.why}; NOT inserted and the existing record is untouched`);
+        notes.unshift(`possible duplicate: ${dupOf.why}; NOT inserted and the existing record is untouched; ${dupOf.diff}`);
       } else {
         const parsed = createPublicationSchema.safeParse({ year: p.year, title: cleaned.title, authors: cleaned.authors, venue: cleaned.venue, doiUrl: doi ?? "", visibility: vis.visibility });
         if (!parsed.success) {
@@ -224,7 +234,7 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
         if (data) {
           const created = await tx.publication.create({ data, select: { id: true } });
           publicationId = created.id;
-          pubs.push({ id: created.id, title: cleaned.title, doiKey: doi ? doiKey(doi) : null, year: p.year });
+          pubs.push({ id: created.id, title: cleaned.title, doiKey: doi ? doiKey(doi) : null, year: p.year, authors: cleaned.authors, venue: cleaned.venue });
           await tx.auditLog.create({ data: { actorId: null, actorEmail: "publication-source-import", action: "PUBLICATION_CREATED", entityType: "PUBLICATION", entityId: created.id, details: JSON.stringify({ source: sourceKey, seq: rec.seq }) } });
         }
         await tx.publicationSourceRecord.create({
@@ -246,7 +256,7 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
         });
       } else if (data) {
         // dry run: remember it so later blocks of the same file are compared against it
-        pubs.push({ id: `(new #${rec.seq})`, title: cleaned.title, doiKey: doi ? doiKey(doi) : null, year: p.year });
+        pubs.push({ id: `(new #${rec.seq})`, title: cleaned.title, doiKey: doi ? doiKey(doi) : null, year: p.year, authors: cleaned.authors, venue: cleaned.venue });
       }
       result.plan.push({ seq: rec.seq, sheet: rec.sheet, rows, sourceKey, disposition, publicationId, note, action });
     }
