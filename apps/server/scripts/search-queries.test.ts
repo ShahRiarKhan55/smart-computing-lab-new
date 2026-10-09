@@ -34,20 +34,23 @@ async function main() {
     const member = { id: "someone", role: "MEMBER" as const };
     const many = await run(member, { q: MARK, limit: "50" });
     t("240 matches, 50 returned", many.res.results.length === 50 && many.res.pagination.total === 240);
-    t("50 results cost at most 14 database operations (12 before Phase 22 added the knowledge COUNT, 13 before Phase 23 added the resource COUNT; not 50+)", many.ops.length <= 14, `${many.ops.length}: ${many.ops.join(",")}`);
+    t("50 results cost at most 15 database operations (12 before Phase 22 added the knowledge COUNT, 13 before Phase 23 added the resource COUNT, 14 before Phase 27 added the one hidden-people name lookup; not 50+)", many.ops.length <= 15, `${many.ops.length}: ${many.ops.join(",")}`);
     const one = await run(member, { q: MARK, limit: "1" });
     t("1 result costs the same order of operations as 50", one.res.results.length === 1 && Math.abs(many.ops.length - one.ops.length) <= 2, `${one.ops.length} vs ${many.ops.length}`);
     t("only COUNT and one findMany per overlapping bucket, nothing else", many.ops.every((o) => /\.(count|findMany)$/.test(o)) && many.ops.filter((o) => o.endsWith(".findMany")).length <= 3);
     t("no operation targets a model that is not searched (User, Session, AuditLog, ...)", many.ops.every((o) => /^(ResearchArea|ResearchProject|ResearchGroup|TeamMember|Publication|NewsItem|ForumPost|ForumCategory|Event|KnowledgeDoc|LabResource)\./.test(o)));
 
     const guest = await run(null, { q: MARK, limit: "50" });
-    t("guest sees only the 120 PUBLIC rows, with the same bounded cost", guest.res.pagination.total === 120 && guest.res.counts.publication === 120 && guest.ops.length <= 14, `${guest.res.pagination.total} ops ${guest.ops.length}`);
+    t("guest sees only the 120 PUBLIC rows, with the same bounded cost", guest.res.pagination.total === 120 && guest.res.counts.publication === 120 && guest.ops.length <= 15, `${guest.res.pagination.total} ops ${guest.ops.length}`);
     const deep = await run(member, { q: MARK, limit: "50", page: "5" });
-    t("deep page (offset 200): the remaining 40, still bounded", deep.res.results.length === 40 && deep.ops.length <= 14);
+    t("deep page (offset 200): the remaining 40, still bounded", deep.res.results.length === 40 && deep.ops.length <= 15);
     const none = await run(null, { q: "zzzznomatchzzzz", limit: "50" });
-    t("no matches: only the 10 per-type COUNTs run (no tier counts, no SELECT)", none.ops.length === 10 && none.ops.every((o) => o.endsWith(".count")), none.ops.join());
+    // Unpublished-people policy: a non-manager's publication search first reads the (small) list of hidden people's names ONCE
+    // (`TeamMember.findMany`), so a hidden name can never be confirmed through an authors line. That is the only non-COUNT query.
+    const counts = none.ops.filter((o) => o.endsWith(".count"));
+    t("no matches: only the 10 per-type COUNTs and the single hidden-names lookup run (no tier counts, no row SELECT)", counts.length === 10 && none.ops.length === 11 && none.ops.filter((o) => o === "TeamMember.findMany").length === 1, none.ops.join());
     const typed = await run(null, { q: MARK, type: "publication", limit: "20" });
-    t("type filter still counts every type (chips) but reads rows of one type only", typed.ops.filter((o) => o.endsWith(".findMany")).every((o) => o === "Publication.findMany"));
+    t("type filter still counts every type (chips) but reads rows of one type only", typed.ops.filter((o) => o.endsWith(".findMany")).every((o) => o === "Publication.findMany" || o === "TeamMember.findMany"));
     const allTypes = await run(member, { q: "a", limit: "50" });
     t("worst case (every type, many words matching): at most 6 + 12 counts + 18 selects", allTypes.ops.length <= 36, String(allTypes.ops.length));
   } finally {

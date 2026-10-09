@@ -12,6 +12,7 @@ import {
 } from "@scl/shared";
 import { prisma } from "./prisma.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
+import { personVisibleWhere, selfProfileIdIfNeeded, visibleAttribution } from "./hiddenPeople.js";
 import { loadRefTranslations, pick } from "./researchGraph.js";
 import { loadTranslations, localize } from "./translations.js";
 import { translationMatchIds } from "./search.js";
@@ -31,11 +32,11 @@ import { translationMatchIds } from "./search.js";
 
 /** What every knowledge read needs: the relationship targets (title + visibility) and the author's public team profile. */
 export const knowledgeInclude = {
-  author: { select: { teamMember: { select: { id: true, name: true } } } },
+  author: { select: { teamMember: { select: { id: true, name: true, isPublished: true } } } },
   project: { select: { id: true, title: true, visibility: true } },
   researchArea: { select: { id: true, title: true, visibility: true } },
   group: { select: { id: true, name: true, visibility: true } },
-  teamMember: { select: { id: true, name: true } },
+  teamMember: { select: { id: true, name: true, isPublished: true } },
 } satisfies Prisma.KnowledgeDocInclude;
 
 export type KnowledgeRow = Prisma.KnowledgeDocGetPayload<{ include: typeof knowledgeInclude }>;
@@ -51,13 +52,14 @@ export async function serializeKnowledge(rows: KnowledgeRow[], viewer: Viewer, l
 export async function serializeKnowledge(rows: KnowledgeRow[], viewer: Viewer, locale: Locale, detail?: false): Promise<KnowledgeDocSummary[]>;
 export async function serializeKnowledge(rows: KnowledgeRow[], viewer: Viewer, locale: Locale, detail = false): Promise<KnowledgeDocSummary[] | KnowledgeDocDetail[]> {
   const seen = <T extends { visibility: string; id: string } | null>(r: T) => (r && canView(viewer, r.visibility) ? [r.id] : []);
-  const [docTr, refTr] = await Promise.all([
+  const [docTr, refTr, selfId] = await Promise.all([
     loadTranslations(prisma, "KNOWLEDGE_DOC", rows.map((r) => r.id), locale),
     loadRefTranslations(locale, {
       projects: rows.flatMap((r) => seen(r.project)),
       areas: rows.flatMap((r) => seen(r.researchArea)),
       groups: rows.flatMap((r) => seen(r.group)),
     }),
+    selfProfileIdIfNeeded(viewer, rows.flatMap((r) => [r.author?.teamMember, r.teamMember])),
   ]);
 
   return rows.map((raw) => {
@@ -69,12 +71,12 @@ export async function serializeKnowledge(rows: KnowledgeRow[], viewer: Viewer, l
       title: row.title,
       excerpt: knowledgeExcerpt(row.body),
       category: category.success ? category.data : "RESOURCE",
-      author: row.author?.teamMember ? { id: row.author.teamMember.id, name: row.author.teamMember.name } : null,
+      author: visibleAttribution(viewer, row.author?.teamMember, selfId),
       project: row.project && canView(viewer, row.project.visibility) ? { id: row.project.id, title: pick(refTr.project, row.project.id, "title", row.project.title) } : null,
       researchArea:
         row.researchArea && canView(viewer, row.researchArea.visibility) ? { id: row.researchArea.id, title: pick(refTr.area, row.researchArea.id, "title", row.researchArea.title) } : null,
       group: row.group && canView(viewer, row.group.visibility) ? { id: row.group.id, title: pick(refTr.group, row.group.id, "name", row.group.name) } : null,
-      researcher: row.teamMember ? { id: row.teamMember.id, name: row.teamMember.name } : null,
+      researcher: visibleAttribution(viewer, row.teamMember, selfId),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       canEdit: canEditKnowledge(viewer, isOwner),
@@ -129,7 +131,7 @@ export async function knowledgeWhere(query: KnowledgeListQuery, viewer: Viewer):
   if (query.project) and.push({ projectId: query.project, project: visible });
   if (query.area) and.push({ researchAreaId: query.area, researchArea: visible });
   if (query.group) and.push({ groupId: query.group, group: visible });
-  if (query.researcher) and.push({ teamMemberId: query.researcher });
+  if (query.researcher) and.push({ teamMemberId: query.researcher, teamMember: personVisibleWhere(viewer) });
   if (query.q.terms.length > 0) {
     const english: Prisma.KnowledgeDocWhereInput = {
       AND: query.q.terms.map((term) => ({ OR: [{ title: { contains: term } }, { body: { contains: term } }] })),

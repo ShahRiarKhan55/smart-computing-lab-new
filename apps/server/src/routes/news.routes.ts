@@ -13,12 +13,12 @@ import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { optionalAuth, requireAuth, requireCan } from "../middleware/auth.js";
 import {
   assertMayChangeLinks,
-  assertTeamMembersExist,
   assertValidId,
   diffLinks,
   type LinkActor,
 } from "../lib/authorLinks.js";
-import { assertMayChangeVisibility, visibleTo } from "../lib/visibility.js";
+import { assertPeopleVisibleAndExist, splitVisible } from "../lib/hiddenPeople.js";
+import { assertMayChangeVisibility, visibleTo, type Viewer } from "../lib/visibility.js";
 import { toNewsItem } from "../lib/serializers.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
@@ -63,6 +63,11 @@ async function listAuthorIds(tx: Prisma.TransactionClient, newsItemId: string) {
   return links.map((l) => l.teamMemberId).sort();
 }
 
+/** Linked ids the viewer may see (an unpublished person is not listed to anyone but managers and themself). */
+async function listVisibleAuthorIds(tx: Prisma.TransactionClient, id: string, viewer: Viewer): Promise<string[]> {
+  return (await splitVisible(tx, viewer, await listAuthorIds(tx, id))).visible;
+}
+
 /** Applies the new author set and returns what changed (for the audit row). */
 async function replaceAuthors(
   tx: Prisma.TransactionClient,
@@ -71,10 +76,12 @@ async function replaceAuthors(
   requestedIds: string[],
 ) {
   const current = await listAuthorIds(tx, newsItemId);
-  await assertMayChangeLinks(tx, actor, current, requestedIds);
-  await assertTeamMembersExist(tx, requestedIds);
+  // Only links the editor may see take part: hidden (unpublished) people are never revealed, probed or removed by this save.
+  const { visible } = await splitVisible(tx, actor, current);
+  await assertMayChangeLinks(tx, actor, visible, requestedIds);
+  await assertPeopleVisibleAndExist(tx, actor, requestedIds);
 
-  const { toAdd, toRemove } = diffLinks(current, requestedIds);
+  const { toAdd, toRemove } = diffLinks(visible, requestedIds);
   if (toRemove.length > 0) {
     await tx.newsAuthor.deleteMany({ where: { newsItemId, teamMemberId: { in: toRemove } } });
   }
@@ -111,7 +118,7 @@ router.get(
       select: { id: true },
     });
     if (!row) throw new HttpError(404, "Not found");
-    const body: NewsAuthorsResponse = { teamMemberIds: await listAuthorIds(prisma, row.id) };
+    const body: NewsAuthorsResponse = { teamMemberIds: await listVisibleAuthorIds(prisma, row.id, req.user ?? null) };
     res.json(body);
   }),
 );
@@ -130,7 +137,7 @@ router.put(
       if (!existing) throw new HttpError(404, "Not found");
       const diff = await replaceAuthors(tx, req.user!, existing.id, teamMemberIds);
       await auditAuthorChange(tx, req.user!, existing.id, diff);
-      return listAuthorIds(tx, existing.id);
+      return listVisibleAuthorIds(tx, existing.id, req.user!);
     });
 
     const body: NewsAuthorsResponse = { teamMemberIds: linked };

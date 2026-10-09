@@ -4,6 +4,7 @@ import { visibleTo, type Viewer } from "./visibility.js";
 import { eventInclude, serializeEvents } from "./eventSerializers.js";
 import { loadTranslations, localize } from "./translations.js";
 import { toNewsItem, toPublication } from "./serializers.js";
+import { hiddenNamesFor, redactNames } from "./hiddenPeople.js";
 
 /**
  * Phase 18: the research graph (Area -> Project -> Group -> Researcher) is read through the SAME
@@ -59,8 +60,11 @@ export async function loadProjectOutputs(projectIds: string[], viewer: Viewer, l
 
 /** Publication rows -> API shape with the locale's title/venue overrides (one batched lookup, none for English). */
 export async function localizedPublications<T extends Parameters<typeof toPublication>[0] & { id: string }>(rows: T[], viewer: Viewer, locale: Locale): Promise<Publication[]> {
-  const tr = await loadTranslations(prisma, "PUBLICATION", rows.map((r) => r.id), locale);
-  return rows.map((r) => toPublication(localize(r, "PUBLICATION", tr), viewer));
+  const [tr, hidden] = await Promise.all([loadTranslations(prisma, "PUBLICATION", rows.map((r) => r.id), locale), hiddenNamesFor(viewer)]);
+  return rows.map((r) => {
+    const p = toPublication(localize(r, "PUBLICATION", tr), viewer);
+    return hidden.length > 0 ? { ...p, authors: redactNames(p.authors, hidden) } : p;
+  });
 }
 
 /** News and events of any of `projectIds` (already filtered to visible projects by the caller), newest first, at most `take` each. */

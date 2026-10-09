@@ -20,6 +20,7 @@ import {
 } from "@scl/shared";
 import { prisma } from "./prisma.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
+import { personVisibleWhere, selfProfileIdIfNeeded, visibleAttribution } from "./hiddenPeople.js";
 import { loadRefTranslations, pick } from "./researchGraph.js";
 import { loadTranslations, localize } from "./translations.js";
 import { translationMatchIds } from "./search.js";
@@ -44,8 +45,8 @@ import { researcherRelations } from "./knowledge.js";
 export const resourceInclude = (viewer: Viewer, projectTake: number) => {
   const visible = visibleTo(viewer);
   return {
-    owner: { select: { teamMember: { select: { id: true, name: true } } } },
-    teamMember: { select: { id: true, name: true } },
+    owner: { select: { teamMember: { select: { id: true, name: true, isPublished: true } } } },
+    teamMember: { select: { id: true, name: true, isPublished: true } },
     researchArea: { select: { id: true, title: true, visibility: true } },
     group: { select: { id: true, name: true, visibility: true } },
     knowledgeDoc: { select: { id: true, title: true, visibility: true } },
@@ -81,7 +82,7 @@ export async function serializeResources(rows: ResourceRow[], viewer: Viewer, lo
 export async function serializeResources(rows: ResourceRow[], viewer: Viewer, locale: Locale, detail?: false): Promise<ResourceSummary[]>;
 export async function serializeResources(rows: ResourceRow[], viewer: Viewer, locale: Locale, detail = false): Promise<ResourceSummary[] | ResourceDetail[]> {
   const seen = <T extends { visibility: string; id: string } | null>(r: T) => (r && canView(viewer, r.visibility) ? [r.id] : []);
-  const [resTr, refTr, docTr, pubTr, eventTr] = await Promise.all([
+  const [resTr, refTr, docTr, pubTr, eventTr, selfId] = await Promise.all([
     loadTranslations(prisma, "LAB_RESOURCE", rows.map((r) => r.id), locale),
     loadRefTranslations(locale, {
       projects: rows.flatMap((r) => r.projectLinks.map((l) => l.project.id)),
@@ -91,6 +92,7 @@ export async function serializeResources(rows: ResourceRow[], viewer: Viewer, lo
     detail ? loadTranslations(prisma, "KNOWLEDGE_DOC", rows.flatMap((r) => seen(r.knowledgeDoc)), locale) : new Map<string, Record<string, string>>(),
     detail ? loadTranslations(prisma, "PUBLICATION", rows.flatMap((r) => seen(r.publication)), locale) : new Map<string, Record<string, string>>(),
     detail ? loadTranslations(prisma, "EVENT", rows.flatMap((r) => seen(r.event)), locale) : new Map<string, Record<string, string>>(),
+    selfProfileIdIfNeeded(viewer, rows.flatMap((r) => [r.owner?.teamMember, r.teamMember])),
   ]);
 
   const ref = (r: { id: string; title: string; visibility: string } | null, tr: Map<string, Record<string, string>>): ResourceRef | null =>
@@ -110,8 +112,8 @@ export async function serializeResources(rows: ResourceRow[], viewer: Viewer, lo
       identifier: row.identifier,
       url: safeResourceUrl(row.url),
       excerpt: resourceExcerpt(row.description),
-      owner: row.owner?.teamMember ? { id: row.owner.teamMember.id, name: row.owner.teamMember.name } : null,
-      researcher: row.teamMember ? { id: row.teamMember.id, name: row.teamMember.name } : null,
+      owner: visibleAttribution(viewer, row.owner?.teamMember, selfId),
+      researcher: visibleAttribution(viewer, row.teamMember, selfId),
       projects: detail ? projects : projects.slice(0, RESOURCE_CARD_PROJECTS),
       projectCount: row._count.projectLinks,
       researchArea:
@@ -159,7 +161,7 @@ export async function resourceWhere(query: ResourceListQuery, viewer: Viewer): P
   if (query.project) and.push({ projectLinks: { some: { projectId: query.project, project: visible } } });
   if (query.area) and.push({ researchAreaId: query.area, researchArea: visible });
   if (query.group) and.push({ groupId: query.group, group: visible });
-  if (query.researcher) and.push({ teamMemberId: query.researcher });
+  if (query.researcher) and.push({ teamMemberId: query.researcher, teamMember: personVisibleWhere(viewer) });
   if (query.knowledge) and.push({ knowledgeDocId: query.knowledge, knowledgeDoc: visible });
   if (query.publication) and.push({ publicationId: query.publication, publication: visible });
   if (query.q.terms.length > 0) {

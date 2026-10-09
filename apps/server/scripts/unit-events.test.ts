@@ -162,7 +162,7 @@ const mkRow = (over: Partial<EventRow> = {}): EventRow =>
     createdAt: new Date(),
     updatedAt: new Date(),
     project: { id: "p1", title: "Project P", visibility: "PUBLIC" },
-    createdBy: { teamMember: { id: "tm1", name: "Alice" } },
+    createdBy: { teamMember: { id: "tm1", name: "Alice", isPublished: true } },
     ...over,
   }) as EventRow;
 

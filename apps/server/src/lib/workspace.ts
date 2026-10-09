@@ -15,6 +15,7 @@ import {
 import { prisma } from "./prisma.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
 import { asGroupRole, asProjectRole, asProjectStatus, toAreaRef } from "./serializers.js";
+import { linkedPersonVisible } from "./hiddenPeople.js";
 import { eventInclude, eventOrderBy, eventScopeWhere, serializeEvents } from "./eventSerializers.js";
 import { loadRefTranslations, localizedNews, localizedPublications, pick } from "./researchGraph.js";
 import { loadTranslations, localize } from "./translations.js";
@@ -114,10 +115,10 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
               where: { researchArea: visible },
               select: { researchArea: { select: { id: true, icon: true, title: true, tag: true, sortOrder: true } } },
             },
-            members: { where: { role: "LEAD" }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
+            members: { where: { role: "LEAD", ...linkedPersonVisible(viewer) }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
             _count: {
               select: {
-                members: true,
+                members: { where: linkedPersonVisible(viewer) },
                 publications: { where: { publication: visible } },
                 events: { where: { ...visible, ...eventScopeWhere("upcoming", now) } },
               },
@@ -139,8 +140,8 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
             id: true,
             name: true,
             visibility: true,
-            members: { where: { role: "LEAD" }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
-            _count: { select: { members: true } },
+            members: { where: { role: "LEAD", ...linkedPersonVisible(viewer) }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
+            _count: { select: { members: { where: linkedPersonVisible(viewer) } } },
             projects: { where: visible, select: { id: true, areaLinks: { where: { researchArea: visible }, select: { researchAreaId: true } } } },
           },
         },
@@ -159,7 +160,7 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
         tag: true,
         visibility: true,
         researcherLinks: { where: mine, select: { teamMemberId: true } },
-        _count: { select: { researcherLinks: true, projectLinks: { where: { project: visible } } } },
+        _count: { select: { researcherLinks: { where: linkedPersonVisible(viewer) }, projectLinks: { where: { project: visible } } } },
       },
     }),
     prisma.researchArea.count({ where: areasWhere }),
@@ -176,17 +177,17 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
     // Collaborators: the OTHER researchers on the same visible projects / groups / areas. Only public
     // profile columns are selected (a TeamMember row has no visibility and these are the /team fields).
     prisma.projectMember.findMany({
-      where: { teamMemberId: { not: me.id }, project: { ...visible, members: { some: mine } } },
+      where: { teamMemberId: { not: me.id }, ...linkedPersonVisible(viewer), project: { ...visible, members: { some: mine } } },
       select: { projectId: true, teamMember: { select: { id: true, name: true, initials: true, role: true } } },
       take: COLLAB_SCAN,
     }),
     prisma.groupMember.findMany({
-      where: { teamMemberId: { not: me.id }, group: { ...visible, members: { some: mine } } },
+      where: { teamMemberId: { not: me.id }, ...linkedPersonVisible(viewer), group: { ...visible, members: { some: mine } } },
       select: { groupId: true, teamMember: { select: { id: true, name: true, initials: true, role: true } } },
       take: COLLAB_SCAN,
     }),
     prisma.researcherArea.findMany({
-      where: { teamMemberId: { not: me.id }, researchArea: { ...visible, researcherLinks: { some: mine } } },
+      where: { teamMemberId: { not: me.id }, ...linkedPersonVisible(viewer), researchArea: { ...visible, researcherLinks: { some: mine } } },
       select: { researchAreaId: true, teamMember: { select: { id: true, name: true, initials: true, role: true } } },
       take: COLLAB_SCAN,
     }),

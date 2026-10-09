@@ -129,11 +129,11 @@ const row = (over: Partial<KnowledgeRow> = {}): KnowledgeRow =>
     teamMemberId: "t1",
     createdAt: now,
     updatedAt: now,
-    author: { teamMember: { id: "tm-author", name: "Ada" } },
+    author: { teamMember: { id: "tm-author", name: "Ada", isPublished: true } },
     project: { id: "p1", title: "Hidden Project", visibility: "LAB_ONLY" },
     researchArea: { id: "a1", title: "Public Area", visibility: "PUBLIC" },
     group: { id: "g1", name: "Hidden Group", visibility: "LAB_ONLY" },
-    teamMember: { id: "t1", name: "Grace" },
+    teamMember: { id: "t1", name: "Grace", isPublished: true },
     ...over,
   }) as KnowledgeRow;
 
@@ -179,7 +179,7 @@ async function main() {
   t("where: a relation filter also demands the linked record be visible to the viewer", fw.includes('"projectId":"p1","project":{"visibility":{"in":["PUBLIC"]}}') && fw.includes('"researchAreaId":"a1","researchArea":{"visibility":{"in":["PUBLIC"]}}') && fw.includes('"groupId":"g1","group":{"visibility":{"in":["PUBLIC"]}}'));
   t("where: category and researcher filters are exact matches", fw.includes('"category":"DATASET"') && fw.includes('"teamMemberId":"t1"'));
   t("where: the visibility clause is ALWAYS first and always present", [gw, mw, fw].every((w) => w.startsWith('{"AND":[{"visibility":{"in":[')));
-  t("include: only the public team profile of the author is selected (no email, no user id)", JSON.stringify(knowledgeInclude.author) === '{"select":{"teamMember":{"select":{"id":true,"name":true}}}}');
+  t("include: only the public team profile of the author is selected (no email, no user id; `isPublished` only decides whether an unpublished person is shown)", JSON.stringify(knowledgeInclude.author) === '{"select":{"teamMember":{"select":{"id":true,"name":true,"isPublished":true}}}}');
   t("order: most recently updated first, id breaks ties", JSON.stringify(knowledgeOrderBy) === '[{"updatedAt":"desc"},{"id":"asc"}]');
   t("researcherScope: a researcher with no profile only has what they wrote", researcherScope(member, null).length === 1);
   const scope = researcherScope(member, "tm1");

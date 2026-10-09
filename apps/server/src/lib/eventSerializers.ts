@@ -2,12 +2,13 @@ import type { Prisma } from "@prisma/client";
 import { canDeleteEvent, canEditEvent, eventKindSchema, toUtcMidnight, type EventScope, type LabEvent, type Locale } from "@scl/shared";
 import { prisma } from "./prisma.js";
 import { canView, visibilityField, type Viewer } from "./visibility.js";
+import { selfProfileIdIfNeeded, visibleAttribution } from "./hiddenPeople.js";
 import { loadTranslations, localize } from "./translations.js";
 
 /** What every event read needs: the linked project (for its title/visibility) and the creator's public team profile. */
 export const eventInclude = {
   project: { select: { id: true, title: true, visibility: true } },
-  createdBy: { select: { teamMember: { select: { id: true, name: true } } } },
+  createdBy: { select: { teamMember: { select: { id: true, name: true, isPublished: true } } } },
 } satisfies Prisma.EventInclude;
 
 export type EventRow = Prisma.EventGetPayload<{ include: typeof eventInclude }>;
@@ -56,9 +57,10 @@ export const eventOrderBy = (scope: EventScope): Prisma.EventOrderByWithRelation
  */
 export async function serializeEvents(rows: EventRow[], viewer: Viewer, locale: Locale): Promise<LabEvent[]> {
   const visibleProjectIds = rows.flatMap((r) => (r.project && canView(viewer, r.project.visibility) ? [r.project.id] : []));
-  const [eventTr, projectTr] = await Promise.all([
+  const [eventTr, projectTr, selfId] = await Promise.all([
     loadTranslations(prisma, "EVENT", rows.map((r) => r.id), locale),
     loadTranslations(prisma, "RESEARCH_PROJECT", Array.from(new Set(visibleProjectIds)), locale),
+    selfProfileIdIfNeeded(viewer, rows.map((r) => r.createdBy?.teamMember)),
   ]);
 
   return rows.map((raw) => {
@@ -81,7 +83,7 @@ export async function serializeEvents(rows: EventRow[], viewer: Viewer, locale: 
       endsAt: row.endsAt ? row.endsAt.toISOString() : null,
       allDay: row.allDay,
       project,
-      organizer: profile ? { id: profile.id, name: profile.name } : null,
+      organizer: visibleAttribution(viewer, profile, selfId),
       canEdit: canEditEvent(viewer, isOwner),
       canDelete: canDeleteEvent(viewer, isOwner),
       ...visibilityField(viewer, row.visibility),

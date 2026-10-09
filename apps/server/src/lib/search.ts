@@ -14,6 +14,7 @@ import {
   type TranslatableEntityType,
 } from "@scl/shared";
 import { prisma } from "./prisma.js";
+import { hiddenNamesFor, mayMatchAuthorText, personVisibleWhere, redactNames } from "./hiddenPeople.js";
 import { asProjectStatus, toIsoDate } from "./serializers.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
 import { visibleForumStatus } from "./forumSerializers.js";
@@ -59,12 +60,15 @@ interface SourceDef<W extends object, R extends { id: string }> {
   /** Other text columns that are searched. */
   fields: Extract<keyof W, string>[];
   /** Extra "this word appears in ..." conditions. Only data that is public to EVERY viewer. */
-  extra?: (term: string) => W[];
+  extra?: (term: string, viewer: Viewer) => W[];
+  /** Free-text columns that can name a person (an authors line). Searched only when the word cannot match a hidden person's name,
+   *  and shown with hidden people's names removed (unpublished-people policy). */
+  authorLine?: Extract<keyof W, string>;
   /** The visibility restriction; `{}` for tables with no visibility column. */
   base: (viewer: Viewer) => W;
   count: (where: W) => Promise<number>;
   find: (where: W, skip: number, take: number) => Promise<R[]>;
-  toResult: (row: R, viewer: Viewer, terms: string[]) => SearchResult;
+  toResult: (row: R, viewer: Viewer, terms: string[], hiddenNames: string[]) => SearchResult;
   /** Present only for the entity types the Phase 14 `Translation` table covers (§4's allow-list).
    *  When the search request's locale is Japanese, this both (a) lets a Japanese override be
    *  MATCHED, on top of the English columns above, and (b) shows that override's text in the
@@ -113,10 +117,13 @@ export async function translationMatchIds(entityType: TranslatableEntityType, te
  *  rank by the ENGLISH title column, which a translation-only match never satisfies, so it always
  *  ranks as t2 ("matched only through other fields"), exactly like an English body-only match does.
  *  It is still ANDed with `base` here like everything else, so locale can never widen visibility. */
-function wheres<W extends object, R extends { id: string }>(def: SourceDef<W, R>, viewer: Viewer, { phrase, terms }: Words, translatedIds: Set<string> | null) {
+function wheres<W extends object, R extends { id: string }>(def: SourceDef<W, R>, viewer: Viewer, { phrase, terms }: Words, translatedIds: Set<string> | null, hiddenNames: string[]) {
   const base = def.base(viewer);
   const anyField = (term: string) => ({
-    OR: [...[def.title, ...def.fields].map((f) => like<W>(f, "contains", term)), ...(def.extra?.(term) ?? [])],
+    OR: [
+      ...[def.title, ...def.fields].filter((f) => f !== def.authorLine || mayMatchAuthorText(term, hiddenNames)).map((f) => like<W>(f, "contains", term)),
+      ...(def.extra?.(term, viewer) ?? []),
+    ],
   });
   const englishMatch = { AND: terms.map(anyField) };
   const byTranslation = translatedIds && translatedIds.size > 0 ? [{ id: { in: Array.from(translatedIds) } } as unknown as W] : [];
@@ -137,7 +144,8 @@ function defineSource<W extends object, R extends { id: string }>(def: SourceDef
     translatable: def.translatable,
     async plan(viewer: Viewer, words: Words, locale: Locale): Promise<SourcePlan> {
       const translatedIds = def.translatable && locale !== DEFAULT_LOCALE ? await translationMatchIds(def.translatable, words.terms) : null;
-      const w = wheres(def, viewer, words, translatedIds);
+      const hiddenNames = def.authorLine ? await hiddenNamesFor(viewer) : [];
+      const w = wheres(def, viewer, words, translatedIds, hiddenNames);
       return {
         count: (part) => def.count(w[part]),
         rows: async (tier, skip, take) => {
@@ -151,7 +159,7 @@ function defineSource<W extends object, R extends { id: string }>(def: SourceDef
                   locale,
                 )
               : new Map<string, Record<string, string>>();
-          return rows.map((row) => def.toResult(def.translatable ? localize(row, def.translatable, translated) : row, viewer, words.terms));
+          return rows.map((row) => def.toResult(def.translatable ? localize(row, def.translatable, translated) : row, viewer, words.terms, hiddenNames));
         },
       };
     },
@@ -308,10 +316,12 @@ const sources = [
     type: "publication",
     title: "title",
     fields: ["authors", "venue", "doiUrl"],
+    authorLine: "authors",
     translatable: "PUBLICATION",
-    // A researcher's name finds their linked publications; a 4-digit word also matches the year.
-    extra: (term) => [
-      { authorLinks: { some: { teamMember: { name: { contains: term } } } } },
+    // A researcher's name finds their linked publications (never through an unpublished person the viewer may not see);
+    // a 4-digit word also matches the year.
+    extra: (term, viewer) => [
+      { authorLinks: { some: { teamMember: { name: { contains: term }, ...personVisibleWhere(viewer) } } } },
       ...(/^\d{4}$/.test(term) ? [{ year: Number(term) }] : []),
     ],
     base: visibleTo,
@@ -324,11 +334,11 @@ const sources = [
         orderBy: [{ year: "desc" }, { title: "asc" }, { id: "asc" }],
         select: { id: true, year: true, title: true, authors: true, venue: true, visibility: true },
       }),
-    toResult: (r, viewer, terms) => ({
+    toResult: (r, viewer, terms, hiddenNames) => ({
       type: "publication",
       id: r.id,
       title: r.title,
-      description: describe([r.authors], terms),
+      description: describe([redactNames(r.authors, hiddenNames)], terms),
       meta: joinMeta(String(r.year), r.venue),
       href: `/publications/${r.id}`,
       ...visibilityField(viewer, r.visibility),

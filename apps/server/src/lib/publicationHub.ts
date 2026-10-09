@@ -11,6 +11,7 @@ import {
   type PublicationListResponse,
 } from "@scl/shared";
 import { prisma } from "./prisma.js";
+import { hiddenNamesFor, linkedPersonVisible, mayMatchAuthorText, personVisibleWhere, redactNames } from "./hiddenPeople.js";
 import { canView, visibleTo, type Viewer } from "./visibility.js";
 import { loadProjectNewsAndEvents, loadRefTranslations, localizedPublications, pick } from "./researchGraph.js";
 import { translationMatchIds } from "./search.js";
@@ -43,15 +44,15 @@ const orderBy = (sort: PublicationListQuery["sort"]): Prisma.PublicationOrderByW
 };
 
 /** Words AND-ed, each matched against title/authors/venue/linked researcher names (and the year for a 4-digit word). */
-function textWhere(terms: string[], translatedIds: Set<string> | null): Prisma.PublicationWhereInput | null {
+function textWhere(terms: string[], translatedIds: Set<string> | null, viewer: Viewer, hiddenNames: string[]): Prisma.PublicationWhereInput | null {
   if (terms.length === 0) return null;
   const english: Prisma.PublicationWhereInput = {
     AND: terms.map((term) => ({
       OR: [
         { title: { contains: term } },
-        { authors: { contains: term } },
+        ...(mayMatchAuthorText(term, hiddenNames) ? [{ authors: { contains: term } }] : []),
         { venue: { contains: term } },
-        { authorLinks: { some: { teamMember: { name: { contains: term } } } } },
+        { authorLinks: { some: { teamMember: { name: { contains: term }, ...personVisibleWhere(viewer) } } } },
         ...(/^\d{4}$/.test(term) ? [{ year: Number(term) }] : []),
       ],
     })),
@@ -67,7 +68,7 @@ export async function browsePublications(query: PublicationListQuery, viewer: Vi
   const and: Prisma.PublicationWhereInput[] = [visible];
   if (query.year !== undefined) and.push({ year: query.year });
   if (query.visibility) and.push({ visibility: query.visibility });
-  if (query.researcher) and.push({ authorLinks: { some: { teamMemberId: query.researcher } } });
+  if (query.researcher) and.push({ authorLinks: { some: { teamMemberId: query.researcher, ...linkedPersonVisible(viewer) } } });
 
   // One linked project must satisfy every project-side filter, and only a project the viewer may see counts.
   if (query.project || query.area || query.group) {
@@ -81,7 +82,7 @@ export async function browsePublications(query: PublicationListQuery, viewer: Vi
 
   const terms = query.q?.terms ?? [];
   const translatedIds = terms.length > 0 && locale !== DEFAULT_LOCALE ? await translationMatchIds("PUBLICATION", terms) : null;
-  const text = textWhere(terms, translatedIds);
+  const text = textWhere(terms, translatedIds, viewer, await hiddenNamesFor(viewer));
   if (text) and.push(text);
   const where: Prisma.PublicationWhereInput = { AND: and };
 
@@ -107,7 +108,7 @@ export async function loadPublicationDetail(id: string, viewer: Viewer, locale: 
   const row = await prisma.publication.findFirst({
     where: { id, ...visible },
     include: {
-      authorLinks: { include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
+      authorLinks: { where: linkedPersonVisible(viewer), include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
       projectLinks: {
         where: { project: visible },
         include: {
@@ -137,14 +138,18 @@ export async function loadPublicationDetail(id: string, viewer: Viewer, locale: 
   const areas = [...areaMap.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
   const groups = [...groupMap.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 
-  const [own, refs, related] = await Promise.all([
+  const [own, refs, related, hiddenNames] = await Promise.all([
     loadTranslations(prisma, "PUBLICATION", [row.id], locale),
     loadRefTranslations(locale, { projects: projects.map((p) => p.id), areas: areas.map((a) => a.id), groups: groups.map((g) => g.id) }),
     loadProjectNewsAndEvents(projects.map((p) => p.id), viewer, locale, PUBLICATION_RELATED_LIMIT),
+    hiddenNamesFor(viewer),
   ]);
 
   return {
-    ...toPublication(localize(row, "PUBLICATION", own), viewer),
+    ...(() => {
+      const p = toPublication(localize(row, "PUBLICATION", own), viewer);
+      return { ...p, authors: redactNames(p.authors, hiddenNames) };
+    })(),
     researchers: row.authorLinks
       .map((l) => l.teamMember)
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))

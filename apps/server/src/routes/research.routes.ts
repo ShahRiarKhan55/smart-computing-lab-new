@@ -13,6 +13,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { optionalAuth, requireAuth, requireCan } from "../middleware/auth.js";
 import { assertValidId, diffLinks } from "../lib/authorLinks.js";
+import { assertPeopleVisibleAndExist, linkedPersonVisible, splitVisible } from "../lib/hiddenPeople.js";
 import { assertMayChangeVisibility, visibleTo } from "../lib/visibility.js";
 import { asProjectStatus, toResearchArea } from "../lib/serializers.js";
 import { loadProjectOutputs, loadRefTranslations, pick } from "../lib/researchGraph.js";
@@ -56,7 +57,7 @@ router.get(
           where: { project: visible },
           include: { project: { select: { id: true, slug: true, title: true, summary: true, status: true, sortOrder: true } } },
         },
-        researcherLinks: { include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
+        researcherLinks: { where: linkedPersonVisible(viewer), include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
       },
     });
     if (!row) throw new HttpError(404, "Not found");
@@ -105,10 +106,9 @@ router.put(
     await prisma.$transaction(async (tx) => {
       const area = await tx.researchArea.findUnique({ where: { id: req.params.id }, select: { id: true, title: true } });
       if (!area) throw new HttpError(404, "Not found");
-      if (teamMemberIds.length > 0 && (await tx.teamMember.count({ where: { id: { in: teamMemberIds } } })) !== teamMemberIds.length) {
-        throw new HttpError(400, "One or more team members do not exist.");
-      }
-      const current = (await tx.researcherArea.findMany({ where: { researchAreaId: area.id }, select: { teamMemberId: true } })).map((c) => c.teamMemberId);
+      await assertPeopleVisibleAndExist(tx, req.user!, teamMemberIds);
+      const allCurrent = (await tx.researcherArea.findMany({ where: { researchAreaId: area.id }, select: { teamMemberId: true } })).map((c) => c.teamMemberId);
+      const current = (await splitVisible(tx, req.user!, allCurrent)).visible;
       const { toAdd, toRemove } = diffLinks(current, teamMemberIds);
 
       if (toRemove.length > 0) await tx.researcherArea.deleteMany({ where: { researchAreaId: area.id, teamMemberId: { in: toRemove } } });

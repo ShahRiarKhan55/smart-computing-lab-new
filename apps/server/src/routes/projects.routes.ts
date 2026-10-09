@@ -23,6 +23,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { optionalAuth, requireCan, requireEditor } from "../middleware/auth.js";
 import { assertValidId, diffLinks } from "../lib/authorLinks.js";
+import { assertPeopleVisibleAndExist, linkedPersonVisible, splitVisible } from "../lib/hiddenPeople.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "../lib/visibility.js";
 import {
   asProjectRole,
@@ -57,7 +58,7 @@ function summaryInclude(viewer: Viewer) {
       where: { researchArea: visibleTo(viewer) },
       include: { researchArea: { select: { id: true, icon: true, title: true, tag: true, sortOrder: true } } },
     },
-    members: { include: { teamMember: { select: { id: true, name: true, initials: true, userId: true } } } },
+    members: { where: linkedPersonVisible(viewer), include: { teamMember: { select: { id: true, name: true, initials: true, userId: true } } } },
   } satisfies Prisma.ResearchProjectInclude;
 }
 
@@ -332,17 +333,20 @@ router.put(
     await prisma.$transaction(async (tx) => {
       const project = await loadProjectOr404(tx, req.params.id);
       const ids = members.map((m) => m.teamMemberId);
-      if (ids.length > 0 && (await tx.teamMember.count({ where: { id: { in: ids } } })) !== ids.length) {
-        throw new HttpError(400, "One or more team members do not exist.");
-      }
+      // A hidden (unpublished) person looks nonexistent to an editor who may not see them, and their links are never touched.
+      await assertPeopleVisibleAndExist(tx, req.user!, ids);
 
-      const current = await tx.projectMember.findMany({ where: { projectId: project.id }, select: { teamMemberId: true, role: true } });
+      const allCurrent = await tx.projectMember.findMany({ where: { projectId: project.id }, select: { teamMemberId: true, role: true } });
+      const seen = new Set((await splitVisible(tx, req.user!, allCurrent.map((c) => c.teamMemberId))).visible);
+      const current = allCurrent.filter((c) => seen.has(c.teamMemberId));
       const currentRole = new Map(current.map((c) => [c.teamMemberId, c.role]));
       const { toAdd, toRemove } = diffLinks([...currentRole.keys()], ids);
       const roleChanged = members.filter((m) => currentRole.has(m.teamMemberId) && currentRole.get(m.teamMemberId) !== m.role);
       // Who holds / held the LEAD role before and after: recorded as ids only, so a lead change is one query away.
-      const leadsBefore = current.filter((c) => c.role === "LEAD").map((c) => c.teamMemberId).sort();
-      const leadsAfter = members.filter((m) => m.role === "LEAD").map((m) => m.teamMemberId).sort();
+      // Hidden people are never edited here, so a hidden lead stays a lead before and after.
+      const hiddenLeads = allCurrent.filter((c) => !seen.has(c.teamMemberId) && c.role === "LEAD").map((c) => c.teamMemberId);
+      const leadsBefore = [...current.filter((c) => c.role === "LEAD").map((c) => c.teamMemberId), ...hiddenLeads].sort();
+      const leadsAfter = [...members.filter((m) => m.role === "LEAD").map((m) => m.teamMemberId), ...hiddenLeads].sort();
 
       if (toRemove.length > 0) await tx.projectMember.deleteMany({ where: { projectId: project.id, teamMemberId: { in: toRemove } } });
       for (const m of members.filter((x) => toAdd.includes(x.teamMemberId))) {
