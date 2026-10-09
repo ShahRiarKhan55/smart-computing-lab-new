@@ -317,9 +317,18 @@ through it). A hidden person looks exactly like a nonexistent one (same 400/404,
 publication/news authors, area researchers) diff against the links the **editor can see**, so a lead or member saving the list they were
 shown can never delete a hidden link; managers (who see everyone) can remove them deliberately. Code: `src/lib/hiddenPeople.ts`;
 tests: `unpublished-exposure-regression.mjs` (96), `unit-hidden-people.test.ts` (31).
-**Known limits (by design / needs a decision):** names inside titles, descriptions or other prose, initials and reordered names are not
-rewritten; forum posts, direct messages and notifications by an unpublished member who has an account still show that member's name to
-the people they interact with (interactive account features, not public attributions) — say if these should be masked too.
+**Forum, messages, notifications (owner-approved extension; `unpublished-communications-regression.mjs`, 52 checks):**
+- *Forum* (public/readable by guests and members): an unpublished author shows as the generic **"Lab member"** (no name, no profile id) to guests, other
+  members and in search hits; managers and the author see the real identity. Stored authorship is untouched, so edit/delete rights, moderation
+  (hide/unhide/lock/pin), counts and ordering are unchanged, and an unpublished member can keep posting.
+- *Messages* (private 1:1 threads): **participants keep seeing each other and the full history** (the thread is private; masking it would only break it).
+  A stranger cannot **start** a thread with an unpublished person — same 404 as a nonexistent profile — while an existing thread keeps working;
+  managers get no extra access to private threads (unchanged); managers can start a thread with anyone.
+- *Notifications* (own only): the actor of a forum notification is masked like the public content it points at; a direct-message notification keeps its
+  sender visible to the recipient (a participant); managers see real names in their own notifications.
+- Everything is a read-time view: nothing is deleted or rewritten, and re-publishing a member restores their name.
+**Known limits:** names inside titles, descriptions, forum bodies (including `@[Name](member:id)` mentions typed by others), initials and reordered
+names are not rewritten; a person who exchanged messages with an unpublished member still knows who that is.
 
 `apps/server/scripts/unpublished-exposure-regression.mjs` (`npm run test:unpublished-exposure -w apps/server`) creates a hidden alumnus
 and a hidden member with an account, links both everywhere a person can be linked, uploads photos, and asks each endpoint who can

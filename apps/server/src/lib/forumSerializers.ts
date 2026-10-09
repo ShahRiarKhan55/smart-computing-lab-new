@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isManager } from "@scl/shared";
 import type { ForumAuthorRef, ForumCategoryRef, ForumReactionCounts, ForumReactionKind, ForumReactions, PaginationMeta } from "@scl/shared";
+import { identityVisible, MASKED_NAME } from "./hiddenPeople.js";
 import type { Viewer } from "./visibility.js";
 
 type ForumDb = Prisma.TransactionClient | PrismaClient;
@@ -11,11 +12,18 @@ export function visibleForumStatus(viewer: Viewer): { status: { in: string[] } }
   return { status: { in: isManager(viewer) ? ["ACTIVE", "HIDDEN"] : ["ACTIVE"] } };
 }
 
-/** A post/comment author as the API shows it. Never includes the account id (userId). */
-export function toForumAuthor(user: { teamMember: { id: string; name: string; initials: string } | null } | null): ForumAuthorRef {
+/**
+ * A post/comment author as the API shows it. Never includes the account id (userId). An UNPUBLISHED member's identity is shown only to
+ * managers and to that member; everyone else sees the same generic "Lab member" an account without a profile gets. This is a read-time
+ * view: the stored authorship (and therefore edit/delete/moderation rights) is untouched.
+ */
+export function toForumAuthor(
+  user: { id?: string; teamMember: { id: string; name: string; initials: string; isPublished?: boolean } | null } | null,
+  viewer: Viewer,
+): ForumAuthorRef {
   if (!user) return { teamMemberId: null, name: "Former member", initials: "—" };
-  if (user.teamMember) return { teamMemberId: user.teamMember.id, name: user.teamMember.name, initials: user.teamMember.initials };
-  return { teamMemberId: null, name: "Lab member", initials: "—" };
+  if (user.teamMember && identityVisible(viewer, user.teamMember, user.id)) return { teamMemberId: user.teamMember.id, name: user.teamMember.name, initials: user.teamMember.initials };
+  return { teamMemberId: null, name: MASKED_NAME, initials: "—" };
 }
 
 export const toForumCategoryRef = (c: { id: string; slug: string; name: string }): ForumCategoryRef => ({ id: c.id, slug: c.slug, name: c.name });

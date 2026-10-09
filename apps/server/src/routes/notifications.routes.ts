@@ -29,10 +29,10 @@ router.get(
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * limit,
       take: limit,
-      include: { actor: { select: { teamMember: { select: { id: true, name: true, initials: true, photoUrl: true } } } } },
+      include: { actor: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true, photoUrl: true, isPublished: true } } } } },
     });
     const response: NotificationListResponse = {
-      notifications: rows.map(toNotification),
+      notifications: rows.map((r) => toNotification(r, req.user ?? null)),
       pagination: paginate(page, limit, total),
     };
     res.json(response);

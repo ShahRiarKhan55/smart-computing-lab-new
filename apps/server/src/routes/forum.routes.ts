@@ -198,13 +198,13 @@ router.delete(
 function postInclude() {
   return {
     category: { select: { id: true, slug: true, name: true, visibility: true } },
-    author: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true } } } },
+    author: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true, isPublished: true } } } },
     project: { select: { id: true, slug: true, title: true, status: true, visibility: true } },
   } satisfies Prisma.ForumPostInclude;
 }
 
 type PostRow = Prisma.ForumPostGetPayload<{ include: ReturnType<typeof postInclude> }>;
-type CommentAuthorInclude = { author: { select: { id: true; teamMember: { select: { id: true; name: true; initials: true } } } } };
+type CommentAuthorInclude = { author: { select: { id: true; teamMember: { select: { id: true; name: true; initials: true; isPublished: true } } } } };
 type CommentRow = Prisma.ForumCommentGetPayload<{ include: CommentAuthorInclude }>;
 
 function excerptOf(body: string): string {
@@ -217,7 +217,7 @@ function toTopicSummary(row: PostRow, viewer: Viewer, reactions: ForumReactions,
   return {
     id: row.id,
     category: toForumCategoryRef(row.category),
-    author: toForumAuthor(row.author),
+    author: toForumAuthor(row.author, viewer),
     title: row.title,
     excerpt: excerptOf(row.body),
     status: row.status as "ACTIVE" | "HIDDEN",
@@ -239,7 +239,7 @@ function toComment(row: CommentRow, viewer: Viewer, reactions: ForumReactions): 
   const isAuthor = viewer !== null && row.authorId === viewer.id;
   return {
     id: row.id,
-    author: toForumAuthor(row.author),
+    author: toForumAuthor(row.author, viewer),
     body: row.body,
     status: row.status as "ACTIVE" | "HIDDEN",
     createdAt: row.createdAt.toISOString(),
@@ -263,7 +263,7 @@ async function loadTopicDetail(id: string, viewer: Viewer, commentsPage: number,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       skip: (commentsPage - 1) * commentsLimit,
       take: commentsLimit,
-      include: { author: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true } } } } },
+      include: { author: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true, isPublished: true } } } } },
     }),
   ]);
   const commentIds = commentRows.map((c) => c.id);
@@ -540,7 +540,7 @@ router.post(
 async function loadCommentDetail(id: string, viewer: Viewer): Promise<ForumComment | null> {
   const row = await prisma.forumComment.findFirst({
     where: { id, ...visibleForumStatus(viewer) },
-    include: { author: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true } } } } },
+    include: { author: { select: { id: true, teamMember: { select: { id: true, name: true, initials: true, isPublished: true } } } } },
   });
   if (!row) return null;
   const reactions = await loadCommentReactions(prisma, [row.id], viewer);

@@ -4,6 +4,7 @@ import {
   conversationsQuerySchema,
   createConversationSchema,
   createMessageSchema,
+  isManager,
   messagesQuerySchema,
   type ConversationDetail,
   type ConversationListResponse,
@@ -91,9 +92,15 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { teamMemberId } = parseOrThrow(createConversationSchema, req.body);
-    const target = await prisma.teamMember.findUnique({ where: { id: teamMemberId }, select: { userId: true } });
+    const target = await prisma.teamMember.findUnique({ where: { id: teamMemberId }, select: { userId: true, isPublished: true } });
     if (!target?.userId) throw new HttpError(404, "Not found");
     if (target.userId === req.user!.id) throw new HttpError(400, "You can't start a conversation with yourself.");
+    // An unpublished person cannot be discovered by being messaged: for anyone but a manager, STARTING a thread with them answers
+    // exactly like a nonexistent profile. A thread that already exists (the two know each other) keeps working.
+    if (!target.isPublished && !isManager(req.user!)) {
+      const existing = await prisma.conversation.findUnique({ where: { directKey: [req.user!.id, target.userId].sort().join(":") }, select: { id: true } });
+      if (!existing) throw new HttpError(404, "Not found");
+    }
 
     const conversation = await getOrCreateDirectConversation(req.user!.id, target.userId);
     res.status(201).json(await loadConversationDetail(conversation.id, req.user!.id, 1, 30));

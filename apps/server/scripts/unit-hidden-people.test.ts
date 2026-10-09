@@ -3,7 +3,9 @@
  *
  *   tsx scripts/unit-hidden-people.test.ts
  */
-import { mayMatchAuthorText, personVisible, redactNames, selfProfileIdIfNeeded, visibleAttribution } from "../src/lib/hiddenPeople.js";
+import { toForumAuthor } from "../src/lib/forumSerializers.js";
+import { toNotification } from "../src/lib/notificationSerializers.js";
+import { identityVisible, mayMatchAuthorText, personVisible, redactNames, selfProfileIdIfNeeded, visibleAttribution } from "../src/lib/hiddenPeople.js";
 
 let ok = 0;
 const failures: string[] = [];
@@ -50,6 +52,26 @@ eq("a missing isPublished fails closed (hidden)", personVisible(guest, { id: "t1
 eq("no lookup for a guest", await selfProfileIdIfNeeded(guest, [hidP]), null);
 eq("no lookup for a manager", await selfProfileIdIfNeeded(manager, [hidP]), null);
 eq("no lookup when everyone is published", await selfProfileIdIfNeeded(member, [pubP, null, undefined]), null);
+
+// ---- forum / notification identities ----------------------------------------------------------------------------------------------
+const tm = (isPublished: boolean | undefined) => ({ id: "t1", name: "Hid Den", initials: "HD", photoUrl: "p.png", isPublished });
+const author = (isPublished: boolean | undefined) => ({ id: "u-hid", teamMember: tm(isPublished) });
+const self = { id: "u-hid", email: "h@example.test", role: "MEMBER" } as never;
+eq("identity: published is visible to a guest", identityVisible(guest, { isPublished: true }, "u-hid"), true);
+eq("identity: unpublished is hidden from a guest and other members", identityVisible(guest, { isPublished: false }, "u-hid") || identityVisible(member, { isPublished: false }, "u-hid"), false);
+eq("identity: unpublished is visible to managers, admins and the person", identityVisible(manager, { isPublished: false }, "u-hid") && identityVisible(admin, { isPublished: false }, "u-hid") && identityVisible(self, { isPublished: false }, "u-hid"), true);
+eq("identity: a missing flag fails closed", identityVisible(guest, {}, "u-hid"), false);
+eq("forum author: published shows the profile", toForumAuthor(author(true), guest).name, "Hid Den");
+eq("forum author: unpublished is 'Lab member' with no profile id for a guest", JSON.stringify(toForumAuthor(author(false), guest)), '{"teamMemberId":null,"name":"Lab member","initials":"—"}');
+eq("forum author: unpublished is shown to a manager and to the person", toForumAuthor(author(false), manager).name === "Hid Den" && toForumAuthor(author(false), self).name === "Hid Den", true);
+eq("forum author: a deleted account stays 'Former member'", toForumAuthor(null, guest).name, "Former member");
+eq("forum author: the account id is never returned", JSON.stringify(toForumAuthor(author(true), guest)).includes("u-hid"), false);
+const nrow = (type: string, isPublished: boolean) => ({ id: "n1", type, actor: author(isPublished), targetPath: "/x", payload: null, readAt: null, createdAt: new Date(0) });
+eq("notification: forum actor masked for a non-manager", toNotification(nrow("FORUM_COMMENT", false), member).actor?.name, "Lab member");
+eq("notification: masked actor has no profile id and no photo", JSON.stringify([toNotification(nrow("FORUM_COMMENT", false), member).actor?.teamMemberId, toNotification(nrow("FORUM_COMMENT", false), member).actor?.photoUrl]), '[null,""]');
+eq("notification: manager sees the real actor", toNotification(nrow("FORUM_COMMENT", false), manager).actor?.name, "Hid Den");
+eq("notification: a direct message keeps its sender visible (private thread participant)", toNotification(nrow("MESSAGE_RECEIVED", false), member).actor?.name, "Hid Den");
+eq("notification: published actor is unchanged", toNotification(nrow("FORUM_REACTION", true), member).actor?.name, "Hid Den");
 
 console.log(`${ok} hidden-people unit checks passed, ${failures.length} failed.`);
 if (failures.length) {

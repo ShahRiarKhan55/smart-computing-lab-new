@@ -14,7 +14,7 @@ import {
   type TranslatableEntityType,
 } from "@scl/shared";
 import { prisma } from "./prisma.js";
-import { hiddenNamesFor, mayMatchAuthorText, personVisibleWhere, redactNames } from "./hiddenPeople.js";
+import { MASKED_NAME, hiddenNamesFor, identityVisible, mayMatchAuthorText, personVisibleWhere, redactNames } from "./hiddenPeople.js";
 import { asProjectStatus, toIsoDate } from "./serializers.js";
 import { canView, visibilityField, visibleTo, type Viewer } from "./visibility.js";
 import { visibleForumStatus } from "./forumSerializers.js";
@@ -164,6 +164,12 @@ function defineSource<W extends object, R extends { id: string }>(def: SourceDef
       };
     },
   };
+}
+
+/** The author name on a forum search hit: an unpublished member is shown as "Lab member" to everyone but managers and themself. */
+function forumAuthorName(viewer: Viewer, author: { id: string; teamMember: { name: string; isPublished: boolean } | null } | null): string {
+  if (!author?.teamMember) return "Former member";
+  return identityVisible(viewer, author.teamMember, author.id) ? author.teamMember.name : MASKED_NAME;
 }
 
 // ---- result text ------------------------------------------------------------------
@@ -383,7 +389,7 @@ const sources = [
       body: string;
       category: { name: string; visibility: string };
       project: { title: string; visibility: string } | null;
-      author: { teamMember: { name: string } | null } | null;
+      author: { id: string; teamMember: { name: string; isPublished: boolean } | null } | null;
     }
   >({
     type: "forum-topic",
@@ -403,7 +409,7 @@ const sources = [
           body: true,
           category: { select: { name: true, visibility: true } },
           project: { select: { title: true, visibility: true } },
-          author: { select: { teamMember: { select: { name: true } } } },
+          author: { select: { id: true, teamMember: { select: { name: true, isPublished: true } } } },
         },
       }),
     toResult: (r, viewer, terms) => ({
@@ -411,7 +417,7 @@ const sources = [
       id: r.id,
       title: r.title,
       description: describe([plainTextForumBody(r.body)], terms),
-      meta: joinMeta(r.category.name, r.author?.teamMember?.name ?? "Former member", r.project && canView(viewer, r.project.visibility) ? r.project.title : undefined),
+      meta: joinMeta(r.category.name, forumAuthorName(viewer, r.author), r.project && canView(viewer, r.project.visibility) ? r.project.title : undefined),
       href: `/community/forum/topic/${r.id}`,
       ...visibilityField(viewer, r.category.visibility),
     }),

@@ -90,6 +90,19 @@ export function mayMatchAuthorText(term: string, hiddenNames: string[]): boolean
   });
 }
 
+// -- identities shown on communication surfaces (forum, notifications) ----------------------------------------------------------
+
+/** What a masked identity looks like: the same shape the API already uses for an account without a profile. */
+export const MASKED_NAME = "Lab member";
+
+/**
+ * May `viewer` see the identity of the account behind `teamMember`? Published profiles: everyone. Unpublished: managers and the person
+ * themself (`accountId` is the author's/actor's USER id, compared with the viewer's — it is never returned). A missing flag fails closed.
+ */
+export function identityVisible(viewer: Viewer, teamMember: { isPublished?: boolean }, accountId: string | null | undefined): boolean {
+  return teamMember.isPublished === true || isManager(viewer) || (viewer !== null && !!accountId && viewer.id === accountId);
+}
+
 // -- free-text author lines --------------------------------------------------------------------------------------------------
 
 /** Names of unpublished people the viewer may not see (empty for managers). */
