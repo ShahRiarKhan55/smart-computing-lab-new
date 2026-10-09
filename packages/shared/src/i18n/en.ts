@@ -991,7 +991,7 @@ export const en = {
   "alumni.hiddenBadge": "Hidden",
   "alumni.noAccountNote": "Alumni profiles never have a login account.",
   "team.publishedLabel": "Show this profile publicly",
-  "team.publishedHint": "Untick to hide the profile page, photo and listings (team, alumni, search) from visitors without deleting it. The name still shows where the person is linked as a project or group member or as an author.",
+  "team.publishedHint": "Untick to hide this person from visitors and other members without deleting them: the profile page, photo, listings (team, alumni, search) and their name where they are linked as a project or group member, publication author, researcher, event organizer or forum author. Managers and the person themself still see everything. Names typed into titles, descriptions, forum posts or @mentions, and initials, are not changed.",
   "footer.alumni": "Alumni",
   // ---- Phase 27: Google sign-in ----
   "auth.google.signIn": "Sign in with Google",

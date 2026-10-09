@@ -306,7 +306,29 @@ Chunks used: core (`^(guest|member|lead|manager|admin|promoted|loading|mobile|pr
 edit a worktree while a chunk runs in it. Result for this PR: identical totals and identical failing check names on both trees
 (see the PR description for the numbers); the failures that remain are failures of unmodified master.
 
-## 14. Unpublished people: exact behaviour today, and a proposal (NOT implemented)
+## 14. Unpublished people: the owner-approved policy (implemented) — and the behaviour it replaced
+
+**Status: implemented** (policy approved by the owner; the table below is the behaviour BEFORE the change, kept for the record).
+Managers/admins see everyone; an unpublished person sees themself; guests and every other account discover them **nowhere**:
+profile routes, `/team`, search, sitemap, photos, publication authors (detail, `?researcher=`, author ids), project/group members and
+counts, research-area researchers, event organizer, knowledge/resource author/owner/researcher attributions, workspace collaborators,
+and the free-text `authors` line (hidden people's **exact full names** are removed from the line; search never matches a hidden name
+through it). A hidden person looks exactly like a nonexistent one (same 400/404, never a 403). Whole-set editors (project/group members,
+publication/news authors, area researchers) diff against the links the **editor can see**, so a lead or member saving the list they were
+shown can never delete a hidden link; managers (who see everyone) can remove them deliberately. Code: `src/lib/hiddenPeople.ts`;
+tests: `unpublished-exposure-regression.mjs` (96), `unit-hidden-people.test.ts` (31).
+**Forum, messages, notifications (owner-approved extension; `unpublished-communications-regression.mjs`, 52 checks):**
+- *Forum* (public/readable by guests and members): an unpublished author shows as the generic **"Lab member"** (no name, no profile id) to guests, other
+  members and in search hits; managers and the author see the real identity. Stored authorship is untouched, so edit/delete rights, moderation
+  (hide/unhide/lock/pin), counts and ordering are unchanged, and an unpublished member can keep posting.
+- *Messages* (private 1:1 threads): **participants keep seeing each other and the full history** (the thread is private; masking it would only break it).
+  A stranger cannot **start** a thread with an unpublished person — same 404 as a nonexistent profile — while an existing thread keeps working;
+  managers get no extra access to private threads (unchanged); managers can start a thread with anyone.
+- *Notifications* (own only): the actor of a forum notification is masked like the public content it points at; a direct-message notification keeps its
+  sender visible to the recipient (a participant); managers see real names in their own notifications.
+- Everything is a read-time view: nothing is deleted or rewritten, and re-publishing a member restores their name.
+**Known limits:** names inside titles, descriptions, forum bodies (including `@[Name](member:id)` mentions typed by others), initials and reordered
+names are not rewritten; a person who exchanged messages with an unpublished member still knows who that is.
 
 `apps/server/scripts/unpublished-exposure-regression.mjs` (`npm run test:unpublished-exposure -w apps/server`) creates a hidden alumnus
 and a hidden member with an account, links both everywhere a person can be linked, uploads photos, and asks each endpoint who can
@@ -327,24 +349,19 @@ still see them. It prints the table below and pins it, so any change is delibera
 So "unpublished" currently means *no profile page, no directory/alumni/search listing, no sitemap entry, no photo* — **not** "the
 person's name disappears from the site". The link targets (`/team/<id>`) 404 for visitors.
 
-### Recommended privacy-preserving default (needs the owner's approval)
-Non-managers (and visitors) should not be shown **linked** entries of unpublished people; managers and the person themself still
-see them; free text stays the editors' responsibility (state this plainly in the UI: "unpublished is not erasure").
+### How it is implemented
+- **One helper, `apps/server/src/lib/hiddenPeople.ts`.** Reads add `personVisibleWhere(viewer)` to every query that returns a linked or attributed person
+  (publication authors and author ids, project/group members and counts, area researchers, event organizer, knowledge/resource attributions, workspace
+  collaborators); free-text author lines go through `redactNames`; forum authors, forum search hits and forum-notification actors go through `identityVisible`.
+- **Write preservation.** Every whole-set editor (`PUT /projects/:id/members`, `/groups/:id/members`, `/publications/:id/authors`, `/news/:id/authors`,
+  `/research/:id/researchers`) diffs the request against the links the *editor can see*, so saving the list they were shown never deletes a hidden link.
+- **Nothing is rewritten.** Masking is a read-time view; stored authorship, edit and moderation rights, message history and audit rows are unchanged, and
+  re-publishing a member restores their name everywhere.
 
-Smallest safe design:
-1. **Read filter, one helper**: `hiddenPeopleWhere(viewer)` → `{ teamMember: { OR: [{ isPublished: true }, { userId: viewer?.id }] } }` for non-managers, `{}` for
-   managers; applied in the include/select of project members, group members, publication authors (detail + `?researcher=` filter),
-   research-area researchers, and (decision) event organizer / knowledge & resource attributions.
-2. **Write-preservation, the part that makes it safe**: every endpoint that replaces a whole link set
-   (`PUT /projects/:id/members`, `/groups/:id/members`, `/publications/:id/authors`, `/member/:id/areas|publications|news`, `/news/:id/authors`)
-   must compute `hidden = current links whose person the *actor* may not see` and write `requested ∪ hidden`, so an editor who
-   cannot see a hidden person can never delete that link by saving the list they were shown. Managers (who see everyone) are unaffected.
-3. **Tests first** (extend `unpublished-exposure-regression.mjs`): guests/members see neither person on the linked surfaces;
-   a project *lead* saving the visible member list keeps the hidden member; a manager can remove the hidden link; the person sees
-   their own; counts/pagination do not reveal a hidden link; the `?researcher=<hiddenId>` filter returns nothing for guests.
-4. Estimated change: ~6 query sites + 6 write sites + the helper + tests; no schema change.
-
-Until that decision is made, the UI hint and the admin guide state the current behaviour (see `team.publishedHint`).
+### Genuinely unresolved
+No owner decision on this policy is outstanding. The residual risks are the **known limits** listed above (names typed into titles, descriptions, forum bodies and
+`@mentions`; initials; reordered names; people who already corresponded with a member). The interactive browser behaviour of the masked surfaces has not been re-measured
+after these changes (see §13).
 
 ## 15. Remote Turso behaviour of the schema guard — RELEASE BLOCKER until verified
 
@@ -399,48 +416,3 @@ sends only the guard's static `SELECT … LIMIT 1` probes, and prints redacted e
 | **ORCID / Crossref** | `publication-import-regression` (71), `unit-publication-import` (34) with a mock | put a public ORCID iD on two *test* profiles; "Check ORCID now" (note: ORCID's docs ask for a `/read-public` token — set `ORCID_CLIENT_ID/SECRET` and confirm both token and token-less behaviour); a malformed/unknown iD reports a per-researcher failure; "Fill from DOI" with a real DOI; an unknown DOI (404 message); rate-limit message after 30 lookups; approve one item → public; re-run → no duplicate; reject → not proposed again |
 | **Google Sites portal link** | `site-integrations-regression` (26): valid https shown, http/`javascript:`/credentialed URLs ignored | set `PORTAL_URL` to the real Site, confirm the footer link opens it in a new tab with `noopener noreferrer`; confirm the Site's link back to the app opens `/`, `/team`, `/alumni`, `/publications` directly (SPA rewrites) |
 | **Facebook updates** | `site-integrations-regression`: `/api/updates` reports `facebook: not_configured`, contributes nothing, no Facebook URL anywhere | confirm the home page shows only "Posted by the lab" items and an honest empty state when there is no news; nothing to test live until an official Page and Meta app review exist |
-
-
-## 17. Publication import from a spreadsheet: provenance schema, limits and the disposable-database run
-
-**Schema (migration `20261009100000_publication_source_provenance`, strictly additive: one nullable `ADD COLUMN`, one `CREATE TABLE`, three indexes; no
-rebuild/DROP/UPDATE — asserted by `schema-compat-regression`).** `Publication.sourceOrder Int?` (position in the source list; NULL for everything else) and
-`PublicationSourceRecord` (one row per source block: sheet, first/last row, sequence, a **unique** `sourceKey = <file hash>:<sheet>:<first row>`, disposition,
-link to the publication, verbatim cells with their original labels in `rawFields`, derived values and warnings in `normalized`). The schema guard probes both,
-so a database without the migration answers the clean `DB_SCHEMA_BEHIND` 503.
-**`year` is NOT made nullable.** `year Int?` makes Prisma rebuild the `Publication` table (`RedefineTables`: create/copy/DROP/rename) — four tables point at it, and
-a Turso HTTP migration cannot rely on `PRAGMA foreign_keys` — and ~57 `.year` uses across server, web and shared (sorting, year filter, grouping, validation, sitemap/
-search/ORCID mapping) would all need changing. That is the wider behaviour change and risky migration this work was told to stop at. Records without a year are
-therefore **kept, not skipped and not given an invented year**: `STAGED_NO_YEAR` rows in the provenance table (visible to nobody publicly) until an editor supplies a year.
-**Importer:** `scripts/publication-source-import.ts` (generic; the real data lives in a manifest outside the repo). Dry run by default; refuses anything that is
-not a plain local `.db` file outside the repository carrying the `_disposable_import_target` marker, refuses when `TURSO_*` is set, never migrates, never updates or
-deletes an existing publication (a duplicate is only recorded next to the existing row), one transaction, idempotent by `sourceKey`. Tests:
-`unit-publication-source-import.test.ts` (34). **Public ordering is unchanged** (year desc, createdAt desc, id asc); imported rows get `createdAt = import time − position`
-so inside a year they show in source order; `sourceOrder` reproduces the exact source order.
-
-**Visibility rule (owner-approved).** Only a status cell that is exactly `出版` (published) may make an imported record `PUBLIC`. `投稿中` (submitted), `受理` (accepted), blank
-and anything unrecognised are `LAB_ONLY`; blank/unrecognised are also reported as *ambiguous* in the provenance `note` for review. A manifest can only make a record more private. The
-original status is kept verbatim in `rawFields` and in `normalized.statusVerbatim`. `LAB_ONLY` is enforced server-side by the existing `visibleTo()` fragment on every read path;
-`publication-visibility-regression.mjs` (47 checks) imports a synthetic manifest through the real importer and asks the list, browse (query/year/researcher/project/area/group/sort),
-detail, authors, search, profile, project, group, research-area, resource, workspace and sitemap endpoints as guest, member and manager (a mutation that drops the filter fails it).
-Signed-in lab members see `LAB_ONLY` records by the existing rule; guests never do.
-
-### 17a. Dependency and deploy order (this branch is STACKED on Phase 27 — read before merging)
-`feat/publication-source-provenance` is based on the Phase 27 branch at `fde25fc` and **needs** its schema guard (`lib/schemaGuard.ts`), its migration
-`20261008090552_phase27_integrations` and its design doc. Its pull request therefore targets `feat/phase-27-lab-website-integrations`, **not** `master`
-(against `master` it would also contain all of Phase 27 and look mergeable on its own). Rules:
-1. Never deploy this branch without the Phase 27 migration applied first, then `20261009100000_publication_source_provenance`; the guard probes both, and until both exist every API route answers `DB_SCHEMA_BEHIND` (503) instead of failing with 500s.
-2. Neither migration is applied to Production, a shared database or Preview by anyone but an authorised operator, as a separate approved step.
-3. The importer only ever writes to a marked, disposable local database. A live import is a separate decision, with its own target verification and approval.
-4. The branches touch disjoint files (privacy work on the Phase 27 branch; migration/importer here), so merge order does not matter for conflicts, but release order does: Phase 27 migration → provenance migration → code.
-
-### 17b. Making `year` nullable: scope and risk (NOT done; deferred by decision)
-*Why it is not additive:* SQLite cannot drop `NOT NULL`, so Prisma emits `RedefineTables` (create `new_Publication`, copy, `DROP TABLE "Publication"`, rename, recreate indexes) with
-`PRAGMA foreign_keys=OFF`. Four tables reference `Publication` (`PublicationAuthor`, `ProjectPublication`, `LabResource`, `PublicationCandidate`, plus the provenance table), and
-an HTTP migration to Turso cannot rely on that `PRAGMA` inside a transaction — a mistake would orphan or cascade-delete link rows. It needs a tested, rehearsed rollback and a verified disposable remote database first.
-*Code that assumes a year:* server — `routes/publicationImports.routes.ts` (9 uses), `lib/publicationHub.ts` (7: sorting, year filter, years facet), `routes/member.routes.ts` (5),
-`lib/search.ts` (5: year match and result meta), `routes/publications.routes.ts` (3), `lib/serializers.ts` (2), `lib/publications/{crossref,orcid,sync,types}.ts` (5), `routes/projects.routes.ts`,
-`lib/workspace.ts`, `lib/researchGraph.ts`, `lib/adminContent.ts` (1 each); web — `PublicationsPage` (5), `PublicationDetailPage` (3), `PublicationFormModal` (3), `MemberPage` (2), `PublicationItem`,
-`ProjectDetailPage`, `PublicationImportsPage`, `useResourceOptions` (1 each); shared — `schemas/publication.ts` (required year 1900–2100, query filters), `publicationImport.ts`, `admin.ts`.
-*Behaviour decisions it would force:* where undated items sort (SQLite sorts NULL first ascending, last descending), how the year facet and `?year=` treat them, what the list/detail/search show instead of a year,
-whether an editor may save an undated record, and the Publication candidate queue (`PublicationCandidate.year` is also required). Nothing here was changed.

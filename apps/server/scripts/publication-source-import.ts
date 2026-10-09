@@ -20,14 +20,14 @@
  *
  * The manifest (with the real data) lives OUTSIDE the repository; only this generic tool is committed.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { createPublicationSchema, doiKey, doiToUrl, normalizeDoi } from "@scl/shared";
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REPO_ROOT = path.resolve(SERVER_ROOT, "..", "..");
+const REPO_ROOT = realpathSync(path.resolve(SERVER_ROOT, "..", ".."));
 export const MARKER_TABLE = "_disposable_import_target";
 
 export interface ManifestField {
@@ -129,10 +129,25 @@ export function checkTargetPath(dbArg: string | undefined, env: NodeJS.ProcessEn
   if (!dbArg) return { ok: false, reason: "--db <file> is required." };
   if (/^[a-z][a-z0-9+.-]*:/i.test(dbArg) && !/^[a-z]:[\\/]/i.test(dbArg)) return { ok: false, reason: "--db must be a plain local file path, not a URL." };
   if (env.TURSO_DATABASE_URL || env.TURSO_AUTH_TOKEN) return { ok: false, reason: "TURSO_DATABASE_URL / TURSO_AUTH_TOKEN are set in this shell. Unset them: this tool never touches Turso." };
-  const resolved = path.resolve(dbArg);
-  const rel = path.relative(REPO_ROOT, resolved);
-  if (!rel.startsWith("..") && !path.isAbsolute(rel)) return { ok: false, reason: "The target must be OUTSIDE the repository (this also excludes prisma/dev.db)." };
-  if (!existsSync(resolved) || !statSync(resolved).isFile()) return { ok: false, reason: "The target file does not exist (create the disposable copy first; this tool never creates a database)." };
+  const inside = (p: string) => {
+    const rel = path.relative(REPO_ROOT, p);
+    return !rel.startsWith("..") && !path.isAbsolute(rel);
+  };
+  const OUTSIDE = "The target must be OUTSIDE the repository (this also excludes prisma/dev.db), including through a symlink.";
+  const lexical = path.resolve(dbArg);
+  if (inside(lexical)) return { ok: false, reason: OUTSIDE };
+  if (!existsSync(lexical) || !statSync(lexical).isFile()) return { ok: false, reason: "The target file does not exist (create the disposable copy first; this tool never creates a database)." };
+  // Canonical path: a symlink (or a symlinked directory) outside the repository that points INTO it must not pass the check above.
+  // The canonical path is also what is returned and opened, so the file that was checked is the file that is used.
+  let resolved: string;
+  try {
+    resolved = realpathSync(lexical);
+  } catch {
+    return { ok: false, reason: "The target path could not be resolved to a real file (a dangling symlink?)." };
+  }
+  if (inside(resolved)) return { ok: false, reason: OUTSIDE };
+  // A hard link to an in-repository file has no in-repository path of its own, so refuse any file with more than one link.
+  if (statSync(resolved).nlink > 1) return { ok: false, reason: "The target file has more than one hard link; use a plain disposable copy." };
   if (!/\.(db|sqlite|sqlite3)$/i.test(resolved)) return { ok: false, reason: "The target must be a .db/.sqlite file." };
   return { ok: true, resolved };
 }
@@ -296,8 +311,8 @@ async function main() {
     console.error("Refusing to run: --manifest <file.json> is required and must exist.");
     process.exit(2);
   }
-  const rel = path.relative(REPO_ROOT, path.resolve(manifestPath));
-  if (!rel.startsWith("..") && !path.isAbsolute(rel)) {
+  const manifestRel = path.relative(REPO_ROOT, realpathSync(path.resolve(manifestPath)));
+  if (!manifestRel.startsWith("..") && !path.isAbsolute(manifestRel)) {
     console.error("Refusing to run: keep the manifest (it holds the real publication data) outside the repository.");
     process.exit(2);
   }

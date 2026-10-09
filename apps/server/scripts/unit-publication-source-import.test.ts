@@ -4,7 +4,7 @@
  *
  *   tsx scripts/unit-publication-source-import.test.ts
  */
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,6 +45,26 @@ async function main() {
   t("target: a nonexistent file is refused (the tool never creates a database)", !checkTargetPath(path.join(work, "nope.db"), {}).ok);
   t("target: a good disposable path outside the repo is accepted", checkTargetPath(dbFile, {}).ok);
 
+  // symlinks, hard links and canonical paths (all links live in the disposable temp dir; nothing in the repo is touched)
+  const linkDir = path.join(work, "links");
+  mkdirSync(linkDir);
+  symlinkSync(DEV_DB, path.join(linkDir, "to-devdb.db"));
+  symlinkSync(path.dirname(DEV_DB), path.join(linkDir, "to-prisma-dir"));
+  symlinkSync(path.join(linkDir, "to-devdb.db"), path.join(linkDir, "chain.db"));
+  symlinkSync(dbFile, path.join(linkDir, "ok-link.db"));
+  symlinkSync(path.join(work, "nowhere.db"), path.join(linkDir, "dangling.db"));
+  const rejectedInRepo = (p: string) => { const r = checkTargetPath(p, {}); return !r.ok && /OUTSIDE the repository/.test(r.reason ?? ""); };
+  t("target: a symlink outside the repo that points at prisma/dev.db is refused", rejectedInRepo(path.join(linkDir, "to-devdb.db")));
+  t("target: a chain of symlinks ending at prisma/dev.db is refused", rejectedInRepo(path.join(linkDir, "chain.db")));
+  t("target: a symlinked DIRECTORY that leads into the repo is refused", rejectedInRepo(path.join(linkDir, "to-prisma-dir", "dev.db")));
+  t("target: a dangling symlink is refused (no crash)", !checkTargetPath(path.join(linkDir, "dangling.db"), {}).ok);
+  const okLink = checkTargetPath(path.join(linkDir, "ok-link.db"), {});
+  t("target: a symlink to a plain disposable file is accepted and the CANONICAL path is returned", okLink.ok && okLink.resolved === path.resolve(dbFile).replace(/^\/private/, ""), String(okLink.resolved));
+  linkSync(dbFile, path.join(linkDir, "second-name.db"));
+  t("target: a file with more than one hard link is refused", /hard link/.test(checkTargetPath(path.join(linkDir, "second-name.db"), {}).reason ?? "") && /hard link/.test(checkTargetPath(dbFile, {}).reason ?? ""));
+  rmSync(path.join(linkDir, "second-name.db"));
+  t("target: …and accepted again once the extra link is gone", checkTargetPath(dbFile, {}).ok);
+  t("target: TURSO_* is still refused for a symlinked path", /TURSO/.test(checkTargetPath(path.join(linkDir, "ok-link.db"), { TURSO_AUTH_TOKEN: "x" }).reason ?? ""));
   t("visibility: 出版 is PUBLIC", visibilityFor("出版").visibility === "PUBLIC" && !visibilityFor(" 出版 ").ambiguous);
   t("visibility: 投稿中 and 受理 are LAB_ONLY and not ambiguous", ["投稿中", "受理"].every((s) => visibilityFor(s).visibility === "LAB_ONLY" && !visibilityFor(s).ambiguous));
   t("visibility: blank, null and unknown are LAB_ONLY and flagged ambiguous", [null, "", "  ", "Published", "出版済"].every((s) => visibilityFor(s).visibility === "LAB_ONLY" && visibilityFor(s).ambiguous));
