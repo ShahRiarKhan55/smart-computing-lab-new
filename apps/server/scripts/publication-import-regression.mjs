@@ -281,7 +281,7 @@ async function main() {
     const withAuthors = await admin.post(`/publication-imports/${noDoi.id}/approve`, { authors: "Someone Real", venue: "A Venue", visibility: "LAB_ONLY", teamMemberIds: [people.A.id] });
     t("approve: with typed authors and LAB_ONLY visibility it works; the source link is kept as an extra link", withAuthors.status === 201);
     const created2 = await s.prisma.publication.findUnique({ where: { id: withAuthors.json.publicationId } });
-    t("approve: LAB_ONLY is respected (hidden from guests)", created2.visibility === "LAB_ONLY" && !(await guest.get("/publications")).json.some((p) => p.id === created2.id) && created2.extraUrl === "https://example.test/paper-102");
+    t("approve: LAB_ONLY is respected (hidden from guests)", created2.visibility === "LAB_ONLY" && !(await guest.get("/publications")).json.some((p) => p.id === created2.id) && created2.extraUrl === "https://example.test/paper-102" && created2.extraLabel === "");
     t("approve: an unknown author id is rejected", (await admin.post(`/publication-imports/${inj.id}/approve`, { authors: "X", venue: "Y", teamMemberIds: ["doesnotexist"] })).status === 400);
     const reject = await admin.post(`/publication-imports/${inj.id}/reject`);
     t("reject: marks the candidate rejected", reject.status === 200 && (await s.prisma.publicationCandidate.findUnique({ where: { id: inj.id } })).status === "REJECTED");

@@ -178,7 +178,7 @@ router.post(
           venue,
           doiUrl: candidate.doi ? doiToUrl(candidate.doi) : "",
           extraUrl: candidate.doi ? "" : candidate.url,
-          extraLabel: candidate.doi || !candidate.url ? "" : "Source",
+          extraLabel: "", // empty -> the UI shows its localized "Link" label (a hard-coded English label would show in the Japanese UI)
           visibility: input.visibility ?? "PUBLIC",
         },
       });
