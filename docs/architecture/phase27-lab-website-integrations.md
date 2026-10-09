@@ -286,3 +286,22 @@ and is there a *separate* Preview-only value? If one value is ticked for both Pr
 Real Google OAuth (consent screen, redirect URI registration, real ID-token claims), a live Vercel Blob write/read (including the
 `access: "private"` behaviour), live ORCID/Crossref responses and rate limits, the libSQL adapter against a **remote** Turso
 (only its local-file mode was exercised), and the behaviour of any Vercel Preview.
+
+## 13. Browser regression: reproducible comparison against unmodified master
+
+The full `browser-regression.cjs` run is long (hours when run in one piece) and, when two copies share ports, databases or a Prisma
+client, produces misleading failures. `apps/server/scripts/run-browser-chunk.sh` runs it (whole or by step-name regex) against ONE
+checkout with its own API / Vite / DevTools ports, a disposable copy of the database, `K22_DB` set (required by the knowledge and
+resources phases), and each server in its own process group (so a finished chunk can never leave a stale server behind).
+
+```
+git worktree add --detach /tmp/wt-branch HEAD && git worktree add --detach /tmp/wt-master origin/master
+for t in /tmp/wt-branch /tmp/wt-master; do cp -a node_modules $t/; (cd $t && npm run build -w packages/shared && cd apps/server && npx prisma generate); done
+# branch: the migrated local dev.db; master: a pre-Phase-27 database
+bash /tmp/wt-branch/apps/server/scripts/run-browser-chunk.sh /tmp/wt-branch br '^knowledge ' 4101 5201 9401 <migrated.db>
+bash /tmp/wt-branch/apps/server/scripts/run-browser-chunk.sh /tmp/wt-master base '^knowledge ' 4102 5202 9402 <pre-phase27.db>
+```
+Chunks used: core (`^(guest|member|lead|manager|admin|promoted|loading|mobile|previous)$`), `^search `, `^nav `, `^ui `, `^forum `,
+`^i18n `, `^events`, `^admin `, `^research`, `^publications`, `^discovery`, `^workspace `, `^knowledge `, `^resources `. Never rebuild or
+edit a worktree while a chunk runs in it. Result for this PR: identical totals and identical failing check names on both trees
+(see the PR description for the numbers); the failures that remain are failures of unmodified master.
