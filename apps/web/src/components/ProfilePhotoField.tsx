@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { DEFAULT_PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_MIME_TYPES, type TeamMember } from "@scl/shared";
 import { Avatar } from "./Avatar";
 import { apiFetch, apiUpload } from "../lib/api";
-import { uploadErrorMessage } from "../lib/uploadErrors";
 import { formatBytes } from "../lib/format";
 import { uploadErrorMessage } from "../lib/uploadErrors";
 import { useLocale } from "../i18n/LocaleContext";
