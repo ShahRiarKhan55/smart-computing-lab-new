@@ -97,6 +97,13 @@ import { P27_MESSAGES } from "@scl/shared";
     const ja = DICTIONARIES.ja[key as keyof typeof DICTIONARIES.ja];
     t(`${key} exists in English and Japanese, and the Japanese is not the English text`, typeof en === "string" && typeof ja === "string" && ja !== en && /[\u3040-\u30ff\u4e00-\u9fff]/.test(ja));
   }
+  // Every Phase 27 UI string has real Japanese text (proper nouns such as "ORCID" are the only allowed identical values).
+  const P27_PREFIXES = ["pubimport.", "alumni.", "photo.", "copyright.", "updates.", "auth.google.", "profile.google.", "p27.err.", "upload.", "publications.fillFromDoi", "footer.disclaimerShort", "footer.copyrightLink", "footer.portal", "footer.alumni", "team.published", "profileLinks."];
+  const PROPER_NOUNS = new Set(["profileLinks.orcid", "profileLinks.researchgate", "profileLinks.scholar"]);
+  for (const key of Object.keys(DICTIONARIES.en).filter((k) => P27_PREFIXES.some((p) => k.startsWith(p)) && !PROPER_NOUNS.has(k))) {
+    const ja = DICTIONARIES.ja[key as keyof typeof DICTIONARIES.ja];
+    t(`Japanese text exists for ${key}`, typeof ja === "string" && /[\u3040-\u30ff\u4e00-\u9fff]/.test(ja), String(ja));
+  }
   // The literals live in ONE file; server code must use the constants (a duplicated literal can drift out of the translation map).
   const walk = (dir: string): string[] => listDir(dir).flatMap((f) => (statSrc(joinPath(dir, f)).isDirectory() ? walk(joinPath(dir, f)) : f.endsWith(".ts") ? [joinPath(dir, f)] : []));
   const offenders = walk(joinPath(root, "apps", "server", "src")).filter((f) => Object.values(P27_MESSAGES).some((m) => readSrc(f, "utf8").includes(JSON.stringify(m).slice(1, -1))));
