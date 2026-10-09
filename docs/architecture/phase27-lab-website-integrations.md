@@ -417,3 +417,10 @@ not a plain local `.db` file outside the repository carrying the `_disposable_im
 deletes an existing publication (a duplicate is only recorded next to the existing row), one transaction, idempotent by `sourceKey`. Tests:
 `unit-publication-source-import.test.ts` (34). **Public ordering is unchanged** (year desc, createdAt desc, id asc); imported rows get `createdAt = import time − position`
 so inside a year they show in source order; `sourceOrder` reproduces the exact source order.
+
+**Visibility rule (owner-approved).** Only a status cell that is exactly `出版` (published) may make an imported record `PUBLIC`. `投稿中` (submitted), `受理` (accepted), blank
+and anything unrecognised are `LAB_ONLY`; blank/unrecognised are also reported as *ambiguous* in the provenance `note` for review. A manifest can only make a record more private. The
+original status is kept verbatim in `rawFields` and in `normalized.statusVerbatim`. `LAB_ONLY` is enforced server-side by the existing `visibleTo()` fragment on every read path;
+`publication-visibility-regression.mjs` (47 checks) imports a synthetic manifest through the real importer and asks the list, browse (query/year/researcher/project/area/group/sort),
+detail, authors, search, profile, project, group, research-area, resource, workspace and sitemap endpoints as guest, member and manager (a mutation that drops the filter fails it).
+Signed-in lab members see `LAB_ONLY` records by the existing rule; guests never do.

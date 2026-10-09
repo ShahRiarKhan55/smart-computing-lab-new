@@ -41,7 +41,17 @@ export interface ManifestRecord {
   rowEnd: number;
   seq: number;
   fields: ManifestField[];
-  publication: { year: number | null; title: string; authors: string; venue: string; doi: string | null; visibility: "PUBLIC" | "LAB_ONLY" };
+  publication: {
+    year: number | null;
+    title: string;
+    authors: string;
+    venue: string;
+    doi: string | null;
+    /** The source's status cell, verbatim (e.g. 出版 / 投稿中 / 受理 / blank). It alone decides visibility — see `visibilityFor`. */
+    status: string | null;
+    /** Optional extra restriction from the manifest; it can only make a record MORE private, never publish one. */
+    visibility?: "PUBLIC" | "LAB_ONLY";
+  };
   warnings: string[];
 }
 export interface Manifest {
@@ -62,6 +72,16 @@ export interface PlanRow {
   publicationId: string | null; // existing row it may duplicate, or (after apply) the created one
   note: string;
   action: "create-publication" | "provenance-only" | "already-imported";
+}
+
+/** Only the one status that means "published" may make a record PUBLIC; everything else (submitted, accepted, blank, unknown) is LAB_ONLY. */
+export const PUBLISHED_STATUS = "出版";
+export function visibilityFor(status: string | null, requested?: "PUBLIC" | "LAB_ONLY"): { visibility: "PUBLIC" | "LAB_ONLY"; ambiguous: boolean } {
+  const st = (status ?? "").trim();
+  if (requested === "LAB_ONLY") return { visibility: "LAB_ONLY", ambiguous: false };
+  if (st === PUBLISHED_STATUS) return { visibility: "PUBLIC", ambiguous: false };
+  // 投稿中 (submitted) and 受理 (accepted) are known, unpublished states; anything else is ambiguous and reported for review.
+  return { visibility: "LAB_ONLY", ambiguous: st !== "投稿中" && st !== "受理" };
 }
 
 const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -146,6 +166,8 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
       const cleaned = { title: collapse(p.title), authors: collapse(p.authors), venue: collapse(lineBreaksToSlash(p.venue)) };
       const changes = (["title", "authors", "venue"] as const).filter((k) => cleaned[k] !== p[k]);
       const notes: string[] = [];
+      const vis = visibilityFor(p.status, p.visibility);
+      if (vis.ambiguous) notes.push(`status ${JSON.stringify(p.status ?? "")} is blank/unrecognised: kept LAB_ONLY, not published automatically — needs review`);
       if (p.doi && !doi) notes.push(`DOI "${p.doi}" is not a valid DOI and was not used`);
       if (changes.length) notes.push(`whitespace/line breaks normalised in: ${changes.join(", ")} (originals kept in rawFields)`);
 
@@ -176,7 +198,7 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
         publicationId = dupOf.id;
         notes.unshift(`possible duplicate: ${dupOf.why}; NOT inserted and the existing record is untouched`);
       } else {
-        const parsed = createPublicationSchema.safeParse({ year: p.year, title: cleaned.title, authors: cleaned.authors, venue: cleaned.venue, doiUrl: doi ?? "", visibility: p.visibility });
+        const parsed = createPublicationSchema.safeParse({ year: p.year, title: cleaned.title, authors: cleaned.authors, venue: cleaned.venue, doiUrl: doi ?? "", visibility: vis.visibility });
         if (!parsed.success) {
           disposition = "STAGED_INVALID";
           notes.unshift(`fails publication validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
@@ -219,7 +241,7 @@ export async function runImport(prisma: PrismaClient, manifest: Manifest, opts: 
             publicationId,
             note,
             rawFields: JSON.stringify(rec.fields),
-            normalized: JSON.stringify({ proposed: { ...p, ...cleaned, doi }, warnings: rec.warnings }),
+            normalized: JSON.stringify({ proposed: { ...p, ...cleaned, doi, visibility: vis.visibility }, statusVerbatim: p.status, ambiguousStatus: vis.ambiguous, warnings: rec.warnings }),
           },
         });
       } else if (data) {

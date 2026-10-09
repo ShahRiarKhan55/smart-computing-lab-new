@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { MARKER_TABLE, checkTargetPath, runImport, sourceKeyOf, titleSimilarity, type Manifest, type ManifestRecord } from "./publication-source-import.js";
+import { MARKER_TABLE, checkTargetPath, runImport, sourceKeyOf, titleSimilarity, visibilityFor, type Manifest, type ManifestRecord } from "./publication-source-import.js";
 
 let ok = 0;
 const failures: string[] = [];
@@ -28,7 +28,7 @@ const rec = (seq: number, over: Partial<ManifestRecord["publication"]> = {}, ext
   rowEnd: 16 + (seq - 1) * 10,
   seq,
   fields: [{ column: `C${7 + (seq - 1) * 10}`, label: "著者", value: `Author ${seq}` }],
-  publication: { year: 2020 + (seq % 5), title: `ZZ Synthetic Title Number ${seq} about widgets`, authors: `Author ${seq}`, venue: `ZZ Venue ${seq}`, doi: null, visibility: "PUBLIC", ...over },
+  publication: { year: 2020 + (seq % 5), title: `ZZ Synthetic Title Number ${seq} about widgets`, authors: `Author ${seq}`, venue: `ZZ Venue ${seq}`, doi: null, status: "出版", ...over },
   warnings: [],
   ...extra,
 });
@@ -45,6 +45,10 @@ async function main() {
   t("target: a nonexistent file is refused (the tool never creates a database)", !checkTargetPath(path.join(work, "nope.db"), {}).ok);
   t("target: a good disposable path outside the repo is accepted", checkTargetPath(dbFile, {}).ok);
 
+  t("visibility: 出版 is PUBLIC", visibilityFor("出版").visibility === "PUBLIC" && !visibilityFor(" 出版 ").ambiguous);
+  t("visibility: 投稿中 and 受理 are LAB_ONLY and not ambiguous", ["投稿中", "受理"].every((s) => visibilityFor(s).visibility === "LAB_ONLY" && !visibilityFor(s).ambiguous));
+  t("visibility: blank, null and unknown are LAB_ONLY and flagged ambiguous", [null, "", "  ", "Published", "出版済"].every((s) => visibilityFor(s).visibility === "LAB_ONLY" && visibilityFor(s).ambiguous));
+  t("visibility: a manifest can never make a non-出版 record PUBLIC, only more private", visibilityFor("受理", "PUBLIC").visibility === "LAB_ONLY" && visibilityFor("出版", "LAB_ONLY").visibility === "LAB_ONLY");
   t("similarity: identical", titleSimilarity("A b c", "a  B, c") === 1);
   t("similarity: unrelated is low", titleSimilarity("graphene transistors", "wafer test coverage") < 0.4);
 
@@ -64,42 +68,44 @@ async function main() {
       rec(5, { year: 2023, title: "", authors: "A" }), //                                       -> STAGED_INVALID
       rec(6, { year: 2020, venue: "ZZ Journal\nCONF 2024  ", title: "ZZ   spaced   title six" }), // -> IMPORTED (normalised)
       rec(7, { year: 2020, doi: "10.9999/zz.one", title: "ZZ another title seven" }), //     -> POSSIBLE_DUPLICATE of #1 (same DOI, case-insensitive)
-      rec(8, { year: 2020, visibility: "LAB_ONLY", doi: "not a doi" }), //                     -> IMPORTED, bad DOI noted & not used
-      rec(9, { year: null, doi: seedDoi.doiUrl }), //                                          -> STAGED_NO_YEAR with duplicate note
+      rec(8, { year: 2020, status: "投稿中", doi: "not a doi" }), //                     -> IMPORTED, bad DOI noted & not used
+      rec(9, { year: null, doi: seedDoi.doiUrl }),
+      rec(10, { year: 2017, status: null, title: "ZZ blank status title ten" }), // -> IMPORTED as LAB_ONLY, flagged ambiguous //                                          -> STAGED_NO_YEAR with duplicate note
     ];
     const m = manifest(records);
 
     // ---- dry run writes nothing --------------------------------------------------------------------------------------------------
     const dry = await runImport(prisma, m, { apply: false });
     t("dry run: nothing written", JSON.stringify(await prisma.publication.findMany({ orderBy: { id: "asc" } })) === before && (await prisma.publicationSourceRecord.count()) === 0);
-    t("dry run: plan accounts for every block exactly once", dry.plan.length === 9 && new Set(dry.plan.map((p) => p.seq)).size === 9);
+    t("dry run: plan accounts for every block exactly once", dry.plan.length === 10 && new Set(dry.plan.map((p) => p.seq)).size === 10);
 
     // ---- apply -------------------------------------------------------------------------------------------------------------------
     const now = new Date("2030-01-01T00:00:00Z");
     const res = await runImport(prisma, m, { apply: true, now });
     const by = Object.fromEntries(res.plan.map((p) => [p.seq, p]));
-    t("apply: dispositions as designed", [1, 6, 8].every((s) => by[s].disposition === "IMPORTED") && by[2].disposition === "STAGED_NO_YEAR" && [3, 4, 7].every((s) => by[s].disposition === "POSSIBLE_DUPLICATE") && by[5].disposition === "STAGED_INVALID" && by[9].disposition === "STAGED_NO_YEAR", JSON.stringify(res.counts));
-    t("apply: counts add up to every source block", Object.values(res.counts).reduce((a, b) => a + b, 0) === 9);
-    t("apply: one provenance row per block, mapped by sheet/rows/seq", (await prisma.publicationSourceRecord.count()) === 9 && (await prisma.publicationSourceRecord.count({ where: { sourceSeq: 6, sourceRowStart: 57, sourceRowEnd: 66, sourceSheet: "Sheet1" } })) === 1);
+    t("apply: dispositions as designed", [1, 6, 8, 10].every((s) => by[s].disposition === "IMPORTED") && by[2].disposition === "STAGED_NO_YEAR" && [3, 4, 7].every((s) => by[s].disposition === "POSSIBLE_DUPLICATE") && by[5].disposition === "STAGED_INVALID" && by[9].disposition === "STAGED_NO_YEAR", JSON.stringify(res.counts));
+    t("apply: counts add up to every source block", Object.values(res.counts).reduce((a, b) => a + b, 0) === 10);
+    t("apply: one provenance row per block, mapped by sheet/rows/seq", (await prisma.publicationSourceRecord.count()) === 10 && (await prisma.publicationSourceRecord.count({ where: { sourceSeq: 6, sourceRowStart: 57, sourceRowEnd: 66, sourceSheet: "Sheet1" } })) === 1);
     const after = await prisma.publication.findMany({ orderBy: { id: "asc" } });
-    t("apply: exactly the 3 IMPORTED blocks became publications", after.length === seeded.length + 3);
+    t("apply: exactly the 4 IMPORTED blocks became publications", after.length === seeded.length + 4);
     t("apply: existing publications are byte-identical (never updated or deleted)", JSON.stringify(after.filter((p) => seeded.some((s) => s.id === p.id))) === before);
     const imported = await prisma.publication.findMany({ where: { sourceOrder: { not: null } }, orderBy: { sourceOrder: "asc" } });
-    t("apply: sourceOrder holds the source position and reproduces the source order", imported.map((p) => p.sourceOrder).join() === "1,6,8");
+    t("apply: sourceOrder holds the source position and reproduces the source order", imported.map((p) => p.sourceOrder).join() === "1,6,8,10");
     t("apply: DOI stored canonically; an invalid DOI is not used", imported[0].doiUrl === "https://doi.org/10.9999/ZZ.One" && imported[2].doiUrl === "" && /not a valid DOI/.test(by[8].note));
     t("apply: whitespace/line breaks normalised, original kept verbatim in rawFields", imported[1].venue === "ZZ Journal / CONF 2024" && imported[1].title === "ZZ spaced title six" && (await prisma.publicationSourceRecord.findUnique({ where: { sourceKey: sourceKeyOf(m, records[5]) } }))?.rawFields.includes("Author 6") === true);
-    t("apply: visibility from the manifest", imported[2].visibility === "LAB_ONLY" && imported[0].visibility === "PUBLIC");
+    t("apply: visibility comes from the status only (出版 -> PUBLIC, 投稿中 -> LAB_ONLY)", imported[2].visibility === "LAB_ONLY" && imported[0].visibility === "PUBLIC" && imported[3].visibility === "LAB_ONLY" && /needs review/.test(by[10].note));
+    t("apply: the verbatim status is kept in provenance", JSON.parse((await prisma.publicationSourceRecord.findUnique({ where: { sourceKey: sourceKeyOf(m, records[7]) } }))!.normalized).statusVerbatim === "投稿中");
     const listed = await prisma.publication.findMany({ where: { sourceOrder: { in: [6, 8] } }, orderBy: [{ year: "desc" }, { createdAt: "desc" }, { id: "asc" }] });
     t("apply: within one year the DEFAULT public order (year desc, createdAt desc) shows imported rows in source order", listed.map((p) => p.sourceOrder).join() === "6,8", listed.map((p) => `${p.year}/${p.sourceOrder}`).join());
     t("apply: a duplicate is linked to the EXISTING row (not inserted)", by[3].publicationId === seedDoi.id && by[4].publicationId === seeded[0].id);
     t("apply: a within-file duplicate is linked to the earlier imported row", by[7].publicationId === imported[0].id);
     t("apply: a no-year block keeps its duplicate hint but creates nothing", by[9].publicationId === seedDoi.id && /possible duplicate/.test(by[9].note));
-    t("apply: every block has a unique source key", new Set((await prisma.publicationSourceRecord.findMany({ select: { sourceKey: true } })).map((r) => r.sourceKey)).size === 9);
-    t("apply: audit rows exist for the created publications only", (await prisma.auditLog.count({ where: { actorEmail: "publication-source-import" } })) === 3);
+    t("apply: every block has a unique source key", new Set((await prisma.publicationSourceRecord.findMany({ select: { sourceKey: true } })).map((r) => r.sourceKey)).size === 10);
+    t("apply: audit rows exist for the created publications only", (await prisma.auditLog.count({ where: { actorEmail: "publication-source-import" } })) === 4);
 
     // ---- idempotent --------------------------------------------------------------------------------------------------------------
     const again = await runImport(prisma, m, { apply: true, now });
-    t("rerun: creates nothing (all 9 already imported)", again.counts.ALREADY_IMPORTED === 9 && (await prisma.publication.count()) === after.length && (await prisma.publicationSourceRecord.count()) === 9);
+    t("rerun: creates nothing (all 10 already imported)", again.counts.ALREADY_IMPORTED === 10 && (await prisma.publication.count()) === after.length && (await prisma.publicationSourceRecord.count()) === 10);
 
     // ---- atomic: a failure midway leaves nothing behind ----------------------------------------------------------------------
     const pubsBefore = await prisma.publication.count();
