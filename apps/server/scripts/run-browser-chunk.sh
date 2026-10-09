@@ -16,12 +16,13 @@ TREE=$(cd "$1" && pwd); LABEL=$2; STEPS=$3; API_PORT=$4; WEB_PORT=$5; CDP_PORT=$
 OUT=${OUT_DIR:-$(mktemp -d)}; mkdir -p "$OUT/shots"
 cp "$DB_SRC" "$OUT/c.db"
 PIDS=()
+port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; } # true when something is listening (no ss/lsof needed)
 # Each server runs in its OWN process group (setsid) and the whole group is killed: `tsx` starts the real server as a child process,
 # and killing only the parent would leave that child holding the port, so the NEXT chunk would silently talk to a stale server.
 cleanup() {
   for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill -9 -- "-$p" 2>/dev/null; done
   pkill -9 -f "remote-debugging-port=$CDP_PORT" 2>/dev/null
-  for i in $(seq 1 20); do (ss -ltn 2>/dev/null | grep -qE ":($API_PORT|$WEB_PORT) ") || break; sleep 0.5; done
+  for i in $(seq 1 20); do { port_open "$API_PORT" || port_open "$WEB_PORT"; } || break; sleep 0.5; done
   true
 }
 trap cleanup EXIT
@@ -33,7 +34,7 @@ export default { root: "$TREE/apps/web", plugins: [react()], server: { port: $WE
 CFG
 
 for port in $API_PORT $WEB_PORT; do
-  if ss -ltn 2>/dev/null | grep -qE ":$port "; then echo "port $port is already in use - refusing to run against a stale server" >&2; exit 3; fi
+  if port_open "$port"; then echo "port $port is already in use - refusing to run against a stale server" >&2; exit 3; fi
 done
 cd "$TREE/apps/server"
 setsid env -u TURSO_DATABASE_URL -u TURSO_AUTH_TOKEN BLOB_READ_WRITE_TOKEN= VERCEL= STORAGE_DIR="$OUT/files" DATABASE_URL="file:$OUT/c.db" \
