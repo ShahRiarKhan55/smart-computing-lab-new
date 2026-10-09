@@ -19,6 +19,9 @@ function res() {
 
 async function main() {
   t("probes are static SQL strings that only SELECT", PHASE27_PROBES.every((p) => /^SELECT [^;]+ LIMIT 1$/.test(p)));
+  t("every probed column is table-qualified (an unqualified double-quoted name silently becomes a string literal in SQLite)", PHASE27_PROBES.every((p) => p.slice(7, p.indexOf(" FROM ")).split(", ").every((c) => /^"\w+"\."\w+"$/.test(c))));
+  t("the real P2010 messages of both engines are recognised", (await checkSchema(dbThatFailsWith("Invalid `prisma.$queryRawUnsafe()` invocation: Raw query failed. Code: `1`. Message: `SQLITE_ERROR: no such column: TeamMember.scholarUrl`"))) === "behind" && (await checkSchema(dbThatFailsWith("Raw query failed. Code: `1`. Message: `no such table: OAuthIdentity`"))) === "behind");
+  t("a lookalike that is NOT a missing-schema error is unknown", (await checkSchema(dbThatFailsWith("Raw query failed. Code: `5`. Message: `database is locked`"))) === "unknown" && (await checkSchema(dbThatFailsWith("SQLITE_NOTADB: file is not a database"))) === "unknown");
   t("probes cover every Phase 27 column and table", ["scholarUrl", "researchGateUrl", "orcid", "isPublished", "OAuthIdentity", "PublicationCandidate", "PublicationCandidateResearcher", "SyncState"].every((n) => PHASE27_PROBES.some((p) => p.includes(n))));
   t("a healthy database is ok", (await checkSchema(healthyDb)) === "ok");
   t("'no such column' means behind", (await checkSchema(dbThatFailsWith("Raw query failed. Code: `1`. Message: `no such column: scholarUrl`"))) === "behind");

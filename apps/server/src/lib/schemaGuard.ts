@@ -20,14 +20,23 @@ export type SchemaStatus = "ok" | "behind" | "unknown";
 
 /** Static probes (no user input). Each selects only what the Phase 27 code needs, so it fails iff that is missing. */
 export const PHASE27_PROBES = [
-  'SELECT "scholarUrl", "researchGateUrl", "orcid", "isPublished" FROM "TeamMember" LIMIT 1',
-  'SELECT "id", "userId" FROM "OAuthIdentity" LIMIT 1',
-  'SELECT "id", "status" FROM "PublicationCandidate" LIMIT 1',
-  'SELECT "candidateId", "teamMemberId" FROM "PublicationCandidateResearcher" LIMIT 1',
-  'SELECT "name" FROM "SyncState" LIMIT 1',
+  // Columns are table-QUALIFIED on purpose: in SQLite an unqualified, double-quoted name that matches no column silently
+  // becomes a string literal (the legacy "DQS" misfeature, enabled in Prisma's bundled SQLite), so `SELECT "scholarUrl" FROM
+  // "TeamMember"` succeeds even when the column is missing. A qualified reference always fails with "no such column".
+  'SELECT "TeamMember"."scholarUrl", "TeamMember"."researchGateUrl", "TeamMember"."orcid", "TeamMember"."isPublished" FROM "TeamMember" LIMIT 1',
+  'SELECT "OAuthIdentity"."id", "OAuthIdentity"."userId" FROM "OAuthIdentity" LIMIT 1',
+  'SELECT "PublicationCandidate"."id", "PublicationCandidate"."status" FROM "PublicationCandidate" LIMIT 1',
+  'SELECT "PublicationCandidateResearcher"."candidateId", "PublicationCandidateResearcher"."teamMemberId" FROM "PublicationCandidateResearcher" LIMIT 1',
+  'SELECT "SyncState"."name" FROM "SyncState" LIMIT 1',
 ] as const;
 
-const MISSING = /no such (column|table)/i;
+/**
+ * What a missing column/table looks like through the two supported engines (captured from real runs, see
+ * scripts/schema-compat-regression.mjs): Prisma's bundled SQLite and the libSQL/Turso driver adapter both raise
+ * PrismaClientKnownRequestError P2010 whose message ends `no such column: TeamMember.scholarUrl` /
+ * `no such table: OAuthIdentity` (the adapter prefixes `SQLITE_ERROR: `). Only this text marks the schema as behind.
+ */
+const MISSING = /no such (column|table)\b/i;
 
 export async function checkSchema(db: Pick<PrismaClient, "$queryRawUnsafe">): Promise<SchemaStatus> {
   for (const sql of PHASE27_PROBES) {

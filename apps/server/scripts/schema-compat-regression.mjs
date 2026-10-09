@@ -16,7 +16,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,10 +61,12 @@ async function columnsOf(c, names) {
   return out;
 }
 
-async function startServer(dbFile) {
+async function startServer(dbFile, engine = "plain") {
   const work = mkdtempSync(path.join(tmpdir(), "scl-compat-srv-"));
   const port = 49000 + Math.floor(Math.random() * 400);
-  const env = { ...cleanEnv, STORAGE_DIR: path.join(work, "files"), DATABASE_URL: `file:${dbFile}`, PORT: String(port), TRUST_PROXY: "0", NODE_ENV: "test", SESSION_SECRET: "schema-compat-secret-0000000000000000" };
+  // engine "libsql" = the production code path (@prisma/adapter-libsql), pointed at a LOCAL file with a dummy token — never a Turso URL.
+  const engineEnv = engine === "libsql" ? { TURSO_DATABASE_URL: `file:${dbFile}`, TURSO_AUTH_TOKEN: "local-test-token" } : {};
+  const env = { ...cleanEnv, ...engineEnv, STORAGE_DIR: path.join(work, "files"), DATABASE_URL: `file:${dbFile}`, PORT: String(port), TRUST_PROXY: "0", NODE_ENV: "test", SESSION_SECRET: "schema-compat-secret-0000000000000000" };
   const child = spawn(process.execPath, [TSX, path.join(SERVER_ROOT, "src", "index.ts")], { cwd: SERVER_ROOT, env });
   let out = "";
   child.stdout.on("data", (d) => (out += d));
@@ -152,6 +154,53 @@ async function main() {
       t("migration: the new OAuthIdentity FK is enforced against the existing User table", Number((await q(neu, `SELECT count(*) AS c FROM "OAuthIdentity" WHERE id='probe1'`))[0].c) === 1);
     }
     await neu.$disconnect();
+
+    // ---- 4. the guard across both supported engines and realistic failure shapes ----------------------------------------------------
+    const probe = (file, engine, timeout = 60000) => {
+      const r = spawnSync(process.execPath, [TSX, path.join(SERVER_ROOT, "scripts", "schema-guard-probe.ts"), file, engine], { cwd: SERVER_ROOT, env: cleanEnv, encoding: "utf8", timeout });
+      try { return JSON.parse(r.stdout.trim().split("\n").pop()); } catch { return { status: "no-output", raw: (r.stdout + r.stderr).slice(-200) }; }
+    };
+    const partial = path.join(work, "partial.db"); // migrated, then ONE Phase 27 column removed: tables present, column missing
+    copyFileSync(newFile, partial);
+    { const c = client(partial); await c.$executeRawUnsafe(`ALTER TABLE "TeamMember" DROP COLUMN "orcid"`); await c.$disconnect(); }
+    const noTable = path.join(work, "notable.db"); // migrated, then a Phase 27 table removed
+    copyFileSync(newFile, noTable);
+    { const c = client(noTable); await c.$executeRawUnsafe(`DROP TABLE "SyncState"`); await c.$disconnect(); }
+    const garbage = path.join(work, "garbage.db");
+    writeFileSync(garbage, "this is not a sqlite database\n".repeat(50));
+    for (const engine of ["plain", "libsql"]) {
+      t(`guard [${engine}]: pre-Phase-27 database (new tables AND columns missing) -> behind`, probe(oldFile, engine).status === "behind");
+      t(`guard [${engine}]: fully migrated database -> ok`, probe(newFile, engine).status === "ok");
+      t(`guard [${engine}]: tables present but ONE column missing -> behind (the case an unqualified probe misses on bundled SQLite)`, probe(partial, engine).status === "behind", JSON.stringify(probe(partial, engine)));
+      t(`guard [${engine}]: one Phase 27 table missing -> behind`, probe(noTable, engine).status === "behind");
+      t(`guard [${engine}]: a file that is not a database is NOT reported as schema-behind`, probe(garbage, engine).status === "unknown", JSON.stringify(probe(garbage, engine)));
+      { const res = probe(path.join(work, "no", "such", "dir", "x.db"), engine); t(`guard [${engine}]: an unreachable path is NOT reported as schema-behind (unknown, or the engine refuses it before the guard runs)`, ["unknown", "engine-unavailable"].includes(res.status), JSON.stringify(res)); }
+    }
+    // A locked database (another writer holds an exclusive lock) is an unrelated failure, not a missing schema.
+    const lockFile = path.join(work, "locked.db");
+    copyFileSync(newFile, lockFile);
+    const holder = spawn("python3", ["-I", "-c", `import sqlite3,time,sys\nc=sqlite3.connect(sys.argv[1],isolation_level=None)\nc.execute('BEGIN EXCLUSIVE')\nprint('locked',flush=True)\ntime.sleep(40)`, lockFile]);
+    await new Promise((r) => holder.stdout.once("data", r));
+    for (const engine of ["plain", "libsql"]) {
+      const res = probe(lockFile, engine, 45000);
+      t(`guard [${engine}]: a LOCKED database is NOT reported as schema-behind`, res.status !== "behind" && res.status !== "ok", JSON.stringify(res));
+    }
+    holder.kill();
+
+    // The same through the whole app on the production engine path: clean 503 on the old schema, normal service on the new one.
+    {
+      const s3 = await startServer(oldFile, "libsql");
+      try {
+        const team = await get(s3.base, "/api/team");
+        t("libsql adapter, old schema: GET /api/team is a clean 503 DB_SCHEMA_BEHIND", team.status === 503 && team.json?.code === "DB_SCHEMA_BEHIND", `${team.status} ${JSON.stringify(team.json)}`);
+        t("libsql adapter, old schema: the response and log expose no SQL, table, column, path or token", !/SELECT|OAuthIdentity|scholarUrl|\/tmp|local-test-token|libsql/i.test(JSON.stringify(team.json) + s3.logs().split("\n").filter((l) => /schema|DB_SCHEMA/.test(l)).join("\n")));
+        t("libsql adapter, old schema: /api/health still answers", (await get(s3.base, "/api/health")).status === 200);
+      } finally { await s3.stop(); }
+      const s4 = await startServer(newFile, "libsql");
+      try {
+        t("libsql adapter, new schema: GET /api/team serves 200 and login works", (await get(s4.base, "/api/team")).status === 200 && (await get(s4.base, "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "admin@smartcomputinglab.org", password: "ChangeMe123!" }) })).status === 200);
+      } finally { await s4.stop(); }
+    }
 
     // ---- 3. the same code on the NEW schema serves normally -------------------------------------------------------------------
     const s2 = await startServer(newFile);
