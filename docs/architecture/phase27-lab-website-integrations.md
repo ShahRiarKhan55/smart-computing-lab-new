@@ -345,3 +345,57 @@ Smallest safe design:
 4. Estimated change: ~6 query sites + 6 write sites + the helper + tests; no schema change.
 
 Until that decision is made, the UI hint and the admin guide state the current behaviour (see `team.publishedHint`).
+
+## 15. Remote Turso behaviour of the schema guard — RELEASE BLOCKER until verified
+
+**Verified (automated, disposable only):** the guard through (a) Prisma's bundled SQLite, (b) the libSQL adapter on a local file, and
+(c) the real `@libsql/client` HTTP/Hrana client plus `@prisma/adapter-libsql` against a local protocol mock
+(`scripts/unit-schema-guard-remote.test.ts`, 14 checks: five wordings of a missing table/column are "behind"; a locked database,
+disk I/O error, other "no such …" errors, a syntax error, a 401, a 503, a proxy HTML page and a refused connection are NOT).
+The client and adapter pass the server's message through unchanged (`ResponseError.message` → `LibsqlError` → Prisma `P2010`
+"Raw query failed … Message: `<server text>`"), so the guard works for any server text that contains SQLite's own
+`no such table:` / `no such column:`. Public evidence points the same way (sqld returns SQLite's message text, sometimes without a
+code — see the [libsql-shell issue](https://github.com/tursodatabase/libsql-shell-go/issues/128)).
+
+**NOT verified:** the wording of a real Turso cloud server. No Turso/Vercel access or disposable remote database exists in the
+development environment, and the production/shared database must not be used. **Until the owner runs the check below, the guard's
+behaviour on remote Turso is unproven: if the real text did not contain `no such table/column`, the guard would fail OPEN (the
+site would serve 500s from the un-migrated database instead of the clean 503). Treat as a release blocker.**
+
+Owner-run, read-only, ~5 minutes, on a DISPOSABLE database only:
+```
+turso db create scl-guard-test --from-file <a pre-Phase-27 sqlite file>      # e.g. the local backup taken before migrating
+TURSO_GUARD_TEST_URL=<its libsql:// url> TURSO_GUARD_TEST_TOKEN=<its token> \
+  npx tsx apps/server/scripts/schema-guard-remote-check.ts --i-confirm-this-database-is-disposable
+# expect: verdict: behind        (then repeat against a copy created from a MIGRATED file: expect verdict: ok)
+```
+The script refuses to run without those variables and flag, never reads `TURSO_DATABASE_URL`, refuses if the URL equals it,
+sends only the guard's static `SELECT … LIMIT 1` probes, and prints redacted error text.
+
+## 16. Preview plan and real-integration checklist (NOT executed)
+
+### Facts established
+- The Vercel bot on PR #8 reports a **Preview deployment of this branch is live** ("Ready", project `smart-computing-lab`). Every push
+  to the branch redeploys it. Its database target is unverified, so it must be treated as production. This session did **not** open
+  or call it (even a read of `/api/team` would touch the shared database); the safe, write-free signal is, for the owner:
+  `GET <preview-url>/api/team` → `503 {"code":"DB_SCHEMA_BEHIND"}` means the Preview points at a database without the Phase 27
+  migration (the guard also blocks login there, so no session rows are written to it). A `200` means that database already has
+  the migration — find out why before anyone uses the Preview.
+- No Vercel or Turso tooling was available to this session, so environment-variable *names and scopes* could not be listed.
+
+### Owner checklist: make the Preview genuinely isolated (see §12 for commands)
+1. Vercel → Settings → Environment Variables: for `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `BLOB_READ_WRITE_TOKEN`, `SESSION_SECRET`,
+   `GOOGLE_*`, `ORCID_*`: write down which of Production / Preview / Development each is ticked for. Anything ticked for both
+   Production and Preview is shared.
+2. Create a separate Turso DB from a local migrated file, a separate Blob store, a separate `SESSION_SECRET`, a test Google OAuth client.
+3. Add those as **Preview-only** variables (untick Production on the new ones; do not edit the Production values).
+4. Redeploy the Preview; `GET /api/team` must now return the *seed* roster (not the lab's real people); only then continue.
+
+### Live-integration test plan (non-production accounts only; record pass/fail, never paste tokens or cookies)
+| Integration | Automated today (mock) | Live test, once the Preview is isolated |
+|---|---|---|
+| **Google OAuth** | `google-auth-regression` (82) + `unit-google-auth` (70): PKCE, state/nonce, signature, iss/aud/exp, `email_verified`, non-designated denial, no email auto-link, session regeneration | (1) "Sign in with Google" appears; (2) a **non-designated** Google test account is refused with the generic error and no account/identity row appears; (3) the designated address `susmartcomputinglab@gmail.com` signs in as ADMIN (needs that real account); (4) a Google account whose email is unverified (use a Workspace test user with unverified alias) is refused; (5) a signed-in MEMBER "Connect Google" links and then signs in; (6) the callback URL registered exactly as `<origin>/api/auth/google/callback` |
+| **Profile photo + storage diagnostics** | `profiles-regression` (78), `gallery-upload-regression` (38), `phase27-security` | admin `GET /api/files/storage-status?probe=1` reports `blob`, configured, writable; upload a JPEG/PNG/WEBP as owner → visible on the profile; replace → old blob gone; oversize/invalid type → localized message; delete; gallery upload → 201 or the structured 503 code |
+| **ORCID / Crossref** | `publication-import-regression` (71), `unit-publication-import` (34) with a mock | put a public ORCID iD on two *test* profiles; "Check ORCID now" (note: ORCID's docs ask for a `/read-public` token — set `ORCID_CLIENT_ID/SECRET` and confirm both token and token-less behaviour); a malformed/unknown iD reports a per-researcher failure; "Fill from DOI" with a real DOI; an unknown DOI (404 message); rate-limit message after 30 lookups; approve one item → public; re-run → no duplicate; reject → not proposed again |
+| **Google Sites portal link** | `site-integrations-regression` (26): valid https shown, http/`javascript:`/credentialed URLs ignored | set `PORTAL_URL` to the real Site, confirm the footer link opens it in a new tab with `noopener noreferrer`; confirm the Site's link back to the app opens `/`, `/team`, `/alumni`, `/publications` directly (SPA rewrites) |
+| **Facebook updates** | `site-integrations-regression`: `/api/updates` reports `facebook: not_configured`, contributes nothing, no Facebook URL anywhere | confirm the home page shows only "Posted by the lab" items and an honest empty state when there is no news; nothing to test live until an official Page and Meta app review exist |
