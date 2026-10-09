@@ -107,6 +107,24 @@ async function main() {
     t("alumni: cannot be given an account (users endpoint)", (await admin.post("/users", { email: "sec-alum@example.test", password: PW, role: "MEMBER", teamMemberId: alum.json?.id })).status === 409);
     t("alumni: cannot be invited", (await admin.post("/invitations", { email: "sec-alum2@example.test", role: "MEMBER", teamMemberId: alum.json?.id })).status === 409);
 
+    // ---- the invitation / alumni race: a profile turned ALUMNI after an invitation was issued can never gain a login ----------------
+    const pending = await admin.post("/team", { name: "ZZ Sec Invitee", initials: "SI", role: "Researcher", category: "MSC", department: "x" });
+    const invite = await admin.post("/invitations", { email: "sec-race@example.test", role: "MEMBER", teamMemberId: pending.json?.id });
+    t("setup: an invitation for an un-linked profile is issued", invite.status === 201, invite.text);
+    const toAlumni = await admin.put(`/team/${pending.json?.id}`, { category: "ALUMNI" });
+    t("setup: the profile (no account yet) can be moved to alumni", toAlumni.status === 200, toAlumni.text);
+    const accept = await fetch(`${s.base}/api/invitations/token/${invite.json?.url?.split("/invite/")[1]}/accept`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: PW }) });
+    t("alumni: accepting an older invitation for a profile that became ALUMNI is refused (409)", accept.status === 409);
+    t("alumni: …and no account or session was created for it", !(await admin.get("/users")).text.includes("sec-race@example.test"));
+    const linkAlum = await admin.put(`/users/${(await admin.get("/users")).json?.find?.((u) => u.email === "sec-member@example.test")?.id}/link`, { teamMemberId: pending.json?.id });
+    t("alumni: linking an existing account to an alumni profile is refused", linkAlum.status === 409 || linkAlum.status === 400, `${linkAlum.status}`);
+
+    // ---- DOI lookup cannot be steered off /works/ (path traversal inside the allowed host) ----------------------------------------
+    for (const evil of ["10.1234/a/../../types", "10.1234/..", "https://doi.org/10.1234/a%2F..%2F..%2Fx"]) {
+      t(`doi lookup: ${evil} is a 400 (never forwarded to Crossref)`, (await member.get(`/publication-imports/lookup?doi=${encodeURIComponent(evil)}`)).status === 400);
+    }
+    t("doi create: a dot-segment DOI is refused by the publication schema too", (await member.post("/publications", { year: 2026, title: "t", authors: "a", venue: "v", doiUrl: "10.1234/a/../../b" })).status === 400);
+
     // ---- public API leaks ----------------------------------------------------------------------------------------------------------------------
     const pub = await guest.get("/team");
     t("public /team never exposes isPublished, user ids or emails", !/isPublished|userId|@example\.test/i.test(pub.text));

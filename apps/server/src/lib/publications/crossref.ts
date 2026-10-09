@@ -44,6 +44,10 @@ export async function lookupDoi(cfg: PublicationSyncConfig, doiInput: string, do
   const doi = normalizeDoi(doiInput);
   if (!doi) throw new ProviderError("invalid_doi");
   const url = `${cfg.crossrefBaseUrl}/works/${doi.split("/").map(encodeURIComponent).join("/")}?mailto=${encodeURIComponent(cfg.contactEmail)}`;
+  // Defence in depth: whatever the DOI contains, the request must stay under `<base>/works/` on the configured host.
+  const parsed = new URL(url);
+  const basePath = new URL(cfg.crossrefBaseUrl).pathname.replace(/\/+$/, "");
+  if (parsed.host !== new URL(cfg.crossrefBaseUrl).host || !parsed.pathname.startsWith(`${basePath}/works/`)) throw new ProviderError("invalid_doi");
   const body = await requestJson({ url, headers: { "user-agent": `SmartComputingLabWebsite/1.0 (mailto:${cfg.contactEmail})` } }, cfg.http, doFetch);
   const msg = (body as { message?: unknown } | null)?.message;
   if (!msg || typeof msg !== "object") throw new ProviderError("malformed_response");

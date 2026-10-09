@@ -12,7 +12,7 @@
  * - the link shown to users is always `doiToUrl(doi)` = `https://doi.org/<doi>`.
  *
  * Deliberately lenient about the suffix: the DOI handbook allows nearly any printable characters
- * after the first `/`, so only whitespace and control characters are refused. Strict about the
+ * after the first `/`, so only whitespace and control characters (and "." / ".." path segments) are refused. Strict about the
  * prefix: `10.` + digits (+ optional `.digits` sub-registrants) + `/`. An arbitrary URL is never
  * accepted as a DOI.
  */
@@ -61,7 +61,11 @@ export function normalizeDoi(input: unknown): string | null {
       return null;
     }
   }
-  return DOI_SHAPE.test(value) ? value : null;
+  if (!DOI_SHAPE.test(value)) return null;
+  // A "." or ".." path segment would be collapsed by any URL parser, letting a DOI escape the `/works/…` (or
+  // doi.org) path it is placed under. No real DOI has one; refuse it (checked AFTER percent-decoding above).
+  if (value.split("/").some((segment) => segment === "." || segment === "..")) return null;
+  return value;
 }
 
 /** The comparison key: case-insensitive, prefix-free. `null` when `input` is not a DOI. */

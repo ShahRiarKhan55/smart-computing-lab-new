@@ -4,7 +4,7 @@ import { Avatar } from "./Avatar";
 import { apiFetch, apiUpload } from "../lib/api";
 import { uploadErrorMessage } from "../lib/uploadErrors";
 import { formatBytes } from "../lib/format";
-import { apiErrorMessage } from "../i18n/errorMessages";
+import { uploadErrorMessage } from "../lib/uploadErrors";
 import { useLocale } from "../i18n/LocaleContext";
 
 interface ProfilePhotoFieldProps {
@@ -89,7 +89,7 @@ export function ProfilePhotoField({ memberId, initials, photoUrl, onChange }: Pr
       onChange(updated.photoUrl);
       setNotice(t("photo.removed"));
     } catch (err) {
-      setError(apiErrorMessage(err, t));
+      setError(uploadErrorMessage(err, t, maxLabel));
     } finally {
       setBusy(null);
     }

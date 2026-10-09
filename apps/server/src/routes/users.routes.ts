@@ -73,7 +73,7 @@ router.post(
       if (body.teamMemberId) {
         // Conditional on "still unlinked" so two concurrent requests can never both claim the same member.
         const linked = await tx.teamMember.updateMany({
-          where: { id: body.teamMemberId, userId: null },
+          where: { id: body.teamMemberId, userId: null, category: { not: "ALUMNI" } }, // atomic with the category check above
           data: { userId: user.id },
         });
         if (linked.count !== 1) throw new HttpError(409, "That team member already has a linked account.");
@@ -164,7 +164,7 @@ router.put(
       const member = await tx.teamMember.findUnique({ where: { id: teamMemberId }, select: { id: true, category: true } });
       if (!member) throw new HttpError(400, "Selected team member does not exist.");
       assertProfileMayHaveAccount(member);
-      const linked = await tx.teamMember.updateMany({ where: { id: teamMemberId, userId: null }, data: { userId: account.id } });
+      const linked = await tx.teamMember.updateMany({ where: { id: teamMemberId, userId: null, category: { not: "ALUMNI" } }, data: { userId: account.id } }); // atomic with the alumni check above
       if (linked.count !== 1) throw new HttpError(409, "That team member already has a linked account.");
       await recordAudit(tx, { actor: req.user!, action: "USER_LINKED", entityType: "USER", entityId: account.id, details: { email: account.email, teamMemberId } });
     });

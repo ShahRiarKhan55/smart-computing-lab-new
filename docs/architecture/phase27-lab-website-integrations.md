@@ -69,8 +69,8 @@ not verified.
 
 - **Architecture:** the Google Site is a separate public front door that **links to** this application. The application
   is **not embedded** in the Site. Verified facts behind that decision:
-  (a) the Express API sends `X-Frame-Options: DENY` (helmet, `apps/server/src/lib/security.ts`), so API responses can never
-  be framed; the static SPA shell is served by Vercel and `vercel.json` sets no framing header, so the *public pages* could
+  (a) the Express API sends `X-Frame-Options: SAMEORIGIN` (helmet default, verified by inspecting a live response; `apps/server/src/lib/security.ts`
+  still carries an older comment that says DENY), so API responses cannot be framed by another origin; the static SPA shell is served by Vercel and `vercel.json` sets no framing header, so the *public pages* could
   technically be framed — but nothing here restricts *who* may frame them (no `frame-ancestors`), which is a clickjacking
   exposure we did **not** widen or "fix" in this phase;
   (b) the session cookie is `SameSite=Lax` (and browsers increasingly block third-party cookies), so inside a cross-site
@@ -115,8 +115,10 @@ not verified.
   icons under the name, **hidden when empty**, `target="_blank" rel="noopener noreferrer"`; ORCID also feeds JSON-LD `sameAs`.
 - **Alumni directory** (`/alumni`): a new member category `ALUMNI`. Alumni have **no login accounts**: the server refuses
   to create a user, link a user, or issue an invitation for an alumni profile (`lib/alumni.ts`). Managers can
-  add/edit/unpublish/remove; `isPublished` hides a profile from all public lists, search and the sitemap (it is not a
-  public field). The team page lists current members only.
+  add/edit/unpublish/remove; `isPublished` hides the profile page, its uploaded photo and the profile from the team/alumni lists, search
+  and the sitemap (it is not a public field). **It does not remove the person's name from explicit relations** (project/group
+  members, publication authors, research-area researchers) or free text: filtering those lists is a deliberate non-goal of this
+  PR because the member/author editors replace the whole link set, so a filtered list could silently delete hidden links. The team page lists current members only.
 - **Profile photo upload** from the computer: JPEG/PNG/WEBP only, validated by magic bytes (the client's MIME and file
   name are ignored), 2 MB default (`MAX_PROFILE_PHOTO_BYTES`, capped at 4 MB on Vercel), header-read dimension limits
   (6000 px / 24 MP — no image decoding library was added). Stored through the existing storage abstraction as a

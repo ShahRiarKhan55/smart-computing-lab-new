@@ -68,6 +68,16 @@ async function main() {
   await lookupDoi(c, "10.1234/abc", (async (u: string) => ((requested = u), json({ message: { title: ["<b>Bold</b> Title"], DOI: "10.1234/abc", author: [{ given: "A", family: "B" }], issued: { "date-parts": [[2021]] }, "container-title": ["J"] } }))) as unknown as typeof fetch);
   t("crossref: mailto (polite pool) is sent and markup is stripped from titles", requested.includes("mailto=") && requested.startsWith("https://api.crossref.org/works/10.1234/abc"));
 
+  // ---- the request path can never leave /works/ on the Crossref host (dot-segment DOIs are refused outright) ----------------
+  for (const evil of ["10.1234/a/../../types", "10.1234/../../journals", "10.1234/..", "https://doi.org/10.1234/%2e%2e/x"]) {
+    let hit = false;
+    const code = await codeOf(lookupDoi(c, evil, (async () => ((hit = true), json({}))) as unknown as typeof fetch));
+    t(`crossref: ${evil} is refused before any request`, code === "invalid_doi" && !hit, code);
+  }
+  requested = "";
+  await lookupDoi(c, "10.1234/ok.thing", (async (u: string) => ((requested = u), json({ message: { title: ["T"] } }))) as unknown as typeof fetch).catch(() => undefined);
+  t("crossref: a normal DOI stays under /works/ on api.crossref.org", /^https:\/\/api\.crossref\.org\/works\/10\.1234\/ok\.thing\?/.test(requested), requested);
+
   // ---- lookup guard -----------------------------------------------------------------------------------------------------------------------------
   resetLookupGuard();
   let allowed = 0;

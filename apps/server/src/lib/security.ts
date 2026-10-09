@@ -27,7 +27,7 @@ import type { RequestHandler } from "express";
  *   server. In production this app is assumed to sit behind a TLS-terminating reverse proxy (the
  *   same one `TRUST_PROXY` documents) — HSTS tells the browser to always use HTTPS for future
  *   requests to this origin.
- * - Everything else (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+ * - Everything else (`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN` (helmet's default),
  *   `Referrer-Policy: no-referrer`, removing `X-Powered-By`) applies in every environment: cheap,
  *   meaningful for a JSON API, and never breaks a legitimate client.
  */

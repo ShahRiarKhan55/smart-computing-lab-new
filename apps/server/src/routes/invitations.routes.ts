@@ -1,3 +1,4 @@
+import { P27_MESSAGES } from "@scl/shared";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import {
@@ -249,7 +250,7 @@ router.post(
 
       if (current.teamMemberId) {
         const member = await tx.teamMember.findUnique({ where: { id: current.teamMemberId }, select: { userId: true, category: true } });
-        if (!member || member.userId || member.category === "ALUMNI") throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
+        if (!member || member.userId || member.category === "ALUMNI") throw new HttpError(409, P27_MESSAGES.invitationProfileGone);
       }
 
       const claimed = await tx.accountInvitation.updateMany({
@@ -264,11 +265,14 @@ router.post(
 
       if (current.teamMemberId) {
         const linked = await tx.teamMember.updateMany({
-          where: { id: current.teamMemberId, userId: null },
+          where: { id: current.teamMemberId, userId: null, category: { not: "ALUMNI" } }, // atomic with the alumni re-check above
           data: { userId: createdUser.id },
         });
-        if (linked.count !== 1) throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
+        if (linked.count !== 1) throw new HttpError(409, P27_MESSAGES.invitationProfileGone);
       } else if (current.name && current.initials && current.memberRole && current.category) {
+        // Defence in depth: an invitation for a NEW alumni profile should never exist (creation refuses it), but an account must
+        // never be created for one even if a row slipped through.
+        if (current.category === "ALUMNI") throw new HttpError(409, P27_MESSAGES.invitationProfileGone);
         await tx.teamMember.create({
           data: {
             userId: createdUser.id,

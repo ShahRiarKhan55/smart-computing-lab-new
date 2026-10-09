@@ -1,3 +1,4 @@
+import { P27_MESSAGES } from "@scl/shared";
 import { HttpError } from "./validate.js";
 
 /**
@@ -7,7 +8,7 @@ import { HttpError } from "./validate.js";
  * still has a login. Together with the schema change that stops an account being created together
  * with an ALUMNI profile, an alumni record cannot authenticate merely because a public profile exists.
  */
-export const ALUMNI_NO_ACCOUNT_MESSAGE = "Alumni profiles can't have a login account.";
+export const ALUMNI_NO_ACCOUNT_MESSAGE = P27_MESSAGES.alumniNoAccount;
 
 export function assertProfileMayHaveAccount(member: { category: string }): void {
   if (member.category === "ALUMNI") throw new HttpError(409, ALUMNI_NO_ACCOUNT_MESSAGE);

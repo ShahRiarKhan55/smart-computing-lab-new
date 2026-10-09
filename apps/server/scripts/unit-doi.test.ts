@@ -51,6 +51,13 @@ eq("rejects a non-string (number)", normalizeDoi(1234 as unknown), null);
 eq("rejects null/undefined", normalizeDoi(null) === null && normalizeDoi(undefined) === null, true);
 eq("rejects an over-long value", normalizeDoi(`10.1234/${"a".repeat(3000)}`), null);
 
+// ---- path traversal: a DOI must not be able to climb out of the URL path it is placed under -----------------
+for (const bad of ["10.1234/a/../../types", "10.1234/..", "10.1234/./x", "10.1234/a/..", "https://doi.org/10.1234/a%2F..%2F..%2Fx", "https://doi.org/10.1234/%2e%2e", "doi:10.1234/a/../b"]) {
+  eq(`dot-segment DOI is refused: ${bad}`, normalizeDoi(bad), null);
+}
+eq("a DOI that merely CONTAINS dots in a segment is still fine", normalizeDoi("10.1234/a..b/c.d"), "10.1234/a..b/c.d");
+eq("an encoded slash that is NOT a dot-segment is untouched", normalizeDoi("10.1002/(SICI)1097-4571(199806)49:8<693::AID-ASI4>3.0.CO;2-O"), "10.1002/(SICI)1097-4571(199806)49:8<693::AID-ASI4>3.0.CO;2-O");
+
 // ---- links and comparison keys ---------------------------------------------------------------------
 eq("doiToUrl builds the canonical link", doiToUrl("10.1234/example"), "https://doi.org/10.1234/example");
 eq("doiToUrl keeps '/' separators but encodes a reserved character", doiToUrl("10.1000/a#b?c"), "https://doi.org/10.1000/a%23b%3Fc");

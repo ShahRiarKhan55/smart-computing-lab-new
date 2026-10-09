@@ -1,3 +1,4 @@
+import { P27_MESSAGES } from "@scl/shared";
 import { Router } from "express";
 import {
   CATEGORY_ORDER,
@@ -19,7 +20,6 @@ import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } 
 import { uploadProfilePhotoFile, validateProfilePhoto } from "../lib/fileService.js";
 import { removeFile, saveFile } from "../lib/storage.js";
 import { PHOTO_ENTITY_TYPE, photoPathFor, retireProfilePhotos } from "../lib/profilePhoto.js";
-import { ALUMNI_NO_ACCOUNT_MESSAGE } from "../lib/alumni.js";
 import type { Viewer } from "../lib/visibility.js";
 
 const router = Router();
@@ -132,7 +132,7 @@ router.put(
       // ignored, so editing your own profile can never move you or hide/show you.
       const category = mayPlace ? body.category ?? existing.category : existing.category;
       if (category === "ALUMNI" && existing.category !== "ALUMNI" && existing.userId) {
-        throw new HttpError(409, `${ALUMNI_NO_ACCOUNT_MESSAGE} Unlink the login account first.`);
+        throw new HttpError(409, P27_MESSAGES.alumniUnlinkFirst);
       }
       const data = {
         name: body.name ?? existing.name,
@@ -181,7 +181,7 @@ router.post(
   requireOwnerOrManager("id"),
   uploadProfilePhotoFile,
   asyncHandler(async (req, res) => {
-    if (!req.file) throw new HttpError(400, 'No photo was uploaded (expected multipart field "file").');
+    if (!req.file) throw new HttpError(400, P27_MESSAGES.photoNoFile);
     const photo = validateProfilePhoto(req.file);
 
     const storageKey = await saveFile(photo.buffer);

@@ -1,3 +1,4 @@
+import { P27_MESSAGES } from "@scl/shared";
 import multer from "multer";
 import { ALLOWED_MIME_TYPES, DEFAULT_DOCUMENT_MAX_BYTES, DEFAULT_IMAGE_MAX_BYTES, DEFAULT_PROFILE_PHOTO_MAX_BYTES, ORIGINAL_NAME_MAX, PROFILE_PHOTO_MIME_TYPES, isImageMime } from "@scl/shared";
 import { HttpError } from "./validate.js";
@@ -117,13 +118,13 @@ export interface ValidatedProfilePhoto extends ValidatedUpload {
 export function validateProfilePhoto(file: { buffer: Buffer; size: number; originalname: string }): ValidatedProfilePhoto {
   const sniffed = sniffMimeType(file.buffer);
   if (!sniffed || !(PROFILE_PHOTO_MIME_TYPES as readonly string[]).includes(sniffed)) {
-    throw new HttpError(400, "Profile photos must be a JPEG, PNG or WEBP image.");
+    throw new HttpError(400, P27_MESSAGES.photoType);
   }
   if (file.size > PROFILE_PHOTO_MAX_BYTES) {
     throw new HttpError(413, `File is too large (max ${(PROFILE_PHOTO_MAX_BYTES / (1024 * 1024)).toFixed(1)} MB for a profile photo).`);
   }
   const dims = readImageDimensions(file.buffer, sniffed);
-  if (!dims) throw new HttpError(400, "That image file looks damaged or incomplete. Please choose a different photo.");
+  if (!dims) throw new HttpError(400, P27_MESSAGES.photoDamaged);
   if (dims.width > PROFILE_PHOTO_MAX_SIDE || dims.height > PROFILE_PHOTO_MAX_SIDE || dims.width * dims.height > PROFILE_PHOTO_MAX_PIXELS) {
     throw new HttpError(400, `That photo is too large in pixels (max ${PROFILE_PHOTO_MAX_SIDE} x ${PROFILE_PHOTO_MAX_SIDE}).`);
   }

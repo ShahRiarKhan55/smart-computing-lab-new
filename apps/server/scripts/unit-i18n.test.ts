@@ -83,6 +83,26 @@ for (const hostile of ["<script>alert(1)</script>", "<img src=x onerror=alert(1)
   t(`accepts hostile text unchanged as ORDINARY DATA (rendering safety is React's text nodes, never dangerouslySetInnerHTML): ${hostile}`, parsed.success && parsed.data.ja?.title === hostile);
 }
 
+// ---- Phase 27: every fixed server message has a Japanese translation, and the server/web share ONE definition ------
+import { readFileSync as readSrc, readdirSync as listDir, statSync as statSrc } from "node:fs";
+import { join as joinPath } from "node:path";
+import { P27_MESSAGES } from "@scl/shared";
+{
+  const root = joinPath(import.meta.dirname, "..", "..", "..");
+  const mapping = readSrc(joinPath(root, "apps", "web", "src", "i18n", "errorMessages.ts"), "utf8");
+  for (const key of Object.keys(P27_MESSAGES)) t(`errorMessages.ts maps P27_MESSAGES.${key} to a translation`, mapping.includes(`[P27_MESSAGES.${key}]`));
+  const mappedKeys = [...mapping.matchAll(/\[P27_MESSAGES\.\w+\]: "(p27\.err\.\w+)"/g)].map((m) => m[1]);
+  for (const key of [...mappedKeys, "p27.err.photoPixels", "p27.err.photoSize"]) {
+    const en = DICTIONARIES.en[key as keyof typeof DICTIONARIES.en];
+    const ja = DICTIONARIES.ja[key as keyof typeof DICTIONARIES.ja];
+    t(`${key} exists in English and Japanese, and the Japanese is not the English text`, typeof en === "string" && typeof ja === "string" && ja !== en && /[\u3040-\u30ff\u4e00-\u9fff]/.test(ja));
+  }
+  // The literals live in ONE file; server code must use the constants (a duplicated literal can drift out of the translation map).
+  const walk = (dir: string): string[] => listDir(dir).flatMap((f) => (statSrc(joinPath(dir, f)).isDirectory() ? walk(joinPath(dir, f)) : f.endsWith(".ts") ? [joinPath(dir, f)] : []));
+  const offenders = walk(joinPath(root, "apps", "server", "src")).filter((f) => Object.values(P27_MESSAGES).some((m) => readSrc(f, "utf8").includes(JSON.stringify(m).slice(1, -1))));
+  t("no server source duplicates a Phase 27 message literal (they all use P27_MESSAGES)", offenders.length === 0, offenders.join());
+}
+
 console.log(`${ok} i18n unit checks passed, ${failures.length} failed.`);
 if (failures.length) {
   for (const f of failures) console.log(`  FAIL  ${f}`);

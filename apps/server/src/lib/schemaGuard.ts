@@ -1,3 +1,4 @@
+import { P27_MESSAGES } from "@scl/shared";
 import type { RequestHandler } from "express";
 import type { PrismaClient } from "@prisma/client";
 
@@ -41,7 +42,7 @@ export async function checkSchema(db: Pick<PrismaClient, "$queryRawUnsafe">): Pr
 
 export const BEHIND_RECHECK_MS = 30_000;
 const BEHIND_BODY = {
-  error: "The database has not been updated for this version of the site yet. Please try again later.",
+  error: P27_MESSAGES.schemaBehind,
   code: "DB_SCHEMA_BEHIND",
 };
 

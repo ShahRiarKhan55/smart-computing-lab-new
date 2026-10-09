@@ -1,4 +1,4 @@
-import { DOI_INVALID_MESSAGE, KNOWLEDGE_CATEGORIES, ORCID_INVALID_MESSAGE, RESEARCHGATE_INVALID_MESSAGE, RESOURCE_TYPES, SCHOLAR_INVALID_MESSAGE, type TranslationKey } from "@scl/shared";
+import { DOI_INVALID_MESSAGE, P27_MESSAGES, KNOWLEDGE_CATEGORIES, ORCID_INVALID_MESSAGE, RESEARCHGATE_INVALID_MESSAGE, RESOURCE_TYPES, SCHOLAR_INVALID_MESSAGE, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -85,11 +85,39 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   // Self-service password change.
   "Current password is incorrect.": "profile.password.err.incorrect",
   "Too many attempts. Please wait a few minutes and try again.": "error.tooManyAttempts",
+  // Phase 27: the fixed messages of the alumni, profile-photo, publication-import and deploy-guard paths.
+  [P27_MESSAGES.alumniNoAccount]: "p27.err.alumniNoAccount",
+  [P27_MESSAGES.alumniUnlinkFirst]: "p27.err.alumniUnlinkFirst",
+  [P27_MESSAGES.photoType]: "p27.err.photoType",
+  [P27_MESSAGES.photoDamaged]: "p27.err.photoDamaged",
+  [P27_MESSAGES.photoNoFile]: "p27.err.photoNoFile",
+  [P27_MESSAGES.importAlreadyReviewed]: "p27.err.importAlreadyReviewed",
+  [P27_MESSAGES.importSyncRunning]: "p27.err.importSyncRunning",
+  [P27_MESSAGES.importAuthorsRequired]: "p27.err.importAuthorsRequired",
+  [P27_MESSAGES.importVenueRequired]: "p27.err.importVenueRequired",
+  [P27_MESSAGES.importAuthorMissing]: "p27.err.importAuthorMissing",
+  [P27_MESSAGES.importDuplicateDoi]: "p27.err.importDuplicateDoi",
+  [P27_MESSAGES.doiLookupLimit]: "p27.err.doiLookupLimit",
+  [P27_MESSAGES.doiLookupNotFound]: "p27.err.doiLookupNotFound",
+  [P27_MESSAGES.doiLookupUnavailable]: "p27.err.doiLookupUnavailable",
+  [P27_MESSAGES.invitationProfileGone]: "p27.err.invitationProfileGone",
+  [P27_MESSAGES.schemaBehind]: "p27.err.schemaBehind",
 };
+
+/** Fixed sentences that embed a number (so they cannot be exact-match keys): matched by shape, number passed to the translation. */
+const KNOWN_PATTERNS: { re: RegExp; key: TranslationKey }[] = [
+  { re: /^That photo is too large in pixels \(max (\d+) x \d+\)\.$/, key: "p27.err.photoPixels" },
+  { re: /^File is too large \(max ([\d.]+) MB for a profile photo\)\.$/, key: "p27.err.photoSize" },
+];
 
 /** The localized text for a known server/schema message, else the message itself (the same rule as `apiErrorMessage`). */
 export function knownMessage(message: string, t: Translator): string {
-  return KNOWN_MESSAGES[message] ? t(KNOWN_MESSAGES[message]) : message;
+  if (KNOWN_MESSAGES[message]) return t(KNOWN_MESSAGES[message]);
+  for (const { re, key } of KNOWN_PATTERNS) {
+    const m = re.exec(message);
+    if (m) return t(key, { max: m[1] });
+  }
+  return message;
 }
 
 type Translator = (key: TranslationKey, vars?: Record<string, string | number>) => string;
@@ -103,6 +131,8 @@ type Translator = (key: TranslationKey, vars?: Record<string, string | number>) 
  * that allow-list — is shown exactly as received.
  */
 export function apiErrorMessage(err: unknown, t: Translator): string {
+  // A stable server code wins over message matching (the deploy-order guard answers 503 DB_SCHEMA_BEHIND).
+  if (err instanceof ApiError && err.code === "DB_SCHEMA_BEHIND") return t("p27.err.schemaBehind");
   if (err instanceof ApiError) return knownMessage(err.message, t) || t("error.somethingWentWrong");
   if (err instanceof TypeError) return t("error.network");
   return t("error.somethingWentWrong");

@@ -1,3 +1,4 @@
+import { P27_MESSAGES } from "@scl/shared";
 import { Router } from "express";
 import {
   approveCandidateSchema,
@@ -38,7 +39,7 @@ router.get(
     const key = doiKey(doi)!;
     const cached = getCachedLookup<DoiLookupResult>(key);
     if (cached) return void res.json(cached);
-    if (!allowDoiLookup(req.user!.id)) throw new HttpError(429, "Too many DOI lookups. Please wait a few minutes.");
+    if (!allowDoiLookup(req.user!.id)) throw new HttpError(429, P27_MESSAGES.doiLookupLimit);
     try {
       const meta = await lookupDoi(getPublicationSyncConfig(), doi);
       const body: DoiLookupResult = { doi: meta.doi, title: meta.title, authors: meta.authors, year: meta.year, venue: meta.venue, doiUrl: doiToUrl(meta.doi) };
@@ -46,8 +47,8 @@ router.get(
       res.json(body);
     } catch (e) {
       if (!(e instanceof ProviderError)) throw e;
-      if (e.code === "not_found") throw new HttpError(404, "No record was found for that DOI. You can still enter the details by hand.");
-      throw new HttpError(502, "The DOI service could not be reached. You can still enter the details by hand.");
+      if (e.code === "not_found") throw new HttpError(404, P27_MESSAGES.doiLookupNotFound);
+      throw new HttpError(502, P27_MESSAGES.doiLookupUnavailable);
     }
   }),
 );
@@ -119,7 +120,7 @@ router.post(
     if (teamMemberId) assertValidId(teamMemberId);
     const cfg = getPublicationSyncConfig();
     const outcome = await runPublicationSync(prisma, cfg, { teamMemberId, budgetMs: Number(process.env.PUBLICATION_SYNC_BUDGET_MS) > 0 ? Number(process.env.PUBLICATION_SYNC_BUDGET_MS) : 20_000 });
-    if (!outcome.started) throw new HttpError(409, "A publication sync is already running. Please try again in a few minutes.");
+    if (!outcome.started) throw new HttpError(409, P27_MESSAGES.importSyncRunning);
     await recordAudit(prisma, {
       actor: req.user!,
       action: "PUBLICATION_SYNC_RUN",
@@ -147,7 +148,7 @@ router.post(
     const created = await prisma.$transaction(async (tx) => {
       const candidate = await tx.publicationCandidate.findUnique({ where: { id: req.params.id }, include: { researchers: { select: { teamMemberId: true } } } });
       if (!candidate) throw new HttpError(404, "Not found");
-      if (candidate.status !== "PENDING") throw new HttpError(409, "This item has already been reviewed.");
+      if (candidate.status !== "PENDING") throw new HttpError(409, P27_MESSAGES.importAlreadyReviewed);
 
       if (candidate.doi) {
         const dupe = (await existingDoiIndex(tx)).get(candidate.doi);
@@ -159,15 +160,15 @@ router.post(
       }
       const authors = input.authors ?? candidate.authors;
       const venue = input.venue ?? candidate.venue;
-      if (!authors.trim()) throw new HttpError(400, "Authors are required: please enter them before approving.");
-      if (!venue.trim()) throw new HttpError(400, "Venue is required: please enter it before approving.");
+      if (!authors.trim()) throw new HttpError(400, P27_MESSAGES.importAuthorsRequired);
+      if (!venue.trim()) throw new HttpError(400, P27_MESSAGES.importVenueRequired);
 
       // Claim first (conditional on still being PENDING) so two editors approving at once cannot both create a record.
       const claim = await tx.publicationCandidate.updateMany({
         where: { id: candidate.id, status: "PENDING" },
         data: { status: "APPROVED", reviewedAt: new Date(), reviewedById: req.user!.id },
       });
-      if (claim.count !== 1) throw new HttpError(409, "This item has already been reviewed.");
+      if (claim.count !== 1) throw new HttpError(409, P27_MESSAGES.importAlreadyReviewed);
 
       const pub = await tx.publication.create({
         data: {
@@ -183,7 +184,7 @@ router.post(
       });
       const wanted = input.teamMemberIds ?? candidate.researchers.map((r) => r.teamMemberId);
       const members = wanted.length ? await tx.teamMember.findMany({ where: { id: { in: wanted } }, select: { id: true } }) : [];
-      if (input.teamMemberIds && members.length !== new Set(wanted).size) throw new HttpError(400, "One of the selected authors does not exist.");
+      if (input.teamMemberIds && members.length !== new Set(wanted).size) throw new HttpError(400, P27_MESSAGES.importAuthorMissing);
       if (members.length) await tx.publicationAuthor.createMany({ data: members.map((m) => ({ publicationId: pub.id, teamMemberId: m.id })) });
       await tx.publicationCandidate.update({ where: { id: candidate.id }, data: { publicationId: pub.id } });
       await recordAudit(tx, {
@@ -202,7 +203,7 @@ router.post(
       });
       return pub;
     });
-    if (!created) throw new HttpError(409, "A publication with this DOI already exists, so this item was marked as a duplicate.");
+    if (!created) throw new HttpError(409, P27_MESSAGES.importDuplicateDoi);
     res.status(201).json({ publicationId: created.id });
   }),
 );
@@ -220,7 +221,7 @@ router.post(
       });
       if (claim.count !== 1) {
         const exists = await tx.publicationCandidate.findUnique({ where: { id: req.params.id }, select: { id: true } });
-        throw new HttpError(exists ? 409 : 404, exists ? "This item has already been reviewed." : "Not found");
+        throw new HttpError(exists ? 409 : 404, exists ? P27_MESSAGES.importAlreadyReviewed : "Not found");
       }
       await recordAudit(tx, { actor: req.user!, action: "PUBLICATION_IMPORT_REJECTED", entityType: "PUBLICATION_CANDIDATE", entityId: req.params.id });
     });
