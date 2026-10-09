@@ -384,15 +384,41 @@ development environment, and the production/shared database must not be used. **
 behaviour on remote Turso is unproven: if the real text did not contain `no such table/column`, the guard would fail OPEN (the
 site would serve 500s from the un-migrated database instead of the clean 503). Treat as a release blocker.**
 
-Owner-run, read-only, ~5 minutes, on a DISPOSABLE database only:
+**The remote test has NOT been run.** The script and its offline tests (`scripts/unit-schema-guard-remote-check.test.ts`, part of
+`npm run test:unit`) use fake hosts, tokens and an in-memory database only. They prove the script's own safety logic (host
+allow-list, URL validation, production refusal, redaction, fixed-SELECT-only probes, error handling). They do **not** verify real
+Turso error wording, the `libsql://` WebSocket path, hostnames, or the scope of a real token.
+
+Owner-run, read-only, on the two DISPOSABLE databases only (`scl-guard-pre27` = pre-Phase-27 fixture, `scl-guard-p27prov` = fixture
+with the Phase 27 and provenance migrations). Never the production or shared Preview database.
+
+| Variable / flag | Meaning |
+|---|---|
+| `TURSO_GUARD_ALLOWED_HOST_PRE27` | the **exact full hostname** of `scl-guard-pre27`, copied from the Turso dashboard (bare `*.turso.io` hostname, no scheme) |
+| `TURSO_GUARD_ALLOWED_HOST_P27PROV` | the exact full hostname of `scl-guard-p27prov` |
+| `TURSO_GUARD_TEST_URL` | `libsql://<one of the two hostnames above>` — the only accepted form (no credentials, port, path or query; no `https`/`wss`/`file`) |
+| `TURSO_GUARD_TEST_TOKEN` | a **database-scoped, read-only, short-lived** token for that one database, e.g. `turso db tokens create <db> --read-only --expiration <short>`; never a platform/account token. The script cannot verify the token's scope — that is the owner's responsibility |
+| `--i-confirm-this-database-is-disposable` | required flag |
+
 ```
-turso db create scl-guard-test --from-file <a pre-Phase-27 sqlite file>      # e.g. the local backup taken before migrating
-TURSO_GUARD_TEST_URL=<its libsql:// url> TURSO_GUARD_TEST_TOKEN=<its token> \
-  npx tsx apps/server/scripts/schema-guard-remote-check.ts --i-confirm-this-database-is-disposable
-# expect: verdict: behind        (then repeat against a copy created from a MIGRATED file: expect verdict: ok)
+npx tsx apps/server/scripts/schema-guard-remote-check.ts --i-confirm-this-database-is-disposable
 ```
-The script refuses to run without those variables and flag, never reads `TURSO_DATABASE_URL`, refuses if the URL equals it,
-sends only the guard's static `SELECT … LIMIT 1` probes, and prints redacted error text.
+Set the variables in the environment settings, not in chat or shell history, and do not paste hostnames or tokens into reports.
+
+**Strict exact-host allow-list.** The target host must equal one of the two configured hostnames after lowercasing and removing a
+trailing dot — no prefix, substring, wildcard or database-name matching, and hostnames are never derived from database names. The
+script **fails closed**: with either allow-list variable unset, malformed or duplicated, it refuses to run. It also refuses if
+`TURSO_DATABASE_URL` is present and matches the target or an allow-list entry (compared in memory by normalised host, never printed
+or used as a credential) or cannot be parsed. It sends only the guard's fixed `SELECT … LIMIT 1` probes, and redacts tokens (raw and
+URL-encoded), URLs, `*.turso.io` hostnames and stack traces from all output.
+
+**Expected results:** `scl-guard-pre27` → `verdict: behind`; `scl-guard-p27prov` → `verdict: ok`. Any other result is a finding to
+investigate, not a pass. Note that an empty or wrong database also reports `behind`, so `behind` alone does not prove the fixture.
+
+**`unknown` is fail-open in the app.** The middleware (`requireCurrentSchema`) returns the 503 `DB_SCHEMA_BEHIND` only for
+`behind`. If the real Turso wording for a missing table/column does not contain SQLite's `no such table/column`, or any other probe
+error occurs, the verdict is `unknown` and requests proceed to the un-migrated database (500s instead of the clean 503). That is the
+design today; the remote run is what shows which verdict real Turso produces.
 
 ## 16. Preview plan and real-integration checklist (NOT executed)
 
