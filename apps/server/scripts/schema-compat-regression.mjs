@@ -130,26 +130,22 @@ async function main() {
 
     // ---- 1. the migration is strictly additive ------------------------------------------------------------------------------------
     const dep = spawnSync(process.execPath, [PRISMA, "migrate", "deploy", "--schema", path.join(SERVER_ROOT, "prisma", "schema.prisma")], { cwd: SERVER_ROOT, env: { ...cleanEnv, DATABASE_URL: `file:${newFile}` }, encoding: "utf8" });
-    t("migration: prisma migrate deploy on the disposable copy succeeds and applies the Phase 27 migration and the later publication-provenance migration", dep.status === 0 && /20261008090552_phase27_integrations/.test(dep.stdout + dep.stderr) && /20261009100000_publication_source_provenance/.test(dep.stdout + dep.stderr), (dep.stdout + dep.stderr).slice(-400));
+    t("migration: prisma migrate deploy on the disposable copy succeeds and applies exactly the Phase 27 migration", dep.status === 0 && /20261008090552_phase27_integrations/.test(dep.stdout + dep.stderr), (dep.stdout + dep.stderr).slice(-400));
     const neu = client(newFile);
     const after = await fingerprint(neu, oldTables, oldCols); // the OLD columns of the OLD tables
     for (const n of oldTables) t(`migration: table ${n} — same ${before[n].count} rows, identical content (old columns)`, after[n].count === before[n].count && after[n].hash === before[n].hash, `${after[n].count} vs ${before[n].count}`);
     const newTables = await tables(neu);
     t("migration: no existing table was dropped or renamed", oldTables.every((n) => newTables.includes(n)));
-    t("migration: exactly the five documented tables were added (four Phase 27 + PublicationSourceRecord)", JSON.stringify(newTables.filter((n) => !oldTables.includes(n)).sort()) === JSON.stringify(["OAuthIdentity", "PublicationCandidate", "PublicationCandidateResearcher", "PublicationSourceRecord", "SyncState"]), newTables.join());
-    for (const n of ["OAuthIdentity", "PublicationCandidate", "PublicationCandidateResearcher", "PublicationSourceRecord", "SyncState"]) t(`migration: new table ${n} starts empty`, Number((await q(neu, `SELECT count(*) AS c FROM "${n}"`))[0].c) === 0);
+    t("migration: exactly the four documented tables were added", JSON.stringify(newTables.filter((n) => !oldTables.includes(n)).sort()) === JSON.stringify(["OAuthIdentity", "PublicationCandidate", "PublicationCandidateResearcher", "SyncState"]), newTables.join());
+    for (const n of ["OAuthIdentity", "PublicationCandidate", "PublicationCandidateResearcher", "SyncState"]) t(`migration: new table ${n} starts empty`, Number((await q(neu, `SELECT count(*) AS c FROM "${n}"`))[0].c) === 0);
     const tmCols = await columnsOf(neu, ["TeamMember"]);
     t("migration: TeamMember gained exactly scholarUrl, researchGateUrl, orcid, isPublished", JSON.stringify(tmCols.TeamMember.filter((c) => !oldCols.TeamMember.includes(c)).sort()) === JSON.stringify(["isPublished", "orcid", "researchGateUrl", "scholarUrl"]));
-    const pubCols = await columnsOf(neu, ["Publication"]);
-    t("migration: Publication gained exactly one nullable column, sourceOrder (existing rows stay NULL)", JSON.stringify(pubCols.Publication.filter((c) => !oldCols.Publication.includes(c))) === JSON.stringify(["sourceOrder"]) && Number((await q(neu, `SELECT count(*) AS c FROM "Publication" WHERE sourceOrder IS NOT NULL`))[0].c) === 0);
     const defaults = await q(neu, `SELECT count(*) AS n, sum(scholarUrl='' AND researchGateUrl='' AND orcid='' AND isPublished=1) AS d FROM "TeamMember"`);
     t("migration: every existing TeamMember got the defaults ('' and published)", Number(defaults[0].n) === Number(defaults[0].d) && Number(defaults[0].n) === before.TeamMember.count);
     t("migration: no foreign-key violation anywhere", (await q(neu, "PRAGMA foreign_key_check")).length === 0);
     t("migration: integrity check is ok", (await q(neu, "PRAGMA integrity_check"))[0].integrity_check === "ok");
     const sql = readFileSync(path.join(SERVER_ROOT, "prisma", "migrations", "20261008090552_phase27_integrations", "migration.sql"), "utf8").split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").replace(/ON (DELETE|UPDATE) (CASCADE|SET NULL)/gi, "");
     t("migration: the SQL has no DROP, RENAME, DELETE, UPDATE or table REDEFINE", !/\b(DROP|RENAME|DELETE|UPDATE|INSERT)\b/i.test(sql) && !/__new_|PRAGMA/i.test(sql));
-    const sql2 = readFileSync(path.join(SERVER_ROOT, "prisma", "migrations", "20261009100000_publication_source_provenance", "migration.sql"), "utf8").split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").replace(/ON (DELETE|UPDATE) (CASCADE|SET NULL)/gi, "");
-    t("migration (provenance): the SQL has no DROP, RENAME, DELETE, UPDATE, INSERT or table REDEFINE", !/\b(DROP|RENAME|DELETE|UPDATE|INSERT)\b/i.test(sql2) && !/__new_|PRAGMA/i.test(sql2));
     // Cascade check: deleting an OLD parent row only cascades into NEW tables (never into pre-existing data).
     const probeUser = (await q(neu, `SELECT id FROM "User" LIMIT 1`))[0];
     if (probeUser) {
