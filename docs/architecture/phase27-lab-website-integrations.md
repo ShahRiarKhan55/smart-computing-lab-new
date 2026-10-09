@@ -240,3 +240,49 @@ legal opinion; the lab or its university should review it.
 - Researchers add their ORCID iDs / profile links; optionally register ORCID API credentials.
 - Provide an official Facebook Page (and approve the Meta app work) before any Facebook integration.
 - Separately approve and perform the production migration, in the right order relative to the deploy.
+
+## 12. Isolated Preview and real-integration verification (runbook — NOT performed)
+
+**Status: nothing in this section has been executed.** Real Google sign-in, a live Blob upload, live ORCID/Crossref reads and
+a Preview of this branch were not tested, because they need accounts, credentials or infrastructure that were not provided
+for this work. Everything verified so far used local disposable SQLite files and mock providers.
+
+### What is known about the Preview database target — and what is not
+- The documentation and the earlier report say Preview deployments share the production Turso database. **This could not be
+  verified from the development session**: it has no Vercel or Turso dashboard access. Treat any Preview of this branch as
+  pointing at production until the steps below prove otherwise.
+- The development session's own environment contains `TURSO_DATABASE_URL` (a `libsql://` URL) and `TURSO_AUTH_TOKEN`
+  variables. They were **never used**: every test script clears them (`env -u …` / empty values; `unit-turso-env-isolation`
+  asserts it), the guard and migration tests use `file:` URLs with a dummy token, and no command was run against them. Whether
+  they are production credentials is unknown; they should be scoped out of development sessions.
+
+### How to confirm the Preview target (no production change)
+In Vercel → Project → Settings → Environment Variables, look at `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`,
+`BLOB_READ_WRITE_TOKEN`, `SESSION_SECRET`: for each, which environments (Production / Preview / Development) is it ticked for,
+and is there a *separate* Preview-only value? If one value is ticked for both Production and Preview, Preview = production.
+
+### Creating an isolated Preview (needs the owner's Turso + Vercel accounts)
+1. **Build a local, data-free database file** (nothing production is involved): `DATABASE_URL=file:/tmp/preview.db npx prisma migrate deploy`
+   in `apps/server`, then seed only the admin/sample rows if wanted (`npm run seed -w apps/server` with the same `DATABASE_URL`).
+2. **Create a separate Turso database from that file**, e.g. `turso db create scl-preview --from-file /tmp/preview.db`, and a token
+   for it (`turso db tokens create scl-preview`). (`prisma migrate deploy` cannot talk to Turso's HTTP endpoint, which is why the file
+   route is used; production's own migration is a separate, explicitly approved one-off.)
+3. **In Vercel, add Preview-scoped values only** (leave every Production value untouched): `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN`
+   (the Preview DB), a *different* `SESSION_SECRET`, `TRUST_PROXY=1`, a Blob store attached to the Preview environment
+   (`BLOB_READ_WRITE_TOKEN`), and — for the sign-in test — a test Google OAuth client whose authorized redirect URI is the
+   Preview alias `https://<project>-git-feat-phase-27-lab-website-integrations-<team>.vercel.app/api/auth/google/callback`
+   (use the stable branch alias, not the per-deployment URL) with `GOOGLE_CLIENT_ID/SECRET/OAUTH_REDIRECT_URI`.
+   Optional: `ORCID_CLIENT_ID/SECRET`, `PUBLICATION_SYNC_CONTACT_EMAIL`, `PORTAL_URL`.
+4. **Prove the target**: after the Preview deploys, `GET /api/health` is 200, `GET /api/team` returns the Preview DB's (seed) data and
+   *not* the lab's real roster, and an admin `GET /api/files/storage-status?probe=1` reports the Blob backend. Only then is the Preview
+   isolated.
+5. **Then verify, in this order** (record results, never paste cookies/tokens): password login → designated Google admin sign-in
+   (the designated address is a hard-coded policy, so this needs that real Google account; a second, non-designated test account
+   should be *denied*) → "Connect Google" from a signed-in member → profile photo upload and removal → gallery upload (expect a
+   clear 503 code if Blob is misconfigured) → add ORCID iDs to two *test* profiles → "Check ORCID now" → review/approve one item →
+   confirm it is public and a re-run does not duplicate it → `/alumni`, `/copyright`, footer portal link.
+
+### What remains unverified until then
+Real Google OAuth (consent screen, redirect URI registration, real ID-token claims), a live Vercel Blob write/read (including the
+`access: "private"` behaviour), live ORCID/Crossref responses and rate limits, the libSQL adapter against a **remote** Turso
+(only its local-file mode was exercised), and the behaviour of any Vercel Preview.
