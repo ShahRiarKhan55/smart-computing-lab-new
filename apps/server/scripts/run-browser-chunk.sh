@@ -16,7 +16,14 @@ TREE=$(cd "$1" && pwd); LABEL=$2; STEPS=$3; API_PORT=$4; WEB_PORT=$5; CDP_PORT=$
 OUT=${OUT_DIR:-$(mktemp -d)}; mkdir -p "$OUT/shots"
 cp "$DB_SRC" "$OUT/c.db"
 PIDS=()
-cleanup() { for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill -9 "$p" 2>/dev/null; done; pkill -9 -f "remote-debugging-port=$CDP_PORT" 2>/dev/null; true; }
+# Each server runs in its OWN process group (setsid) and the whole group is killed: `tsx` starts the real server as a child process,
+# and killing only the parent would leave that child holding the port, so the NEXT chunk would silently talk to a stale server.
+cleanup() {
+  for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill -9 -- "-$p" 2>/dev/null; done
+  pkill -9 -f "remote-debugging-port=$CDP_PORT" 2>/dev/null
+  for i in $(seq 1 20); do (ss -ltn 2>/dev/null | grep -qE ":($API_PORT|$WEB_PORT) ") || break; sleep 0.5; done
+  true
+}
 trap cleanup EXIT
 
 # A Vite config that points the dev proxy at THIS run's API (the checked-in config hard-codes :4001). It lives outside the tree.
@@ -25,12 +32,15 @@ import react from "$TREE/node_modules/@vitejs/plugin-react/dist/index.js";
 export default { root: "$TREE/apps/web", plugins: [react()], server: { port: $WEB_PORT, strictPort: true, proxy: { "/api": { target: "http://localhost:$API_PORT", changeOrigin: true } } } };
 CFG
 
+for port in $API_PORT $WEB_PORT; do
+  if ss -ltn 2>/dev/null | grep -qE ":$port "; then echo "port $port is already in use - refusing to run against a stale server" >&2; exit 3; fi
+done
 cd "$TREE/apps/server"
-env -u TURSO_DATABASE_URL -u TURSO_AUTH_TOKEN BLOB_READ_WRITE_TOKEN= VERCEL= STORAGE_DIR="$OUT/files" DATABASE_URL="file:$OUT/c.db" \
+setsid env -u TURSO_DATABASE_URL -u TURSO_AUTH_TOKEN BLOB_READ_WRITE_TOKEN= VERCEL= STORAGE_DIR="$OUT/files" DATABASE_URL="file:$OUT/c.db" \
   PORT=$API_PORT TRUST_PROXY=0 NODE_ENV=test SESSION_SECRET="browser-chunk-secret-$LABEL-0000000000" \
   node ../../node_modules/tsx/dist/cli.mjs src/index.ts > "$OUT/api.log" 2>&1 &
 PIDS+=($!)
-(cd "$TREE/apps/web" && exec node "$TREE/node_modules/vite/bin/vite.js" --config "$OUT/vite.config.mjs" > "$OUT/web.log" 2>&1) &
+(cd "$TREE/apps/web" && exec setsid node "$TREE/node_modules/vite/bin/vite.js" --config "$OUT/vite.config.mjs" > "$OUT/web.log" 2>&1) &
 PIDS+=($!)
 for i in $(seq 1 80); do grep -q "listening on" "$OUT/api.log" 2>/dev/null && curl -s -o /dev/null "http://localhost:$WEB_PORT/" && break; sleep 0.5; done
 
