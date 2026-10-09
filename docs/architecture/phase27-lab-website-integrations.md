@@ -305,3 +305,43 @@ Chunks used: core (`^(guest|member|lead|manager|admin|promoted|loading|mobile|pr
 `^i18n `, `^events`, `^admin `, `^research`, `^publications`, `^discovery`, `^workspace `, `^knowledge `, `^resources `. Never rebuild or
 edit a worktree while a chunk runs in it. Result for this PR: identical totals and identical failing check names on both trees
 (see the PR description for the numbers); the failures that remain are failures of unmodified master.
+
+## 14. Unpublished people: exact behaviour today, and a proposal (NOT implemented)
+
+`apps/server/scripts/unpublished-exposure-regression.mjs` (`npm run test:unpublished-exposure -w apps/server`) creates a hidden alumnus
+and a hidden member with an account, links both everywhere a person can be linked, uploads photos, and asks each endpoint who can
+still see them. It prints the table below and pins it, so any change is deliberate.
+
+| Surface | guest | other member | manager | the person (if they have an account) |
+|---|---|---|---|---|
+| `GET /team`, `/team/:id`, `/member/:id` (profile page) | hidden (404) | hidden | visible | sees **own** profile only |
+| Researcher search results | hidden | hidden | visible | not found |
+| Uploaded profile photo (`/api/files/<id>`) | 404 | 404 | visible | own only |
+| `/sitemap.xml` | not listed | not listed | not listed | not listed |
+| Publication detail — **linked authors** | **name + id shown** | shown | shown | shown |
+| Project members, group members, research-area researchers | **shown** | shown | shown | shown |
+| Free-text `authors` line, any text field | always shown (plain text) | | | |
+| News authors | not serialised publicly | | | |
+| Not probed: event organizer, knowledge/resource owner attributions (shown as "by <name>" on content the person created) | | | | |
+
+So "unpublished" currently means *no profile page, no directory/alumni/search listing, no sitemap entry, no photo* — **not** "the
+person's name disappears from the site". The link targets (`/team/<id>`) 404 for visitors.
+
+### Recommended privacy-preserving default (needs the owner's approval)
+Non-managers (and visitors) should not be shown **linked** entries of unpublished people; managers and the person themself still
+see them; free text stays the editors' responsibility (state this plainly in the UI: "unpublished is not erasure").
+
+Smallest safe design:
+1. **Read filter, one helper**: `hiddenPeopleWhere(viewer)` → `{ teamMember: { OR: [{ isPublished: true }, { userId: viewer?.id }] } }` for non-managers, `{}` for
+   managers; applied in the include/select of project members, group members, publication authors (detail + `?researcher=` filter),
+   research-area researchers, and (decision) event organizer / knowledge & resource attributions.
+2. **Write-preservation, the part that makes it safe**: every endpoint that replaces a whole link set
+   (`PUT /projects/:id/members`, `/groups/:id/members`, `/publications/:id/authors`, `/member/:id/areas|publications|news`, `/news/:id/authors`)
+   must compute `hidden = current links whose person the *actor* may not see` and write `requested ∪ hidden`, so an editor who
+   cannot see a hidden person can never delete that link by saving the list they were shown. Managers (who see everyone) are unaffected.
+3. **Tests first** (extend `unpublished-exposure-regression.mjs`): guests/members see neither person on the linked surfaces;
+   a project *lead* saving the visible member list keeps the hidden member; a manager can remove the hidden link; the person sees
+   their own; counts/pagination do not reveal a hidden link; the `?researcher=<hiddenId>` filter returns nothing for guests.
+4. Estimated change: ~6 query sites + 6 write sites + the helper + tests; no schema change.
+
+Until that decision is made, the UI hint and the admin guide state the current behaviour (see `team.publishedHint`).

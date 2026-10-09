@@ -35,6 +35,7 @@
     "test:site-integrations": "node scripts/site-integrations-regression.mjs",
     "test:schema-compat": "node scripts/schema-compat-regression.mjs",
     "test:phase27-security": "node scripts/phase27-security-regression.mjs",
+    "test:unpublished-exposure": "node scripts/unpublished-exposure-regression.mjs",
     "test:events": "node scripts/events-regression.mjs",
     "test:admin": "node scripts/admin-regression.mjs",
     "test:research": "node scripts/research-regression.mjs",
