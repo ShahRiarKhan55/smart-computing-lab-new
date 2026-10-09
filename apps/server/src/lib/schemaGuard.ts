@@ -28,6 +28,9 @@ export const PHASE27_PROBES = [
   'SELECT "PublicationCandidate"."id", "PublicationCandidate"."status" FROM "PublicationCandidate" LIMIT 1',
   'SELECT "PublicationCandidateResearcher"."candidateId", "PublicationCandidateResearcher"."teamMemberId" FROM "PublicationCandidateResearcher" LIMIT 1',
   'SELECT "SyncState"."name" FROM "SyncState" LIMIT 1',
+  // Migration 20261009100000_publication_source_provenance (spreadsheet import provenance; additive).
+  'SELECT "Publication"."sourceOrder" FROM "Publication" LIMIT 1',
+  'SELECT "PublicationSourceRecord"."id", "PublicationSourceRecord"."sourceKey" FROM "PublicationSourceRecord" LIMIT 1',
 ] as const;
 
 /**
@@ -75,7 +78,7 @@ export function requireCurrentSchema(db: Pick<PrismaClient, "$queryRawUnsafe">, 
     if (status === "ok") okForever = true;
     if (status === "behind") {
       behindUntil = Date.now() + BEHIND_RECHECK_MS;
-      console.error("[schema] DB_SCHEMA_BEHIND: the database lacks the Phase 27 migration (20261008090552_phase27_integrations); it must be applied by an authorized operator.");
+      console.error("[schema] DB_SCHEMA_BEHIND: the database lacks a Phase 27 migration (20261008090552_phase27_integrations or 20261009100000_publication_source_provenance); it must be applied by an authorized operator.");
       res.status(503).json(BEHIND_BODY);
       return;
     }

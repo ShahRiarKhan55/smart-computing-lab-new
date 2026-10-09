@@ -267,15 +267,47 @@ model Publication {
   extraUrl   String   @default("")
   extraLabel String   @default("")
   visibility String   @default("PUBLIC") // PUBLIC | LAB_ONLY
+  // Spreadsheet import: position of this publication in the source list it was imported from (1 = first). NULL for every
+  // publication that was not imported that way. Never used by the default public ordering (year desc); it only lets the
+  // original list order be reproduced exactly.
+  sourceOrder Int?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  authorLinks  PublicationAuthor[]
-  projectLinks ProjectPublication[]
-  labResources LabResource[]
-  candidates   PublicationCandidate[]
+  authorLinks   PublicationAuthor[]
+  projectLinks  ProjectPublication[]
+  labResources  LabResource[]
+  candidates    PublicationCandidate[]
+  sourceRecords PublicationSourceRecord[]
 
   @@index([year])
+}
+
+/// One row-block of an imported spreadsheet and what became of it. Keeps EVERY source value (verbatim, with the original column
+/// labels) so nothing the Publication table cannot hold is lost, and gives the import a durable idempotency key: re-running the
+/// same file can never create a second record for the same source block. A record without a usable year is kept here
+/// (`publicationId` NULL, disposition STAGED_NO_YEAR) until an editor supplies one. Created by the import tool only.
+model PublicationSourceRecord {
+  id             String   @id @default(cuid())
+  sourceKey      String   @unique // "<sha256-prefix of the file>:<sheet>:<first row>" — the idempotency key
+  batchId        String // one import run, e.g. "pubxlsx-<sha8>"
+  sourceFile     String // file name only, never a path
+  sourceSha256   String
+  sourceSheet    String
+  sourceRowStart Int
+  sourceRowEnd   Int
+  sourceSeq      Int // 1-based position in the source list
+  disposition    String // IMPORTED | STAGED_NO_YEAR | STAGED_INVALID | POSSIBLE_DUPLICATE
+  publicationId  String? // the Publication created from it, or the existing one it may duplicate (never overwritten)
+  note           String   @default("")
+  rawFields      String // JSON: [{ column, label, value }] exactly as read from the file
+  normalized     String // JSON: the values/warnings the importer derived
+  createdAt      DateTime @default(now())
+
+  publication Publication? @relation(fields: [publicationId], references: [id], onDelete: SetNull)
+
+  @@index([batchId, sourceSeq])
+  @@index([publicationId])
 }
 
 model NewsItem {

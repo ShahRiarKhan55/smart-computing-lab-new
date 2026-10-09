@@ -399,3 +399,21 @@ sends only the guard's static `SELECT … LIMIT 1` probes, and prints redacted e
 | **ORCID / Crossref** | `publication-import-regression` (71), `unit-publication-import` (34) with a mock | put a public ORCID iD on two *test* profiles; "Check ORCID now" (note: ORCID's docs ask for a `/read-public` token — set `ORCID_CLIENT_ID/SECRET` and confirm both token and token-less behaviour); a malformed/unknown iD reports a per-researcher failure; "Fill from DOI" with a real DOI; an unknown DOI (404 message); rate-limit message after 30 lookups; approve one item → public; re-run → no duplicate; reject → not proposed again |
 | **Google Sites portal link** | `site-integrations-regression` (26): valid https shown, http/`javascript:`/credentialed URLs ignored | set `PORTAL_URL` to the real Site, confirm the footer link opens it in a new tab with `noopener noreferrer`; confirm the Site's link back to the app opens `/`, `/team`, `/alumni`, `/publications` directly (SPA rewrites) |
 | **Facebook updates** | `site-integrations-regression`: `/api/updates` reports `facebook: not_configured`, contributes nothing, no Facebook URL anywhere | confirm the home page shows only "Posted by the lab" items and an honest empty state when there is no news; nothing to test live until an official Page and Meta app review exist |
+
+
+## 17. Publication import from a spreadsheet: provenance schema, limits and the disposable-database run
+
+**Schema (migration `20261009100000_publication_source_provenance`, strictly additive: one nullable `ADD COLUMN`, one `CREATE TABLE`, three indexes; no
+rebuild/DROP/UPDATE — asserted by `schema-compat-regression`).** `Publication.sourceOrder Int?` (position in the source list; NULL for everything else) and
+`PublicationSourceRecord` (one row per source block: sheet, first/last row, sequence, a **unique** `sourceKey = <file hash>:<sheet>:<first row>`, disposition,
+link to the publication, verbatim cells with their original labels in `rawFields`, derived values and warnings in `normalized`). The schema guard probes both,
+so a database without the migration answers the clean `DB_SCHEMA_BEHIND` 503.
+**`year` is NOT made nullable.** `year Int?` makes Prisma rebuild the `Publication` table (`RedefineTables`: create/copy/DROP/rename) — four tables point at it, and
+a Turso HTTP migration cannot rely on `PRAGMA foreign_keys` — and ~57 `.year` uses across server, web and shared (sorting, year filter, grouping, validation, sitemap/
+search/ORCID mapping) would all need changing. That is the wider behaviour change and risky migration this work was told to stop at. Records without a year are
+therefore **kept, not skipped and not given an invented year**: `STAGED_NO_YEAR` rows in the provenance table (visible to nobody publicly) until an editor supplies a year.
+**Importer:** `scripts/publication-source-import.ts` (generic; the real data lives in a manifest outside the repo). Dry run by default; refuses anything that is
+not a plain local `.db` file outside the repository carrying the `_disposable_import_target` marker, refuses when `TURSO_*` is set, never migrates, never updates or
+deletes an existing publication (a duplicate is only recorded next to the existing row), one transaction, idempotent by `sourceKey`. Tests:
+`unit-publication-source-import.test.ts` (34). **Public ordering is unchanged** (year desc, createdAt desc, id asc); imported rows get `createdAt = import time − position`
+so inside a year they show in source order; `sourceOrder` reproduces the exact source order.
