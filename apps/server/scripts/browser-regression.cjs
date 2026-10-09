@@ -28,7 +28,7 @@ const WEB = process.argv[2] || "http://localhost:5180";
 const API = process.argv[3] || "http://localhost:4001";
 const SHOTS = process.argv[4] || path.join(os.tmpdir(), "shots");
 fs.mkdirSync(SHOTS, { recursive: true });
-const PORT = 9334;
+const PORT = Number(process.env.CDP_PORT) || 9334; // DevTools port; override to run several harnesses side by side
 // BROWSER_PATH (Phase 26): this script drives a real browser directly over CDP, spawned as a raw
 // child process — it always hard-coded a Windows-only Edge path, so it could never run anywhere
 // else (this container, any Linux CI runner, ...) without editing the script by hand. The Windows
