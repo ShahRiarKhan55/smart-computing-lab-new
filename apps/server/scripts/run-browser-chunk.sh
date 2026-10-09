@@ -21,7 +21,7 @@ trap cleanup EXIT
 
 # A Vite config that points the dev proxy at THIS run's API (the checked-in config hard-codes :4001). It lives outside the tree.
 cat > "$OUT/vite.config.mjs" <<CFG
-import react from "$TREE/node_modules/@vitejs/plugin-react/dist/index.mjs";
+import react from "$TREE/node_modules/@vitejs/plugin-react/dist/index.js";
 export default { root: "$TREE/apps/web", plugins: [react()], server: { port: $WEB_PORT, strictPort: true, proxy: { "/api": { target: "http://localhost:$API_PORT", changeOrigin: true } } } };
 CFG
 
