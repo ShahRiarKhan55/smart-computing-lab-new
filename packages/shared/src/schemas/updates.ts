@@ -29,4 +29,6 @@ export interface UpdatesResponse {
 export interface SiteConfig {
   /** The lab's public Google Sites portal, or null when none is configured. Never invented. */
   portalUrl: string | null;
+  /** The lab's official Facebook Page (a link only), or null when none is configured or the value is not an acceptable Page URL. */
+  facebookPageUrl: string | null;
 }

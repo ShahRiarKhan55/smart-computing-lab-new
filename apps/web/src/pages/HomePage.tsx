@@ -6,6 +6,7 @@ import { useSeo } from "../hooks/useSeo";
 import { HeroCircuit } from "../components/HeroCircuit";
 import { Icon } from "../components/Icon";
 import { SectionHeader } from "../components/SectionHeader";
+import { FacebookSection } from "../components/FacebookSection";
 import { StatCard } from "../components/StatCard";
 import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
@@ -312,6 +313,9 @@ export function HomePage() {
           </div>
         </section>
       )}
+
+      {/* ===================== FACEBOOK PAGE LINK (item A; link only, no posts are retrieved) ===================== */}
+      <FacebookSection />
 
       {/* ===================== CONTACT CTA ===================== */}
       <section className="band band--flush" aria-labelledby="home-cta">

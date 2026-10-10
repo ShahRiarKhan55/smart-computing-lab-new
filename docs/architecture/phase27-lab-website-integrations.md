@@ -96,9 +96,37 @@ not verified.
   source. One failing provider never hides the others.
 - Today's only active source is `manual` (the lab's own news items, entered by hand). The home page shows each item
   with "Posted by the lab" and an honest empty state ("No news yet.") when there are none.
-- **Facebook: not connected, nothing fabricated.** There is no official Page URL or API credential in this project, so
-  there is no link, no embed, no scraping, no sample posts. `facebookProvider` is a stub that is never configured and
-  is reported as `not_configured`.
+- **Facebook: a Page LINK only; recent posts are NOT retrieved, nothing is fabricated.** The home page has a "Follow us on
+  Facebook" section (`apps/web/src/components/FacebookSection.tsx`, placed above the contact band). It reads the optional,
+  non-secret `FACEBOOK_PAGE_URL` setting through `GET /api/site-config` (`facebookPageUrl`).
+  - *Accepted format (exact policy):* an `https://` URL on exactly `facebook.com`, `www.facebook.com` or `m.facebook.com`, pointing
+    at a Page path, e.g. `https://www.facebook.com/<page-name>` or the id form `https://www.facebook.com/profile.php?id=<1-20 digits>`.
+    - *Host and form:* anything else is rejected (the setting is then treated as unset): `http`, any other host (look-alikes such as
+      `facebook.com.example.test`, sub-domains, `web.facebook.com`, `fb.com`), credentials, an explicit port, whitespace, control
+      characters or backslashes anywhere in the value, more than 2048 characters, and the site root. A `#fragment` is dropped.
+    - *Path:* every segment is percent-**decoded** before it is judged. A segment with malformed encoding, a decoded control
+      character, whitespace, `/`, `\` or `%` (encoded separators and double encoding), or `.` / `..` rejects the whole value; the
+      first decoded segment must not be a login / share / redirect endpoint (`login`, `login.php`, `dialog`, `sharer`, `share`, `l.php`,
+      `plugins`, `tr`, …, compared case-insensitively), so `/%6Cogin.php` is refused like `/login.php`.
+    - *Query:* only `profile.php?id=<digits>` (exactly one `id`) and the copied-link tracking parameters `mibextid`, `ref` and `fbclid`
+      are tolerated, and the tracking parameters are **removed** from the stored link (e.g. `…/PageName?mibextid=ZbWKwL` becomes
+      `…/PageName`). Any other parameter name (case-sensitive, including empty or near-miss names), `id` on any other path, or
+      `profile.php` without a valid `id` rejects the value. Arbitrary Facebook URLs are not accepted to make a copied link work.
+    One shared validator (`parseFacebookPageUrl`, `packages/shared/src/facebookPage.ts`) is used by the server and re-checked by the
+    browser before a link is rendered.
+  - *Configured:* a clear section with an accessible link that opens in a new tab (`target="_blank"`, `rel="noopener noreferrer"`,
+    and a screen-reader note that it opens a new tab).
+  - *Not configured or invalid:* a discreet notice, "Facebook updates are not connected yet", with no link. Nothing renders until
+    the site configuration has loaded (`useSiteConfigState().ready`), so a configured Page never flashes the notice; a failed,
+    HTTP-error or malformed configuration response falls back to the notice, and the home page never depends on Facebook.
+  - *Startup warning:* when `FACEBOOK_PAGE_URL` is set but not acceptable, the API logs one line at process start
+    (`[site-config] FACEBOOK_PAGE_URL is set but is not an acceptable official Facebook Page URL …`) — never the value itself, never
+    per request, and the server still starts. An unset or blank value is the normal "not connected yet" case and logs nothing.
+  - *Not implemented:* retrieving or showing posts, Page details or statistics. No token, Meta app secret, scraping or Graph API
+    call exists in the code. `facebookProvider` (the `/api/updates` source) remains a stub reported as `not_configured`; the
+    "Posted by the lab" news is unchanged. When post retrieval is added, the post list goes inside the same home-page section.
+  - *Setting:* `FACEBOOK_PAGE_URL` in the server environment (placeholder in `apps/server/.env.example`); set it per environment
+    in Vercel only when the owner decides to — nothing in this change touches deployment settings.
   *What a real integration would need (verified against Meta's Pages API documentation, Oct 2026 — re-check before
   building):* an official Facebook Page the lab controls; a Meta developer app; a Page access token obtained by a person
   with the CREATE_CONTENT/MANAGE/MODERATE tasks on that Page via Facebook Login with `pages_read_engagement` (advanced
@@ -238,7 +266,7 @@ legal opinion; the lab or its university should review it.
 - Attach a (private-capable) Vercel Blob store to the project, or confirm one is attached; use the storage diagnostic.
 - Provide the Google Site URL (`PORTAL_URL`), build the Site, and link it to the application.
 - Researchers add their ORCID iDs / profile links; optionally register ORCID API credentials.
-- Provide an official Facebook Page (and approve the Meta app work) before any Facebook integration.
+- Supply the official Facebook Page URL (`FACEBOOK_PAGE_URL`) to turn on the home-page link; an official Page and approved Meta app work are still required before any post retrieval.
 - Separately approve and perform the production migration, in the right order relative to the deploy.
 
 ## 12. Isolated Preview and real-integration verification (runbook — NOT performed)
@@ -446,5 +474,5 @@ design today; the remote run is what shows which verdict real Turso produces.
 | **Profile photo + storage diagnostics** | `profiles-regression` (78), `gallery-upload-regression` (38), `phase27-security` | admin `GET /api/files/storage-status?probe=1` reports `blob`, configured, writable; upload a JPEG/PNG/WEBP as owner → visible on the profile; replace → old blob gone; oversize/invalid type → localized message; delete; gallery upload → 201 or the structured 503 code |
 | **ORCID / Crossref** | `publication-import-regression` (71), `unit-publication-import` (34) with a mock | put a public ORCID iD on two *test* profiles; "Check ORCID now" (note: ORCID's docs ask for a `/read-public` token — set `ORCID_CLIENT_ID/SECRET` and confirm both token and token-less behaviour); a malformed/unknown iD reports a per-researcher failure; "Fill from DOI" with a real DOI; an unknown DOI (404 message); rate-limit message after 30 lookups; approve one item → public; re-run → no duplicate; reject → not proposed again |
 | **Google Sites portal link** | `site-integrations-regression` (26): valid https shown, http/`javascript:`/credentialed URLs ignored | set `PORTAL_URL` to the real Site, confirm the footer link opens it in a new tab with `noopener noreferrer`; confirm the Site's link back to the app opens `/`, `/team`, `/alumni`, `/publications` directly (SPA rewrites) |
-| **Facebook updates** | `site-integrations-regression`: `/api/updates` reports `facebook: not_configured`, contributes nothing, no Facebook URL anywhere | confirm the home page shows only "Posted by the lab" items and an honest empty state when there is no news; nothing to test live until an official Page and Meta app review exist |
+| **Facebook Page link** | `unit-site-config` (128: URL policy incl. encoded-path, control-character, tracking-parameter and look-alike cases, plus the startup warning) and `unit-facebook-section` (42: rendering of the configured / unavailable / still-loading states) in `npm run test:unit`; `site-integrations-regression`: `/api/site-config` returns the validated link or null, one startup warning for an invalid value and none otherwise, `/api/updates` still reports `facebook: not_configured`; **`npm run test:facebook-section-browser -w apps/server`** (53 checks, real browser against a disposable stack, run by hand): the real `useSiteConfigState` hook while the request is pending (no flash of the notice), valid / null / invalid / HTTP 500 / malformed / failed answers, Japanese, 390 px width | set `FACEBOOK_PAGE_URL` to the real Page, confirm the home page shows "Follow us on Facebook" and the link opens the Page in a new tab; unset it and confirm the "not connected yet" notice. **Recent posts are not implemented**, so there is nothing to test live until an official Page and an authorized Meta integration exist |
 

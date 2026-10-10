@@ -129,7 +129,7 @@ async function main() {
     const pub = await guest.get("/team");
     t("public /team never exposes isPublished, user ids or emails", !/isPublished|userId|@example\.test/i.test(pub.text));
     t("public google config reveals nothing but a boolean", (await guest.get("/auth/google/config")).text === '{"enabled":false}');
-    t("public site-config reveals only portalUrl", Object.keys((await guest.get("/site-config")).json).join() === "portalUrl");
+    t("public site-config reveals only the two public links (portalUrl, facebookPageUrl)", Object.keys((await guest.get("/site-config")).json).join() === "portalUrl,facebookPageUrl");
 
     // ---- secrets: server log + built web bundle ------------------------------------------------------------------------------------
     t("server log never contains configured secrets", !s.logs().includes(SECRET));

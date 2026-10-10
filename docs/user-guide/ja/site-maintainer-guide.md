@@ -122,11 +122,11 @@ Tursoはホスティングプラットフォーム側でポイントインタイ
 詳細：`docs/architecture/phase27-lab-website-integrations.md`。
 
 - **デプロイ順序：** フェーズ27のマイグレーション（`20261008090552_phase27_integrations`、追加のみ）は、新しいコードがトラフィックを処理する **前** にTursoへ適用する必要があります。適用しないと `/api/team` と `/api/profile` が「no such column」で失敗します。Previewデプロイは本番データベースを共有するため、このブランチのPreviewも影響を受けます。明示的な承認なしに本番へ `migrate`/`seed` を実行しないでください。
-- **環境変数（プレースホルダーは `apps/server/.env.example`）：** `PORTAL_URL`（Google SitesのURL、httpsのみ）、`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GOOGLE_OAUTH_REDIRECT_URI`（3つすべて、または未設定）、`ORCID_CLIENT_ID`・`ORCID_CLIENT_SECRET`（任意・推奨）、`PUBLICATION_SYNC_CONTACT_EMAIL`・`PUBLICATION_SYNC_DELAY_MS`・`PUBLICATION_SYNC_BUDGET_MS`、`MAX_PROFILE_PHOTO_BYTES`。
+- **環境変数（プレースホルダーは `apps/server/.env.example`）：** `PORTAL_URL`（Google SitesのURL、httpsのみ）、`FACEBOOK_PAGE_URL`（公式FacebookページのURL、httpsのみ、任意）、`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GOOGLE_OAUTH_REDIRECT_URI`（3つすべて、または未設定）、`ORCID_CLIENT_ID`・`ORCID_CLIENT_SECRET`（任意・推奨）、`PUBLICATION_SYNC_CONTACT_EMAIL`・`PUBLICATION_SYNC_DELAY_MS`・`PUBLICATION_SYNC_BUDGET_MS`、`MAX_PROFILE_PHOTO_BYTES`。
 - **Google OAuthの設定：** Google Cloud Consoleで「ウェブアプリケーション」のOAuthクライアントを作成し、環境ごとに `/api/auth/google/callback` で終わるリダイレクトURI（本番はhttps）を登録します。Googleで管理者セッションを取得できるのは、確認済みのアカウント `susmartcomputinglab@gmail.com` のみで、メールアドレスだけで自動的にリンクされることはありません。
 - **アップロードの問題：** 管理者として `/api/files/storage-status?probe=1` を開きます。`STORAGE_NOT_CONFIGURED` はプロジェクトにBlobストア／トークンが接続されていないこと、`STORAGE_UNAVAILABLE` はバックエンドが書き込みを拒否したこと（Blobストアとアクセスモードを確認）を意味します。Vercelではアップロードは4 MBまでです。
 - **埋め込み不可：** Cookieが `SameSite=Lax` のため、このアプリはGoogle Sitesの埋め込みでは動作しません。サイトからリンクしてください。
-- **Facebook：** 未連携です（このプロジェクトには公式ページがありません）。必要な作業はアーキテクチャ文書を参照してください。
+- **Facebook：** 研究室の公式ページ（facebook.com / www.facebook.com / m.facebook.com 上のhttps URL、例：`https://www.facebook.com/<ページ名>`）を `FACEBOOK_PAGE_URL` に設定すると、ホームページに「Facebook で最新情報をチェック」のリンクが表示されます。未設定の場合（および値が受け付けられない場合）は「Facebook の更新はまだ連携されていません」と表示され、後者ではサーバーが起動時に警告を1行出力します。コピーしたリンクの追跡パラメータ（`mibextid`・`ref`・`fbclid`）は自動的に取り除かれ、それ以外のクエリ文字列は受け付けられません。対応しているのはリンクのみで、最近の投稿の取得・表示は行いません（Facebookのトークンやアプリも使用しません）。投稿の表示には、公式ページと承認されたMeta連携が必要です。詳細はアーキテクチャ文書を参照してください。
 
 ## 既知の制限事項
 

@@ -40,6 +40,7 @@ async function startServer(extraEnv = {}) {
     BLOB_READ_WRITE_TOKEN: "",
     VERCEL: "",
     PORTAL_URL: "",
+    FACEBOOK_PAGE_URL: "",
     STORAGE_DIR: path.join(work, "files"),
     DATABASE_URL: `file:${path.join(work, "c.db")}`,
     PORT: String(port),
@@ -55,7 +56,7 @@ async function startServer(extraEnv = {}) {
   for (let i = 0; i < 80 && !/listening on/.test(out); i++) await new Promise((r) => setTimeout(r, 250));
   if (!/listening on/.test(out)) throw new Error(`server did not start:\n${out}`);
   const prisma = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
-  return { base: `http://localhost:${port}`, prisma, async stop() { child.kill(); await prisma.$disconnect(); rmSync(work, { recursive: true, force: true }); } };
+  return { base: `http://localhost:${port}`, prisma, logs: () => out, async stop() { child.kill(); await prisma.$disconnect(); rmSync(work, { recursive: true, force: true }); } };
 }
 
 function client(base, cookie = null) {
@@ -90,7 +91,43 @@ async function main() {
     try {
       const r = await client(s.base).get("/site-config");
       t(`portal: ${label} -> ${want === null ? "no link" : "that link"}`, r.status === 200 && r.json.portalUrl === want, JSON.stringify(r.json));
-      t(`portal: ${label} -> response is exactly {portalUrl} (no other settings or secrets leak)`, Object.keys(r.json).join() === "portalUrl");
+      t(`portal: ${label} -> response is exactly {portalUrl, facebookPageUrl} (no other settings or secrets leak)`, Object.keys(r.json).join() === "portalUrl,facebookPageUrl");
+      t(`portal: ${label} -> the Facebook setting is independent (unset here)`, r.json.facebookPageUrl === null);
+    } finally {
+      await s.stop();
+    }
+  }
+
+  // ---- official Facebook Page link (item A): configured / unset / unsafe values --------------------------------
+  for (const [label, value, want] of [
+    ["unset", "", null],
+    ["a valid https Page URL", "https://www.facebook.com/SmartComputingLab", "https://www.facebook.com/SmartComputingLab"],
+    ["the bare host", "https://facebook.com/SmartComputingLab", "https://facebook.com/SmartComputingLab"],
+    ["a copied link with tracking parameters", "https://www.facebook.com/SmartComputingLab?mibextid=ZbWKwL&ref=share", "https://www.facebook.com/SmartComputingLab"],
+    ["the id-based Page form", "https://www.facebook.com/profile.php?id=100012345678901", "https://www.facebook.com/profile.php?id=100012345678901"],
+    ["an unknown query parameter", "https://www.facebook.com/SmartComputingLab?next=https%3A%2F%2Fevil.test", null],
+    ["an encoded login endpoint", "https://www.facebook.com/%6Cogin.php", null],
+    ["an encoded NUL in the path", "https://www.facebook.com/Smart%00Lab", null],
+    ["plain http", "http://www.facebook.com/SmartComputingLab", null],
+    ["a javascript: URL", "javascript:alert(1)", null],
+    ["an unrelated domain", "https://example.com/SmartComputingLab", null],
+    ["a look-alike host", "https://facebook.com.evil.test/SmartComputingLab", null],
+    ["credentials in the URL", "https://www.facebook.com@evil.test/x", null],
+    ["a login/redirect endpoint", "https://www.facebook.com/login.php", null],
+    ["garbage", "not a url", null],
+  ]) {
+    const s = await startServer({ FACEBOOK_PAGE_URL: value, PORTAL_URL: "https://sites.google.com/view/example-lab" });
+    try {
+      const r = await client(s.base).get("/site-config");
+      t(`facebook: ${label} -> ${want === null ? "no link" : "that link"}`, r.status === 200 && r.json.facebookPageUrl === want, JSON.stringify(r.json));
+      t(`facebook: ${label} -> response is exactly {portalUrl, facebookPageUrl}`, Object.keys(r.json).join() === "portalUrl,facebookPageUrl");
+      t(`facebook: ${label} -> the portal link is unaffected`, r.json.portalUrl === "https://sites.google.com/view/example-lab");
+      const warns = (s.logs().match(/\[site-config\] FACEBOOK_PAGE_URL is set but is not an acceptable/g) ?? []).length;
+      const expectWarn = value !== "" && want === null ? 1 : 0;
+      t(`facebook: ${label} -> ${expectWarn ? "exactly one startup warning" : "no startup warning"} (not one per request)`, warns === expectWarn && (await client(s.base).get("/site-config")).status === 200 && (s.logs().match(/\[site-config\]/g) ?? []).length === expectWarn, `warnings=${warns}`);
+      t(`facebook: ${label} -> the log never repeats the supplied value`, value === "" || !s.logs().includes(value.split("?")[0].replace(/^https?:\/\//, "")));
+      const u = await client(s.base).get("/updates?limit=50");
+      t(`facebook: ${label} -> /updates still reports Facebook as not connected (no posts are retrieved)`, u.status === 200 && u.json.sources.some((x) => x.id === "facebook" && x.status === "not_configured") && !/facebook\.com|fb\.com/i.test(JSON.stringify(u.json)));
     } finally {
       await s.stop();
     }

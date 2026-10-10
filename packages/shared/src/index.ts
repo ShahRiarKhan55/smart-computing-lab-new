@@ -32,5 +32,6 @@ export * from "./schemas/workspace.js";
 export * from "./seo.js";
 export * from "./doi.js";
 export * from "./profileLinks.js";
+export * from "./facebookPage.js";
 export * from "./redirect.js";
 export * from "./phase27Messages.js";
