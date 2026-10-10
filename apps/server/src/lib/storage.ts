@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { del, get, head, put } from "@vercel/blob";
+import { HttpError } from "./validate.js";
 
 /**
  * Low-level blob storage for uploaded files (Phase 13; Vercel deployment adapter). Bytes are
@@ -46,8 +47,52 @@ const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
 
 let rootReady: Promise<void> | null = null;
 async function ensureRoot(): Promise<void> {
-  if (!rootReady) rootReady = mkdir(STORAGE_ROOT, { recursive: true }).then(() => undefined);
+  if (!rootReady) {
+    rootReady = mkdir(STORAGE_ROOT, { recursive: true }).then(
+      () => undefined,
+      (err) => {
+        rootReady = null; // don't cache a failure: a later attempt (e.g. after a fix) must be able to succeed
+        throw err;
+      },
+    );
+  }
   await rootReady;
+}
+
+/**
+ * Thrown when uploads cannot be stored because no usable persistent storage backend is available
+ * (e.g. Vercel Blob is not attached, or the local disk is read-only/full/unwritable). It is an
+ * `HttpError`, so the error middleware (app.ts) answers 503 with this fixed message — never a
+ * filesystem path, stack trace or credential. `reason` is for server-side logs only.
+ */
+export class StorageUnavailableError extends HttpError {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(503, "File storage is not available right now. Please try again later or contact the site administrator.");
+    this.name = "StorageUnavailableError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * True in a Vercel production/preview runtime with no Blob token. Vercel's function filesystem is
+ * read-only (and `/tmp` is ephemeral), so the local-disk backend can never persist an upload there,
+ * regardless of `STORAGE_DIR`. Self-hosted production (no `VERCEL`) and local development are
+ * unaffected. Deliberately NOT a startup check: the rest of the site must run without a token.
+ */
+export function isPersistentStorageUnavailable(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NODE_ENV === "production" && !!env.VERCEL && !env.BLOB_READ_WRITE_TOKEN;
+}
+
+/**
+ * Filesystem error codes that mean "storage is unavailable or misconfigured" (read-only filesystem,
+ * no permission, disk full). Anything else (EEXIST collision, ENOTDIR, bad key, ...) is NOT mapped:
+ * it is an unexpected fault and keeps flowing to the generic 500 handler.
+ */
+const UNAVAILABLE_FS_CODES = new Set(["EROFS", "EACCES", "EPERM", "ENOSPC"]);
+export function asStorageUnavailable(err: unknown): StorageUnavailableError | null {
+  const code = (err as NodeJS.ErrnoException | null | undefined)?.code;
+  return typeof code === "string" && UNAVAILABLE_FS_CODES.has(code) ? new StorageUnavailableError(code) : null;
 }
 
 const KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -87,12 +132,25 @@ export async function saveFile(bytes: Buffer): Promise<string> {
     return key;
   }
 
-  await ensureRoot();
-  const handle = await open(pathFor(key), "wx");
+  if (isPersistentStorageUnavailable()) {
+    console.error("[storage] upload refused: no persistent storage backend (BLOB_READ_WRITE_TOKEN is not set on Vercel)");
+    throw new StorageUnavailableError("no-persistent-backend");
+  }
+
   try {
-    await handle.writeFile(bytes);
-  } finally {
-    await handle.close();
+    await ensureRoot();
+    const handle = await open(pathFor(key), "wx");
+    try {
+      await handle.writeFile(bytes);
+    } finally {
+      await handle.close();
+    }
+  } catch (err) {
+    const unavailable = asStorageUnavailable(err);
+    if (!unavailable) throw err;
+    await unlink(pathFor(key)).catch(() => undefined); // drop a partially written file (e.g. disk full)
+    console.error(`[storage] upload failed: local storage unavailable (${unavailable.reason})`);
+    throw unavailable;
   }
   return key;
 }
