@@ -1,9 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
-import { CAPTION_MAX, DEFAULT_IMAGE_MAX_BYTES, GALLERY_CATEGORIES, IMAGE_MIME_TYPES, type GalleryCategory, type GalleryItem, type Visibility } from "@scl/shared";
+import type { ChangeEvent, FormEvent } from "react";
+import {
+  CAPTION_MAX,
+  GALLERY_BATCH_MAX_FILES,
+  GALLERY_BATCH_MAX_IMAGE_BYTES,
+  GALLERY_CATEGORIES,
+  IMAGE_MIME_TYPES,
+  batchProgress,
+  batchSubmitAction,
+  pendingBatchIds,
+  planGallerySelection,
+  runGalleryBatch,
+  type BatchStatus,
+  type GalleryCategory,
+  type GalleryItem,
+  type SelectionRejectReason,
+  type Visibility,
+} from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
-import { apiUpload, ApiError } from "../lib/api";
+import { apiUpload } from "../lib/api";
+import { apiErrorMessage } from "../i18n/errorMessages";
 import { formatBytes } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
 import { GALLERY_CATEGORY_LABEL_KEY } from "../i18n/labels";
@@ -13,81 +30,185 @@ interface GalleryUploadModalProps {
   projects: { id: string; title: string }[];
   canSetVisibility: boolean;
   onClose: () => void;
-  onUploaded: (item: GalleryItem) => void;
+  /** Called once per batch with every item created in it (not once per file). */
+  onUploaded: (items: GalleryItem[]) => void;
+}
+
+interface BatchEntry {
+  id: string;
+  file: File;
+  status: BatchStatus;
+  error?: string;
 }
 
 const ACCEPT = IMAGE_MIME_TYPES.join(",");
+const REJECT_KEY: Record<SelectionRejectReason, "gallery.rejectedType" | "gallery.rejectedTooLarge" | "gallery.rejectedBatchFull"> = {
+  unsupportedType: "gallery.rejectedType",
+  tooLarge: "gallery.rejectedTooLarge",
+  batchFull: "gallery.rejectedBatchFull",
+};
 
-/** Add-a-photo form: file picker (required), caption, category, optional project, visibility
- *  (managers only). Client-side checks are a courtesy for fast feedback only — the server is the
- *  authority (magic-byte signature check, size limit, allow-list), so a rejected upload always
- *  shows the SERVER's error, never a fabricated success. */
+/** Add-photos form: choose up to GALLERY_BATCH_MAX_FILES images, one shared caption/category/project/
+ *  visibility, uploaded one at a time through the existing single-file `POST /api/gallery`. Client-side
+ *  checks are a courtesy for fast feedback only — the server is the authority (magic-byte signature
+ *  check, size limit, allow-list), so a rejected upload always shows the SERVER's error, never a
+ *  fabricated success. Batch logic (selection rules, sequencing, stop-on-401/503, retry) lives in
+ *  `@scl/shared` (galleryBatch.ts) where it is unit-tested. */
 export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, onUploaded }: GalleryUploadModalProps) {
   const { locale, t } = useLocale();
-  const [file, setFile] = useState<File | null>(null);
+  const [entries, setEntries] = useState<BatchEntry[]>([]);
+  const [rejections, setRejections] = useState<string[]>([]);
   const [caption, setCaption] = useState("");
   const [category, setCategory] = useState<GalleryCategory>("LAB_LIFE");
   const [projectId, setProjectId] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("LAB_ONLY");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const [runIds, setRunIds] = useState<string[]>([]); // the files in the batch currently/last running (for "Uploading n of m")
+  const [finished, setFinished] = useState<{ succeeded: number; failed: number; cancelled: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const entriesRef = useRef<BatchEntry[]>([]);
+  const runningRef = useRef(false); // synchronous guard against a double-click starting two batches
+  const cancelRef = useRef(false);
+  const nextId = useRef(0);
+
+  function updateEntries(next: BatchEntry[]) {
+    entriesRef.current = next;
+    setEntries(next);
+  }
 
   useEffect(() => {
     if (open) {
-      setFile(null);
+      updateEntries([]);
+      setRejections([]);
       setCaption("");
       setCategory("LAB_LIFE");
       setProjectId("");
       setVisibility("LAB_ONLY");
       setError(null);
+      setRunning(false);
+      setCancelRequested(false);
+      setRunIds([]);
+      setFinished(null);
+      runningRef.current = false;
+      cancelRef.current = false;
     }
   }, [open]);
 
-  function onPickFile(f: File | null) {
+  function onPickFiles(e: ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    // Clear the input so choosing the same file again (after removing it, or after a batch) fires onChange.
+    e.target.value = "";
+    if (runningRef.current || picked.length === 0) return;
     setError(null);
-    if (f && !(IMAGE_MIME_TYPES as readonly string[]).includes(f.type)) {
-      setFile(null);
-      setError(t("gallery.unsupportedFileType"));
-      return;
+    setFinished(null);
+    const plan = planGallerySelection(entriesRef.current.length, picked);
+    setRejections(
+      plan.rejected.map(({ file, reason }) =>
+        t(REJECT_KEY[reason], { name: file.name, max: formatBytes(GALLERY_BATCH_MAX_IMAGE_BYTES, locale), maxFiles: GALLERY_BATCH_MAX_FILES }),
+      ),
+    );
+    if (plan.accepted.length > 0) {
+      updateEntries([
+        ...entriesRef.current,
+        ...plan.accepted.map((file): BatchEntry => ({ id: `f${nextId.current++}`, file, status: "waiting" })),
+      ]);
     }
-    if (f && f.size > DEFAULT_IMAGE_MAX_BYTES) {
-      setFile(null);
-      setError(t("gallery.fileTooLargeMax", { max: formatBytes(DEFAULT_IMAGE_MAX_BYTES, locale) }));
-      return;
-    }
-    setFile(f);
+  }
+
+  function removeEntry(id: string) {
+    if (runningRef.current) return;
+    updateEntries(entriesRef.current.filter((x) => x.id !== id));
+    setRejections([]);
+    setFinished(null);
+    setError(null);
+  }
+
+  function setStatus(id: string, status: BatchStatus, message?: string) {
+    updateEntries(entriesRef.current.map((x) => (x.id === id ? { ...x, status, error: status === "failed" ? message : undefined } : x)));
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (runningRef.current) return; // prevent duplicate submissions while a batch is running
     setError(null);
-    if (!file) {
-      setError(t("gallery.chooseImageToUpload"));
+    setRejections([]);
+    setFinished(null);
+    const ids = pendingBatchIds(entriesRef.current);
+    if (ids.length === 0) {
+      if (entriesRef.current.length === 0) setError(t("gallery.chooseImageToUpload"));
       return;
     }
 
-    const form = new FormData();
-    form.set("file", file);
-    form.set("caption", caption);
-    form.set("category", category);
-    if (projectId) form.set("projectId", projectId);
-    if (canSetVisibility) form.set("visibility", visibility);
+    runningRef.current = true;
+    cancelRef.current = false;
+    setRunIds(ids);
+    setRunning(true);
+    setCancelRequested(false);
 
-    setSubmitting(true);
-    try {
-      const item = await apiUpload<GalleryItem>("/gallery", form);
-      onUploaded(item);
+    const created: GalleryItem[] = [];
+    const messages = new Map<string, string>();
+    const outcome = await runGalleryBatch(
+      ids,
+      async (id) => {
+        const entry = entriesRef.current.find((x) => x.id === id);
+        if (!entry) return;
+        const form = new FormData();
+        form.set("file", entry.file);
+        form.set("caption", caption);
+        form.set("category", category);
+        if (projectId) form.set("projectId", projectId);
+        if (canSetVisibility) form.set("visibility", visibility);
+        try {
+          created.push(await apiUpload<GalleryItem>("/gallery", form));
+        } catch (err) {
+          messages.set(id, apiErrorMessage(err, t));
+          throw err;
+        }
+      },
+      (id, status) => setStatus(id, status, messages.get(id)),
+      () => cancelRef.current,
+    );
+
+    runningRef.current = false;
+    setRunning(false);
+    setCancelRequested(false);
+    if (created.length > 0) onUploaded(created); // refresh the Gallery once, even after a partial failure
+
+    if (outcome.failed === 0 && outcome.cancelled === 0) {
       onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("gallery.uploadFailed"));
-    } finally {
-      setSubmitting(false);
+      return;
     }
+    setFinished({ succeeded: outcome.succeeded, failed: outcome.failed, cancelled: outcome.cancelled });
+    if (outcome.stoppedBy === 401) setError(t("gallery.batchStoppedAuth"));
+    else if (outcome.stoppedBy === 503) setError(t("gallery.batchStoppedUnavailable"));
   }
 
+  function cancelRemaining() {
+    cancelRef.current = true;
+    setCancelRequested(true);
+  }
+
+  const pending = pendingBatchIds(entries).length;
+  const action = batchSubmitAction(entries);
+  const progress = batchProgress(entries, runIds);
+  const submitLabel = running
+    ? t("gallery.uploading")
+    : action === "retry"
+      ? t("gallery.retryRemaining", { count: pending })
+      : action === "uploadRemaining"
+        ? t("gallery.uploadRemaining", { count: pending })
+        : entries.length > 1
+          ? t("gallery.uploadCount", { count: entries.length })
+          : t("gallery.upload");
+  // One status line, announced politely: "Uploading image 3 of 8" while running (it changes once per
+  // finished file, not on every internal state update), then the final summary.
+  const liveStatus = running ? t("gallery.progress", { current: progress.current, total: progress.total }) : finished ? t("gallery.batchSummary", finished) : "";
+  const attempted = entries.some((x) => x.status !== "waiting");
+
   return (
-    <Modal open={open} onClose={submitting ? () => {} : onClose} title={t("gallery.addAPhotoTitle")}>
+    <Modal open={open} onClose={running ? () => {} : onClose} title={t("gallery.addPhotosTitle")}>
       {error && (
         <div className="form-error" role="alert">
           {error}
@@ -95,32 +216,57 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       )}
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-group">
-          <label htmlFor="gallery_file">{t("gallery.imageFile")}</label>
+          <label htmlFor="gallery_file">{t("gallery.imageFiles")}</label>
           <input
             id="gallery_file"
             ref={fileInputRef}
             type="file"
             accept={ACCEPT}
+            multiple
+            disabled={running || entries.length >= GALLERY_BATCH_MAX_FILES}
             data-autofocus
-            onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+            onChange={onPickFiles}
           />
-          <p className="form-hint">{t("gallery.fileTypesHint", { max: formatBytes(DEFAULT_IMAGE_MAX_BYTES, locale) })}</p>
-          {file && (
-            <p className="form-hint" aria-live="polite">
-              {t("gallery.selected", { name: file.name, size: formatBytes(file.size, locale) })}
-            </p>
+          <p className="form-hint">{t("gallery.batchHint", { maxFiles: GALLERY_BATCH_MAX_FILES, max: formatBytes(GALLERY_BATCH_MAX_IMAGE_BYTES, locale) })}</p>
+          {rejections.length > 0 && (
+            <ul className="form-hint gallery-batch__rejections" role="alert">
+              {rejections.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
           )}
+          {entries.length > 0 && (
+            <ul className="gallery-batch" aria-label={t("gallery.fileListLabel")}>
+              {entries.map((x) => (
+                <li key={x.id} className={`gallery-batch__item gallery-batch__item--${x.status}`}>
+                  <span className="gallery-batch__name">
+                    {x.file.name} <span className="gallery-batch__size">({formatBytes(x.file.size, locale)})</span>
+                  </span>
+                  <span className="gallery-batch__status">{t(`gallery.status.${x.status}`)}</span>
+                  {x.status !== "succeeded" && !running && (
+                    <button type="button" className="btn btn--secondary" onClick={() => removeEntry(x.id)} aria-label={t("gallery.removeFileAria", { name: x.file.name })}>
+                      ×
+                    </button>
+                  )}
+                  {x.status === "failed" && x.error && <span className="gallery-batch__error">{x.error}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="form-hint" role="status" aria-live="polite">
+            {liveStatus}
+          </p>
         </div>
 
         <div className="form-group">
           <label htmlFor="gallery_caption">{t("gallery.caption")}</label>
-          <input id="gallery_caption" value={caption} maxLength={CAPTION_MAX} onChange={(e) => setCaption(e.target.value)} placeholder={t("gallery.optionalPlaceholder")} />
+          <input id="gallery_caption" value={caption} maxLength={CAPTION_MAX} onChange={(e) => setCaption(e.target.value)} placeholder={t("gallery.optionalPlaceholder")} disabled={running} />
         </div>
 
         <div className="form-row">
           <div className="form-group">
             <label htmlFor="gallery_category">{t("gallery.category")}</label>
-            <select id="gallery_category" value={category} onChange={(e) => setCategory(e.target.value as GalleryCategory)}>
+            <select id="gallery_category" value={category} onChange={(e) => setCategory(e.target.value as GalleryCategory)} disabled={running}>
               {GALLERY_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {t(GALLERY_CATEGORY_LABEL_KEY[c])}
@@ -130,7 +276,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           </div>
           <div className="form-group">
             <label htmlFor="gallery_project">{t("gallery.project")}</label>
-            <select id="gallery_project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <select id="gallery_project" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={running}>
               <option value="">{t("gallery.noneOption")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -141,15 +287,21 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           </div>
         </div>
 
-        {canSetVisibility && <VisibilityField id="gallery_visibility" value={visibility} onChange={setVisibility} disabled={submitting} />}
+        {canSetVisibility && <VisibilityField id="gallery_visibility" value={visibility} onChange={setVisibility} disabled={running} />}
 
         <div className="modal__actions">
-          <button className="btn btn--primary form-submit" type="submit" disabled={submitting || !file}>
-            {submitting ? t("gallery.uploading") : t("gallery.upload")}
+          <button className="btn btn--primary form-submit" type="submit" disabled={running || pending === 0}>
+            {submitLabel}
           </button>
-          <button className="btn btn--secondary" type="button" onClick={onClose} disabled={submitting}>
-            {t("common.cancel")}
-          </button>
+          {running ? (
+            <button className="btn btn--secondary" type="button" onClick={cancelRemaining} disabled={cancelRequested}>
+              {t("gallery.cancelRemaining")}
+            </button>
+          ) : (
+            <button className="btn btn--secondary" type="button" onClick={onClose}>
+              {attempted ? t("common.close") : t("common.cancel")}
+            </button>
+          )}
         </div>
       </form>
     </Modal>

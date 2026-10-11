@@ -195,6 +195,39 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
+  section("BATCH: the multi-image UI sends N separate single-file requests; each creates its own item");
+  const batchShared = { caption: "ZZ Gallery batch", category: "EVENT" };
+  const batchResults = [];
+  for (let i = 0; i < 5; i++) batchResults.push(await upload(a.client, batchShared, JPEG, `batch-${i}.jpg`));
+  check("five sequential single-file uploads all answer 201", batchResults.every((r) => r.status === 201), batchResults.map((r) => r.status).join());
+  check("they create five distinct gallery items", new Set(batchResults.map((r) => r.json?.id)).size === 5);
+  check("... backed by five distinct stored files", new Set(batchResults.map((r) => r.json?.file?.id)).size === 5);
+  check("the shared caption and category apply to every item", batchResults.every((r) => r.json?.caption === "ZZ Gallery batch" && r.json?.category === "EVENT"));
+  const batchRead = await Promise.all(batchResults.map((r) => a.client.get(`/gallery/${r.json?.id}`)));
+  check("every created item can be read back (200)", batchRead.every((r) => r.status === 200));
+
+  const blankCaption = await upload(a.client, { category: "EVENT" }, JPEG, "no-caption.jpg");
+  check("a blank caption is valid for a batch item (201, caption stored as empty)", blankCaption.status === 201 && blankCaption.json?.caption === "");
+
+  const mixedBefore = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
+  const mixed = [];
+  mixed.push(await upload(a.client, batchShared, JPEG, "mix-ok-1.jpg"));
+  mixed.push(await upload(a.client, batchShared, PDF, "mix-bad.pdf", "application/pdf"));
+  mixed.push(await upload(a.client, batchShared, JPEG, "mix-ok-2.jpg"));
+  check("a rejected file in the middle fails alone: statuses are 201, 400, 201", mixed.map((r) => r.status).join() === "201,400,201", mixed.map((r) => r.status).join());
+  const mixedAfter = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
+  check("only the two valid files were added (the rejected file created nothing)", mixedAfter === mixedBefore + 2, `before ${mixedBefore}, after ${mixedAfter}`);
+
+  const twoFiles = new FormData();
+  twoFiles.append("file", new Blob([JPEG], { type: "image/jpeg" }), "one.jpg");
+  twoFiles.append("file", new Blob([JPEG], { type: "image/jpeg" }), "two.jpg");
+  twoFiles.set("caption", "ZZ Gallery two-in-one");
+  const twoRes = await fetch(`${API}/api/gallery`, { method: "POST", headers: { cookie: a.client.cookie }, body: twoFiles });
+  check("ONE request carrying two files is still rejected (the API stays single-file) -> 400", twoRes.status === 400, `got ${twoRes.status}`);
+  const twoAfter = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
+  check("... and creates no item", twoAfter === mixedAfter, `before ${mixedAfter}, after ${twoAfter}`);
+
+  // ------------------------------------------------------------------
   section("SEARCH: gallery items are deliberately NOT part of global search (Phase 13 scope)");
   const searchHit = await a.client.get("/search?q=ZZ%20Gallery%20research");
   check("global search returns no gallery-type results (not implemented this phase)", !(searchHit.json?.results ?? []).some((r) => r.type === "gallery" || r.type === "gallery-item"));
