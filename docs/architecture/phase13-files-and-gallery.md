@@ -527,3 +527,15 @@ Phase 14 was **not** started. Nothing was deployed. No new role was introduced. 
 implementation (`Lab-Website/reference/`) was not touched. `apps/server/prisma/dev.db` was not
 modified by any command in this phase — every test ran against a disposable copy in the session
 scratchpad (SHA-256 and mtime confirmed unchanged before and after this phase's entire session).
+
+## Multi-image gallery entries (follow-up)
+
+One upload submission with several images is ONE gallery entry, not one entry per image.
+
+- **Model.** `GalleryItem.fileId` remains the entry's cover (first) image, so every pre-existing single-image row is already a complete entry. Further images are `GalleryImage` rows (`itemId`, unique `fileId`, `sortOrder`), added by the migration `20261011130000_gallery_item_images` (one new table; additive, nothing existing is altered).
+- **API.** `POST /api/gallery` is unchanged (one image, creates the entry). `POST /api/gallery/:id/images` appends one image to an existing entry (entry owner or a manager; image files only; at most `GALLERY_BATCH_MAX_FILES` = 10 images per entry, 409 beyond that). It stays one image per request because Vercel rejects request bodies over 4.5 MB. `GET /api/gallery` and `GET /api/gallery/:id` return `images` (cover first; `file` is still the cover).
+- **Client.** The dialog sends the first image to `POST /api/gallery` and the rest to `POST /api/gallery/:id/images` (`createEntryUploader` in `@scl/shared`). The entry id is remembered, so "retry" appends to the same entry and never creates a second one. Once the entry exists, its caption/category/project/visibility are locked in the dialog (change them later with Edit).
+- **Visibility.** A new image takes the entry's visibility (any client value is ignored); a manager changing the entry's visibility updates every image's file, so an entry never mixes visibilities. Files are still served only through `GET /api/files/:id`; no Blob URL is ever returned.
+- **Delete.** Deleting the entry soft-deletes every image's file, removes the `GalleryImage` rows and removes every blob. A single image of an entry cannot be deleted on its own (`DELETE /api/files/:id` answers 409), and there is no "remove one image" endpoint yet.
+- **Failure handling.** Each append writes its blob first and removes it again if the database write fails (same as create), so a failed image leaves no row and no blob. If the process dies between the blob write and the cleanup, the blob is orphaned like any other failed upload (the Blob-aware reconciler remains a separate follow-up). Images already uploaded stay in the entry when a later one fails or the dialog is closed.
+- **Deployment order.** The list/detail queries read `GalleryImage`, so the migration MUST be applied to the production database (the audited manual process in the site maintainer guide) BEFORE this code is deployed; the old code ignores the new table, so applying the migration first is safe.

@@ -525,8 +525,9 @@ model StoredFile {
   deletedAt    DateTime? // soft delete; the blob is purged by a cleanup job
   createdAt    DateTime  @default(now())
 
-  owner       User?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  galleryItem GalleryItem?
+  owner        User?         @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  galleryItem  GalleryItem?
+  galleryImage GalleryImage?
 
   @@index([entityType, entityId])
   @@index([ownerId])
@@ -549,10 +550,28 @@ model GalleryItem {
   file    StoredFile       @relation(fields: [fileId], references: [id], onDelete: Cascade)
   event   Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
   project ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  images  GalleryImage[]
 
   @@index([eventId])
   @@index([projectId])
   @@index([category, sortOrder])
+}
+
+// Additional images of ONE gallery entry. `GalleryItem.fileId` stays the entry's cover (first)
+// image, so every pre-existing single-image row is already a complete entry and needs no data
+// migration; a multi-image entry is the cover plus these rows, ordered by `sortOrder`. Every
+// image's file shares the cover file's visibility (kept in sync by the gallery routes).
+model GalleryImage {
+  id        String   @id @default(cuid())
+  itemId    String
+  fileId    String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  item GalleryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  file StoredFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, sortOrder])
 }
 
 // =====================================================================

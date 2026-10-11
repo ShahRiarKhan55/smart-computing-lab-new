@@ -114,10 +114,10 @@ router.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     assertValidId(req.params.id);
-    const file = await prisma.storedFile.findUnique({ where: { id: req.params.id }, include: { galleryItem: { select: { id: true } } } });
+    const file = await prisma.storedFile.findUnique({ where: { id: req.params.id }, include: { galleryItem: { select: { id: true } }, galleryImage: { select: { id: true } } } });
     if (!file || file.deletedAt) throw new HttpError(404, "Not found");
     if (!(isManager(req.user!) || file.ownerId === req.user!.id)) throw new HttpError(403, "Forbidden");
-    if (file.galleryItem) throw new HttpError(409, "This file is part of a gallery item; delete the gallery item instead.");
+    if (file.galleryItem || file.galleryImage) throw new HttpError(409, "This file is part of a gallery item; delete the gallery item instead.");
 
     await prisma.$transaction(async (tx) => {
       await tx.storedFile.update({ where: { id: file.id }, data: { deletedAt: new Date() } });

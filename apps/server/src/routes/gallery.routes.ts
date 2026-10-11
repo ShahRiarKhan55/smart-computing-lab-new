@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import type { Prisma } from "@prisma/client";
 import {
   GALLERY_MANAGER_ONLY_KEYS,
@@ -9,6 +9,7 @@ import {
   galleryQuerySchema,
   isManager,
   updateGalleryItemSchema,
+  GALLERY_BATCH_MAX_FILES,
   type GalleryItem,
   type GalleryListResponse,
 } from "@scl/shared";
@@ -34,12 +35,20 @@ const router = Router();
  * never a client-supplied value): any member may create an item, but editing/deleting is the
  * owner or a manager, the same "owned content" shape as a forum post — see
  * @scl/shared/permissions.ts `canEditGalleryItem`.
+ *
+ * An item is ONE entry with one or more images. `GalleryItem.fileId` is the cover (first) image;
+ * further images are `GalleryImage` rows appended with `POST /:id/images`. Every image's file
+ * carries the same visibility (propagated on edit), and deleting the entry deletes all of them.
  */
 
 function galleryInclude() {
   return {
     file: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, visibility: true, ownerId: true, deletedAt: true } },
     project: { select: { id: true, slug: true, title: true, status: true, visibility: true } },
+    images: {
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      select: { file: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, deletedAt: true } } },
+    },
   } satisfies Prisma.GalleryItemInclude;
 }
 
@@ -149,6 +158,73 @@ router.post(
   }),
 );
 
+// POST /api/gallery/:id/images -> add one more image to an existing entry (the entry's owner or a
+// manager). One image per request, like POST /api/gallery: Vercel rejects request bodies over 4.5 MB,
+// so a multi-image submission is the first image creating the entry plus one append per further
+// image. The new file takes the entry's visibility (never a client value). Blob first, outside the
+// transaction, and removed again if the database write fails — same discipline as the create route.
+async function authorizeGalleryAppend(req: Request, res: Response, next: NextFunction) {
+  try {
+    assertValidId(req.params.id);
+    const { isOwner } = await loadEditableGalleryItem(req.params.id, req.user!.id);
+    if (!canEditGalleryItem(req.user!, isOwner)) throw new HttpError(403, "Forbidden");
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+router.post(
+  "/:id/images",
+  requireAuth,
+  authorizeGalleryAppend, // before the body is buffered: a stranger's upload is rejected without reading it
+  uploadSingleFile,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new HttpError(400, 'No image was uploaded (expected multipart field "file").');
+    const upload = validateUpload(req.file);
+    assertIsImage(upload);
+
+    const storageKey = await saveFile(upload.buffer);
+    try {
+      await prisma.$transaction(async (tx) => {
+        const item = await tx.galleryItem.findUnique({
+          where: { id: req.params.id },
+          include: { file: { select: { visibility: true, deletedAt: true } }, images: { select: { sortOrder: true, file: { select: { deletedAt: true } } } } },
+        });
+        if (!item || item.file.deletedAt) throw new HttpError(404, "Not found");
+        const live = item.images.filter((i) => !i.file.deletedAt);
+        if (1 + live.length >= GALLERY_BATCH_MAX_FILES) {
+          throw new HttpError(409, `A gallery entry can hold at most ${GALLERY_BATCH_MAX_FILES} images.`);
+        }
+        const file = await tx.storedFile.create({
+          data: {
+            storageKey,
+            originalName: upload.originalName,
+            mimeType: upload.mimeType,
+            sizeBytes: upload.sizeBytes,
+            visibility: item.file.visibility,
+            ownerId: req.user!.id,
+          },
+        });
+        await tx.galleryImage.create({
+          data: { itemId: item.id, fileId: file.id, sortOrder: item.images.reduce((max, i) => Math.max(max, i.sortOrder), 0) + 1 },
+        });
+        await recordAudit(tx, {
+          actor: req.user!,
+          action: "GALLERY_ITEM_UPDATED",
+          entityType: "GALLERY_ITEM",
+          entityId: item.id,
+          details: { imageAdded: true, imageCount: live.length + 2 },
+        });
+      });
+      res.status(201).json(await loadDetail(req.params.id, req.user!));
+    } catch (err) {
+      await removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+      throw err;
+    }
+  }),
+);
+
 /**
  * Existence-then-ownership for a write, exactly like `loadOwnMessage` in messages.routes.ts:
  * checked here rather than via the generic `requireEditor` middleware because `GalleryItem` is
@@ -194,7 +270,11 @@ router.put(
         where: { id: existing.id },
         data: { ...itemFields, ...(takenAt !== undefined && { takenAt: fromIsoDate(takenAt) }) },
       });
-      if (visibility !== undefined) await tx.storedFile.update({ where: { id: existing.fileId }, data: { visibility } });
+      if (visibility !== undefined) {
+        await tx.storedFile.update({ where: { id: existing.fileId }, data: { visibility } });
+        // Every further image of the entry follows the cover, so one entry never mixes visibilities.
+        await tx.storedFile.updateMany({ where: { galleryImage: { itemId: existing.id } }, data: { visibility } });
+      }
 
       const before = { ...existing, takenAt: existing.takenAt ? existing.takenAt.toISOString().slice(0, 10) : null };
       const changed = changedFields(before, body, ["caption", "category", "projectId", "sortOrder", "takenAt"]);
@@ -220,14 +300,27 @@ router.delete(
     if (!canDeleteGalleryItem(req.user!, isOwner)) throw new HttpError(403, "Forbidden");
 
     const removed = await prisma.$transaction(async (tx) => {
-      const existing = await tx.galleryItem.findUnique({ where: { id: req.params.id }, include: { file: { select: { id: true, storageKey: true, deletedAt: true } } } });
+      const existing = await tx.galleryItem.findUnique({
+        where: { id: req.params.id },
+        include: { file: { select: { id: true, storageKey: true, deletedAt: true } }, images: { select: { file: { select: { id: true, storageKey: true, deletedAt: true } } } } },
+      });
       if (!existing || existing.file.deletedAt) throw new HttpError(404, "Not found");
-      await tx.galleryItem.delete({ where: { id: existing.id } });
-      await tx.storedFile.update({ where: { id: existing.fileId }, data: { deletedAt: new Date() } });
-      await recordAudit(tx, { actor: req.user!, action: "GALLERY_ITEM_DELETED", entityType: "GALLERY_ITEM", entityId: existing.id, details: { fileId: existing.fileId, caption: existing.caption } });
-      return existing.file;
+      // The cover plus every further image: all soft-deleted together so none stays fetchable by id.
+      const files = [existing.file, ...existing.images.map((i) => i.file).filter((f) => !f.deletedAt)];
+      await tx.galleryItem.delete({ where: { id: existing.id } }); // cascades the GalleryImage rows
+      await tx.storedFile.updateMany({ where: { id: { in: files.map((f) => f.id) } }, data: { deletedAt: new Date() } });
+      await recordAudit(tx, {
+        actor: req.user!,
+        action: "GALLERY_ITEM_DELETED",
+        entityType: "GALLERY_ITEM",
+        entityId: existing.id,
+        details: { fileId: existing.fileId, caption: existing.caption, imageCount: files.length },
+      });
+      return files;
     });
-    await removeFile(removed.storageKey).catch((err) => console.error(`[gallery] failed to remove blob for deleted item ${req.params.id}:`, err));
+    for (const f of removed) {
+      await removeFile(f.storageKey).catch((err) => console.error(`[gallery] failed to remove blob for deleted item ${req.params.id}:`, err));
+    }
     res.json({ success: true });
   }),
 );

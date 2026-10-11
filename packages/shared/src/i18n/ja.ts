@@ -499,6 +499,11 @@ export const ja: Record<keyof typeof en, string> = {
   "gallery.photoFallback": "写真",
   "gallery.previousPhotoAria": "前の写真",
   "gallery.nextPhotoAria": "次の写真",
+  "gallery.imageCount": "{count}枚",
+  "gallery.imagesInEntry": "このエントリーの写真",
+  "gallery.showImageAria": "{total}枚中{current}枚目を表示",
+  "gallery.oneEntryHint": "選択した画像はすべて、下のキャプション・カテゴリー・プロジェクトを共有する1つのギャラリーエントリーに追加されます。",
+  "gallery.entryCreatedLocked": "エントリーを作成しました。キャプション・カテゴリー・プロジェクト・公開範囲はエントリー全体に適用されます。変更は後から「編集」で行えます。",
 
   // ---- schedule ----------------------------------------------------------------------------
   "schedule.eyebrow": "メンバー限定",

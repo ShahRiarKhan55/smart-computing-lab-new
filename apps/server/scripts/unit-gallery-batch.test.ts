@@ -11,6 +11,7 @@ import {
   GALLERY_BATCH_STOP_STATUSES,
   batchProgress,
   batchSubmitAction,
+  createEntryUploader,
   pendingBatchIds,
   planGallerySelection,
   retryableBatchIds,
@@ -223,9 +224,95 @@ const final = (events: Event[], id: string) => [...events].reverse().find((e) =>
     }));
 }
 
+// ---- one submission = ONE gallery entry (createEntryUploader) -----------------------------------
+{
+  // A fake server: create() makes an entry, append() adds an image to it. Counting calls reproduces the
+  // reported bug (the old client called create() once PER image, i.e. N entries) and proves the fix.
+  const makeServer = (failOn: (call: string) => boolean = () => false) => {
+    const entries = new Map<string, string[]>();
+    const calls: string[] = [];
+    let seq = 0;
+    return {
+      entries,
+      calls,
+      create: async (id: string) => {
+        calls.push(`create:${id}`);
+        if (failOn(`create:${id}`)) throw httpError(500);
+        const entryId = `e${++seq}`;
+        entries.set(entryId, [id]);
+        return entryId;
+      },
+      append: async (entryId: string, id: string) => {
+        calls.push(`append:${entryId}:${id}`);
+        if (failOn(`append:${entryId}:${id}`)) throw httpError(500);
+        if (!entries.has(entryId)) throw httpError(404);
+        entries.get(entryId)!.push(id);
+      },
+    };
+  };
+  const statuses = () => {
+    const m = new Map<string, BatchStatus>();
+    return { m, on: (id: string, st: BatchStatus) => void m.set(id, st) };
+  };
+
+  // THE REPORTED BUG: uploading 4 images in one submission must produce exactly ONE entry holding 4 images.
+  {
+    const srv = makeServer();
+    const up = createEntryUploader(srv.create, srv.append);
+    const out = await runGalleryBatch(["a", "b", "c", "d"], up.upload, statuses().on);
+    t("4 images in one submission -> exactly ONE entry", srv.entries.size === 1);
+    t("... that entry holds all 4 images in selection order", JSON.stringify([...srv.entries.values()][0]) === JSON.stringify(["a", "b", "c", "d"]));
+    t("... via exactly one create and three appends", srv.calls.filter((c) => c.startsWith("create")).length === 1 && srv.calls.filter((c) => c.startsWith("append")).length === 3);
+    t("... and the run reports 4 succeeded", out.succeeded === 4 && out.failed === 0);
+    t("the uploader exposes the created entry id", up.entryId() === "e1");
+  }
+  // A single image keeps the old behaviour: one create, no append.
+  {
+    const srv = makeServer();
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["only"], up.upload, statuses().on);
+    t("a single image = one create and no append", srv.calls.length === 1 && srv.entries.size === 1);
+  }
+  // Partial failure then retry: the retry appends to the SAME entry; it never creates a second one.
+  {
+    let failC = true;
+    const srv = makeServer((c) => failC && c.endsWith(":c"));
+    const up = createEntryUploader(srv.create, srv.append);
+    const first = await runGalleryBatch(["a", "b", "c", "d"], up.upload, statuses().on);
+    t("a failed middle image fails alone (a, b, d succeed; c fails)", first.succeeded === 3 && first.failed === 1);
+    t("... still ONE entry, holding the three that succeeded", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,d");
+    failC = false;
+    const retry = await runGalleryBatch(["c"], up.upload, statuses().on);
+    t("retrying the failed image succeeds", retry.succeeded === 1);
+    t("... appended to the SAME entry (no duplicate entry created)", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,d,c");
+    t("... exactly one create call in total across both runs", srv.calls.filter((c) => c.startsWith("create")).length === 1);
+  }
+  // The very first image fails: nothing exists yet, so the NEXT image creates the entry (still one entry).
+  {
+    let failA = true;
+    const srv = makeServer((c) => failA && c === "create:a");
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("first image failed -> the second creates the entry, the third joins it", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "b,c");
+    t("... the entry id is known only after a create succeeded", up.entryId() === "e1");
+    failA = false;
+    await runGalleryBatch(["a"], up.upload, statuses().on);
+    t("retrying the first image later appends to that entry (no second entry)", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "b,c,a");
+  }
+  // Nothing created yet -> no entry id.
+  t("a fresh uploader has no entry id", createEntryUploader(async () => "x", async () => {}).entryId() === null);
+  // A stop status (503) on the first image creates nothing and cancels the rest.
+  {
+    const srv = makeServer();
+    const up = createEntryUploader(async () => { throw httpError(503); }, srv.append);
+    const out = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("a 503 on the first image creates no entry and cancels the rest", out.failed === 1 && out.cancelled === 2 && out.stoppedBy === 503 && up.entryId() === null && srv.calls.length === 0);
+  }
+}
+
 // ---- translations for the batch UI ------------------------------------------------------------
 {
-  const NEW_KEYS = ["gallery.progress", "gallery.uploadRemaining", "gallery.retryRemaining", "gallery.uploadCount", "gallery.batchHint", "gallery.batchStoppedUnavailable", "gallery.batchStoppedAuth", "gallery.batchSummary"] as const;
+  const NEW_KEYS = ["gallery.progress", "gallery.uploadRemaining", "gallery.retryRemaining", "gallery.uploadCount", "gallery.batchHint", "gallery.batchStoppedUnavailable", "gallery.batchStoppedAuth", "gallery.batchSummary", "gallery.imageCount", "gallery.imagesInEntry", "gallery.showImageAria", "gallery.oneEntryHint", "gallery.entryCreatedLocked"] as const;
   for (const lang of ["en", "ja"] as const) {
     const d = DICTIONARIES[lang] as Record<string, string>;
     t(`${lang}: all batch UI keys exist and are non-empty`, NEW_KEYS.every((k) => typeof d[k] === "string" && d[k].length > 0));

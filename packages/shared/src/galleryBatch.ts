@@ -1,10 +1,12 @@
 import { IMAGE_MIME_TYPES } from "./schemas/files.js";
 
 /**
- * Gallery multi-image upload: the pure, framework-free logic behind the upload modal. A batch is
- * uploaded as N separate single-file requests to the existing `POST /api/gallery`, one at a time —
- * no server change. Kept here (not in the React component) so it can be unit-tested without a
- * browser (apps/server/scripts/unit-gallery-batch.test.ts).
+ * Gallery multi-image upload: the pure, framework-free logic behind the upload modal. One submission
+ * is ONE gallery entry with several images. Each image is still sent as its own single-file request
+ * (Vercel rejects bodies over 4.5 MB, so images cannot share a request): the first successful image
+ * creates the entry (`POST /api/gallery`), every later one is appended to it
+ * (`POST /api/gallery/:id/images`) — see `createEntryUploader`. Kept here (not in the React
+ * component) so it can be unit-tested without a browser (apps/server/scripts/unit-gallery-batch.test.ts).
  */
 
 /** Maximum number of images in one batch. */
@@ -161,4 +163,26 @@ export function batchSubmitAction(entries: readonly { id: string; status: BatchS
   if (pendingBatchIds(entries).length === 0) return "none";
   if (!entries.some((e) => e.status !== "waiting")) return "upload";
   return entries.some((e) => e.status === "waiting") ? "uploadRemaining" : "retry";
+}
+
+/**
+ * Turns "upload these N images" into ONE gallery entry. The first image to succeed creates the entry
+ * (`create` returns its id); every later image — including a retry after a failure — is appended to
+ * that same entry (`append`). Because the entry id is remembered here, retrying a failed image can
+ * never create a second entry. If the very first image fails nothing exists yet, so the next image
+ * simply becomes the one that creates it. Hold one uploader per submission (reset when the dialog
+ * reopens); `upload` is shaped for `runGalleryBatch`.
+ */
+export function createEntryUploader(
+  create: (id: string) => Promise<string>,
+  append: (entryId: string, id: string) => Promise<void>,
+): { upload: (id: string) => Promise<void>; entryId: () => string | null } {
+  let entryId: string | null = null;
+  return {
+    entryId: () => entryId,
+    upload: async (id) => {
+      if (entryId === null) entryId = await create(id);
+      else await append(entryId, id);
+    },
+  };
 }

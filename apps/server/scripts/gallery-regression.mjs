@@ -9,6 +9,8 @@
  * Run it ONLY against a COPY of the database. Creates/removes fixtures prefixed "ZZ Gallery" /
  * p13gtest-*@example.test (also at start, in case a previous run was interrupted).
  */
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 
 const API = process.env.API || "http://localhost:4001";
@@ -195,37 +197,149 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  section("BATCH: the multi-image UI sends N separate single-file requests; each creates its own item");
-  const batchShared = { caption: "ZZ Gallery batch", category: "EVENT" };
-  const batchResults = [];
-  for (let i = 0; i < 5; i++) batchResults.push(await upload(a.client, batchShared, JPEG, `batch-${i}.jpg`));
-  check("five sequential single-file uploads all answer 201", batchResults.every((r) => r.status === 201), batchResults.map((r) => r.status).join());
-  check("they create five distinct gallery items", new Set(batchResults.map((r) => r.json?.id)).size === 5);
-  check("... backed by five distinct stored files", new Set(batchResults.map((r) => r.json?.file?.id)).size === 5);
-  check("the shared caption and category apply to every item", batchResults.every((r) => r.json?.caption === "ZZ Gallery batch" && r.json?.category === "EVENT"));
-  const batchRead = await Promise.all(batchResults.map((r) => a.client.get(`/gallery/${r.json?.id}`)));
-  check("every created item can be read back (200)", batchRead.every((r) => r.status === 200));
+  section("MULTI-IMAGE: one submission = ONE gallery entry with several images");
+  const entryCount = async (caption) => prisma.galleryItem.count({ where: { caption } });
+  const append = (client, id, buffer = JPEG, filename = "extra.jpg", contentType = "image/jpeg", fields = {}) =>
+    client.upload(`/gallery/${id}/images`, fields, { buffer, filename, contentType });
+  const storedFileCount = () => prisma.storedFile.count();
+  const blobCount = () => {
+    const dir = process.env.STORAGE_DIR;
+    if (!dir) return null;
+    const walk = (d) => readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? walk(join(d, e.name)) : 1), 0);
+    return existsSync(dir) ? walk(dir) : 0;
+  };
+
+  // The reported bug: the UI used to POST /gallery once PER image, so 4 images became 4 entries.
+  const SHARED = "ZZ Gallery batch";
+  const old1 = await upload(a.client, { caption: SHARED, category: "EVENT" }, JPEG, "old-1.jpg");
+  const old2 = await upload(a.client, { caption: SHARED, category: "EVENT" }, JPEG, "old-2.jpg");
+  check("single-image POST /gallery is unchanged: each call is its own entry with exactly one image", old1.status === 201 && old2.status === 201 && old1.json.id !== old2.json.id && old1.json.images.length === 1 && old2.json.images.length === 1 && old1.json.images[0].id === old1.json.file.id);
+  check("(this is what the old multi-image flow did per image: 2 calls -> 2 entries)", (await entryCount(SHARED)) === 2);
+  await prisma.galleryItem.deleteMany({ where: { caption: SHARED } });
+
+  // The fixed flow: first image creates the entry, the others are appended to it.
+  const CAP = "ZZ Gallery one-entry";
+  const eventBefore = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
+  const first = await upload(a.client, { caption: CAP, category: "EVENT" }, JPEG, "multi-0.jpg");
+  const entryId = first.json.id;
+  const appended = [];
+  for (let i = 1; i <= 3; i++) appended.push(await append(a.client, entryId, JPEG, `multi-${i}.jpg`));
+  check("create + three appends all answer 201", first.status === 201 && appended.every((r) => r.status === 201), appended.map((r) => r.status).join());
+  check("exactly ONE gallery entry exists for the submission (no duplicate cards/projects)", (await entryCount(CAP)) === 1);
+  const eventAfter = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
+  check("the gallery list gained ONE entry, not one per image", eventAfter === eventBefore + 1, `before ${eventBefore}, after ${eventAfter}`);
+  const detail = (await a.client.get(`/gallery/${entryId}`)).json;
+  check("the entry holds all four images, cover first, in upload order", detail.images.length === 4 && detail.images[0].id === first.json.file.id && detail.images.map((i) => i.originalName).join() === "multi-0.jpg,multi-1.jpg,multi-2.jpg,multi-3.jpg", JSON.stringify(detail.images.map((i) => i.originalName)));
+  check("`file` is still the cover image (backward compatible)", detail.file.id === detail.images[0].id);
+  check("the caption and category are stored once, on the entry", detail.caption === CAP && detail.category === "EVENT");
+  check("the list shows the entry exactly once", (await a.client.get("/gallery?category=EVENT&limit=50")).json.items.filter((i) => i.id === entryId).length === 1);
+  check("the last append's response is the full entry (4 images)", appended[2].json?.id === entryId && appended[2].json.images.length === 4);
+  check("no image URL exposes a storage key or blob URL", detail.images.every((i) => /^\/api\/files\/[a-z0-9]+$/i.test(i.url)) && !/blob\.vercel|storageKey|vercel-storage/i.test(JSON.stringify(detail)));
+  const dbExtras = await prisma.galleryImage.findMany({ where: { itemId: entryId }, include: { file: true }, orderBy: { sortOrder: "asc" } });
+  const me = await prisma.user.findUnique({ where: { email: a.email } });
+  check("three GalleryImage rows, ordered, owned by the uploader, LAB_ONLY like the cover", dbExtras.length === 3 && dbExtras.every((r, i) => r.sortOrder === i + 1 && r.file.ownerId === me.id && r.file.visibility === "LAB_ONLY"));
 
   const blankCaption = await upload(a.client, { category: "EVENT" }, JPEG, "no-caption.jpg");
-  check("a blank caption is valid for a batch item (201, caption stored as empty)", blankCaption.status === 201 && blankCaption.json?.caption === "");
+  check("a blank caption is valid (201, stored as empty)", blankCaption.status === 201 && blankCaption.json?.caption === "");
 
-  const mixedBefore = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
-  const mixed = [];
-  mixed.push(await upload(a.client, batchShared, JPEG, "mix-ok-1.jpg"));
-  mixed.push(await upload(a.client, batchShared, PDF, "mix-bad.pdf", "application/pdf"));
-  mixed.push(await upload(a.client, batchShared, JPEG, "mix-ok-2.jpg"));
-  check("a rejected file in the middle fails alone: statuses are 201, 400, 201", mixed.map((r) => r.status).join() === "201,400,201", mixed.map((r) => r.status).join());
-  const mixedAfter = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
-  check("only the two valid files were added (the rejected file created nothing)", mixedAfter === mixedBefore + 2, `before ${mixedBefore}, after ${mixedAfter}`);
+  // ---- authorization on append
+  section("MULTI-IMAGE: authorization on POST /gallery/:id/images");
+  check("guest cannot append -> 401", (await append(guest, entryId)).status === 401);
+  check("a different member (not the owner) cannot append -> 403", (await append(b.client, entryId)).status === 403);
+  check("... and nothing was added", (await prisma.galleryImage.count({ where: { itemId: entryId } })) === 3);
+  check("a nonexistent entry -> 404", (await append(a.client, "cmnotarealentry00000000000")).status === 404);
+  check("a malformed id is rejected (400/404), never a 500", [400, 404].includes((await append(a.client, "not a valid id!!")).status));
+  const mgrAppend = await append(mgr.client, entryId, JPEG, "by-manager.jpg");
+  check("a manager CAN append to someone else's entry -> 201", mgrAppend.status === 201 && mgrAppend.json.images.length === 5);
+  const mgrRow = await prisma.galleryImage.findFirst({ where: { itemId: entryId }, orderBy: { sortOrder: "desc" }, include: { file: true } });
+  check("... the manager is recorded as that image's uploader, the entry's owner is unchanged", mgrRow.file.ownerId !== me.id && (await a.client.get(`/gallery/${entryId}`)).json.canEdit === true);
 
-  const twoFiles = new FormData();
-  twoFiles.append("file", new Blob([JPEG], { type: "image/jpeg" }), "one.jpg");
-  twoFiles.append("file", new Blob([JPEG], { type: "image/jpeg" }), "two.jpg");
-  twoFiles.set("caption", "ZZ Gallery two-in-one");
-  const twoRes = await fetch(`${API}/api/gallery`, { method: "POST", headers: { cookie: a.client.cookie }, body: twoFiles });
-  check("ONE request carrying two files is still rejected (the API stays single-file) -> 400", twoRes.status === 400, `got ${twoRes.status}`);
-  const twoAfter = (await a.client.get("/gallery?category=EVENT&limit=1")).json.pagination.total;
-  check("... and creates no item", twoAfter === mixedAfter, `before ${mixedAfter}, after ${twoAfter}`);
+  const smuggled = await append(a.client, entryId, JPEG, "smuggle.jpg", "image/jpeg", { visibility: "PUBLIC" });
+  check("a member cannot choose visibility on an append: the client value is ignored, the image stays LAB_ONLY", smuggled.status === 201 && (await prisma.storedFile.count({ where: { visibility: "PUBLIC", galleryImage: { itemId: entryId } } })) === 0);
+
+  // ---- validation + atomicity
+  section("MULTI-IMAGE: invalid input and failures leave no misleading records");
+  const filesBefore = await storedFileCount();
+  const blobsBefore = blobCount();
+  check("a non-image (PDF) append -> 400", (await append(a.client, entryId, PDF, "doc.pdf", "application/pdf")).status === 400);
+  const noFile = await a.client.upload(`/gallery/${entryId}/images`, {}, null);
+  check("an append with no file -> 400", noFile.status === 400);
+  const twoForm = new FormData();
+  twoForm.append("file", new Blob([JPEG], { type: "image/jpeg" }), "one.jpg");
+  twoForm.append("file", new Blob([JPEG], { type: "image/jpeg" }), "two.jpg");
+  const twoRes = await fetch(`${API}/api/gallery/${entryId}/images`, { method: "POST", headers: { cookie: a.client.cookie }, body: twoForm });
+  check("ONE request carrying two files is rejected (the API stays one image per request) -> 400", twoRes.status === 400, `got ${twoRes.status}`);
+  const twoCreate = new FormData();
+  twoCreate.append("file", new Blob([JPEG], { type: "image/jpeg" }), "one.jpg");
+  twoCreate.append("file", new Blob([JPEG], { type: "image/jpeg" }), "two.jpg");
+  check("... and POST /gallery with two files is still rejected -> 400", (await fetch(`${API}/api/gallery`, { method: "POST", headers: { cookie: a.client.cookie }, body: twoCreate })).status === 400);
+  check("rejected requests created no StoredFile rows", (await storedFileCount()) === filesBefore);
+  if (blobsBefore !== null) check("rejected requests left no blob behind", blobCount() === blobsBefore, `before ${blobsBefore}, after ${blobCount()}`);
+  const spoof = await append(a.client, entryId, PDF, "fake.jpg", "image/jpeg");
+  check("a PDF renamed .jpg with an image content-type is rejected by the magic-byte check -> 400", spoof.status === 400);
+
+  // cap: cover + 9 more = 10 images; the 11th is refused and leaves nothing behind
+  let capRes = null;
+  let have = (await a.client.get(`/gallery/${entryId}`)).json.images.length;
+  while (have < 10) {
+    capRes = await append(a.client, entryId, JPEG, `fill-${have}.jpg`);
+    if (capRes.status !== 201) break;
+    have = capRes.json.images.length;
+  }
+  check("the entry can be filled up to 10 images", have === 10, `have ${have}`);
+  const filesAtCap = await storedFileCount();
+  const blobsAtCap = blobCount();
+  const over = await append(a.client, entryId, JPEG, "eleventh.jpg");
+  check("an 11th image is refused -> 409", over.status === 409, `got ${over.status}`);
+  check("... the refusal created no StoredFile row", (await storedFileCount()) === filesAtCap);
+  if (blobsAtCap !== null) check("... and its already-written blob was cleaned up (no orphan)", blobCount() === blobsAtCap, `before ${blobsAtCap}, after ${blobCount()}`);
+  check("... the entry still has exactly 10 images", (await a.client.get(`/gallery/${entryId}`)).json.images.length === 10);
+
+  // ---- visibility
+  section("MULTI-IMAGE: visibility follows the entry, for every image");
+  const imgs = (await a.client.get(`/gallery/${entryId}`)).json.images;
+  check("LAB_ONLY entry: guest gets 404 on the entry and on EVERY image file", (await guest.get(`/gallery/${entryId}`)).status === 404 && (await Promise.all(imgs.map((i) => guest.raw(`/files/${i.id}`)))).every((r) => r.status === 404));
+  check("LAB_ONLY entry: a signed-in member can fetch every image", (await Promise.all(imgs.map((i) => b.client.raw(`/files/${i.id}`)))).every((r) => r.status === 200));
+  check("LAB_ONLY entry is absent from the guest list", !(await guest.get("/gallery?limit=50")).json.items.some((i) => i.id === entryId));
+  const toPublic = await mgr.client.put(`/gallery/${entryId}`, { visibility: "PUBLIC" });
+  check("a manager makes the entry PUBLIC -> 200", toPublic.status === 200);
+  check("every image file of the entry is now PUBLIC in the database", (await prisma.storedFile.count({ where: { visibility: "PUBLIC", OR: [{ galleryImage: { itemId: entryId } }, { galleryItem: { id: entryId } }] } })) === 10);
+  check("guest now sees ONE card for it, with all 10 images, and can fetch each", (await (async () => {
+    const list = (await guest.get("/gallery?limit=50")).json.items.filter((i) => i.id === entryId);
+    return list.length === 1 && list[0].images.length === 10;
+  })()) && (await Promise.all(imgs.map((i) => guest.raw(`/files/${i.id}`)))).every((r) => r.status === 200));
+  await mgr.client.put(`/gallery/${entryId}`, { visibility: "LAB_ONLY" });
+  check("back to LAB_ONLY: the guest loses every image again (cover and extras)", (await Promise.all(imgs.map((i) => guest.raw(`/files/${i.id}`)))).every((r) => r.status === 404));
+  await mgr.client.put(`/gallery/${entryId}`, { visibility: "PUBLIC" });
+  const pubAppend = await mgr.client.upload(`/gallery/${(await prisma.galleryItem.findFirst({ where: { caption: "ZZ Gallery public photo" } })).id}/images`, {}, { buffer: JPEG, filename: "pub-extra.jpg", contentType: "image/jpeg" });
+  const pubExtra = pubAppend.json?.images?.[1];
+  check("an image appended to a PUBLIC entry is PUBLIC (guest can fetch it)", pubAppend.status === 201 && !!pubExtra && (await guest.raw(`/files/${pubExtra.id}`)).status === 200);
+  await mgr.client.put(`/gallery/${entryId}`, { visibility: "LAB_ONLY" });
+
+  // ---- edit + delete
+  section("MULTI-IMAGE: edit and delete act on the whole entry");
+  const edited = await a.client.put(`/gallery/${entryId}`, { caption: "ZZ Gallery edited", category: "RESEARCH" });
+  check("editing the entry changes caption/category once and keeps all 10 images", edited.status === 200 && edited.json.caption === "ZZ Gallery edited" && edited.json.category === "RESEARCH" && edited.json.images.length === 10);
+  const extraFileId = imgs[3].id;
+  check("deleting an extra image's file directly is refused -> 409 (delete the entry instead)", (await a.client.del(`/files/${extraFileId}`)).status === 409);
+  check("the cover file cannot be deleted directly either -> 409", (await a.client.del(`/files/${imgs[0].id}`)).status === 409);
+  check("a different member cannot delete the entry -> 403", (await b.client.del(`/gallery/${entryId}`)).status === 403);
+  const blobsBeforeDelete = blobCount();
+  const delRes = await a.client.del(`/gallery/${entryId}`);
+  check("the owner deletes the entry -> 200", delRes.status === 200);
+  check("the entry is gone (404)", (await a.client.get(`/gallery/${entryId}`)).status === 404);
+  check("EVERY image of the entry is gone: all ten file URLs answer 404", (await Promise.all(imgs.map((i) => a.client.raw(`/files/${i.id}`)))).every((r) => r.status === 404));
+  check("all ten StoredFile rows are soft-deleted and the GalleryImage rows removed", (await prisma.storedFile.count({ where: { id: { in: imgs.map((i) => i.id) }, deletedAt: null } })) === 0 && (await prisma.galleryImage.count({ where: { itemId: entryId } })) === 0);
+  if (blobsBeforeDelete !== null) check("all ten blobs were removed from storage", blobCount() === blobsBeforeDelete - 10, `before ${blobsBeforeDelete}, after ${blobCount()}`);
+  check("appending to a deleted entry -> 404", (await append(a.client, entryId)).status === 404);
+  check("deleting again -> 404", (await a.client.del(`/gallery/${entryId}`)).status === 404);
+  const mgrEntry = await upload(b.client, { caption: "ZZ Gallery mgr-multi" }, JPEG, "m0.jpg");
+  await append(b.client, mgrEntry.json.id, JPEG, "m1.jpg");
+  check("a manager can delete someone else's multi-image entry -> 200", (await mgr.client.del(`/gallery/${mgrEntry.json.id}`)).status === 200);
+
+  // ---- mixed pagination: one card per entry
+  const pageCheck = (await a.client.get("/gallery?limit=50")).json.items;
+  check("no entry appears twice in a list page", new Set(pageCheck.map((i) => i.id)).size === pageCheck.length);
 
   // ------------------------------------------------------------------
   section("SEARCH: gallery items are deliberately NOT part of global search (Phase 13 scope)");
