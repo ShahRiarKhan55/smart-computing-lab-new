@@ -73,6 +73,10 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
   const [cancelRequested, setCancelRequested] = useState(false);
   const [runIds, setRunIds] = useState<string[]>([]); // the files in the batch currently/last running (for "Uploading n of m")
   const [finished, setFinished] = useState<{ succeeded: number; failed: number; cancelled: number } | null>(null);
+  // Set when the user removes the image that may already have created the entry. Deliberately separate from
+  // `error` (which every pick/remove/submit clears): it stays through the next Upload attempt and goes away
+  // only when dismissed, replaced by another such warning, or when the dialog is reopened.
+  const [removedWarning, setRemovedWarning] = useState<string | null>(null);
   const [entryCreated, setEntryCreated] = useState(false); // once true the shared details belong to the existing entry
   const fileInputRef = useRef<HTMLInputElement>(null);
   const entriesRef = useRef<BatchEntry[]>([]);
@@ -99,6 +103,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       setProjectId("");
       setVisibility("LAB_ONLY");
       setError(null);
+      setRemovedWarning(null);
       setRunning(false);
       setCancelRequested(false);
       setRunIds([]);
@@ -135,10 +140,14 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
 
   function removeEntry(id: string) {
     if (runningRef.current) return;
+    // A removed image can no longer be re-sent: stop waiting for it to resolve an uncertain create.
+    const wasPinnedCreator = uploaderRef.current?.forget(id) ?? false;
+    const removedName = entriesRef.current.find((x) => x.id === id)?.file.name ?? "";
     updateEntries(entriesRef.current.filter((x) => x.id !== id));
     setRejections([]);
     setFinished(null);
     setError(null);
+    if (wasPinnedCreator) setRemovedWarning(t("gallery.removedMayBeUploaded", { name: removedName }));
   }
 
   function setStatus(id: string, status: BatchStatus, message?: string) {
@@ -172,7 +181,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       uploaderRef.current = createEntryUploader(
         async (id) => {
           const file = fileFor(id);
-          if (!file) throw new Error("missing file");
+          if (!file) throw Object.assign(new Error("missing file"), { status: 400 }); // a definite failure, never "uncertain"
           const f = formRef.current;
           const form = new FormData();
           form.set("file", file);
@@ -187,7 +196,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
         },
         async (entryId, id) => {
           const file = fileFor(id);
-          if (!file) throw new Error("missing file");
+          if (!file) throw Object.assign(new Error("missing file"), { status: 400 }); // a definite failure, never "uncertain"
           const form = new FormData();
           form.set("file", file);
           await apiUpload<GalleryItem>(`/gallery/${entryId}/images`, form, keyHeader(id));
@@ -250,6 +259,14 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       {error && (
         <div className="form-error" role="alert">
           {error}
+        </div>
+      )}
+      {removedWarning && (
+        <div className="form-hint gallery-batch__warning" role="status">
+          {removedWarning}{" "}
+          <button type="button" className="btn btn--secondary btn--sm" onClick={() => setRemovedWarning(null)}>
+            {t("gallery.dismissNotice")}
+          </button>
         </div>
       )}
       <form onSubmit={handleSubmit} noValidate>

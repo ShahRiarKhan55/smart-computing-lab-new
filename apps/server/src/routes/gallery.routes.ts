@@ -25,6 +25,7 @@ import { paginate } from "../lib/forumSerializers.js";
 import { assertIsImage, uploadSingleFile, validateUpload } from "../lib/fileService.js";
 import { removeFile, saveFile } from "../lib/storage.js";
 import { changedFields, recordAudit, recordVisibilityChange } from "../lib/audit.js";
+import { releaseUploadedBlob } from "../lib/galleryBlobCleanup.js";
 import { findCompletedAttempt, isUniqueViolation, readIdempotencyKey, sha256Hex } from "../lib/galleryIdempotency.js";
 
 const router = Router();
@@ -146,7 +147,10 @@ router.post(
     // Blob written FIRST, outside the transaction; any failure below removes it immediately
     // rather than leaving an orphaned file with no database record (Phase 13 "Storage cleanup").
     const storageKey = await saveFile(upload.buffer);
-    const dropBlob = () => removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+    // Set as the callback's LAST step: the callback has completed, so Prisma goes on to commit. If the
+    // transaction then reports an error, whether it committed is UNCERTAIN, so the blob must be kept
+    // (see releaseUploadedBlob).
+    let commitAttempted = false;
     let itemId: string;
     try {
       itemId = await prisma.$transaction(async (tx) => {
@@ -183,10 +187,11 @@ router.post(
           entityId: item.id,
           details: { caption: item.caption, category: item.category, visibility: file.visibility, projectId: item.projectId },
         });
+        commitAttempted = true;
         return item.id;
       });
     } catch (err) {
-      await dropBlob(); // nothing was committed, so the blob is unreferenced
+      await releaseUploadedBlob(storageKey, commitAttempted); // removes it only if the callback never completed (no commit can have been issued)
       if (key && isUniqueViolation(err)) {
         // Lost a race against a concurrent duplicate of this very attempt: answer with the winner's entry.
         const done = await findCompletedAttempt(prisma, req.user!.id, key, "CREATE", null, sha256);
@@ -232,7 +237,7 @@ router.post(
     }
 
     const storageKey = await saveFile(upload.buffer);
-    const dropBlob = () => removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+    let commitAttempted = false; // see the create route / releaseUploadedBlob
     try {
       await prisma.$transaction(async (tx) => {
         // The FIRST statement is a write (touching the entry): it takes the write lock, so concurrent appends
@@ -280,9 +285,10 @@ router.post(
           entityId: item.id,
           details: { imageAdded: true, imageCount: live.length + 2 },
         });
+        commitAttempted = true;
       });
     } catch (err) {
-      await dropBlob(); // nothing was committed for this upload (a replay's blob is unused too)
+      await releaseUploadedBlob(storageKey, commitAttempted); // a replay's or a refused upload's blob is unused; a possibly-committed one is kept
       if (err instanceof AttemptAlreadyDone) return respondWithEntry(res, err.itemId, req.user!, true);
       if (key && isUniqueViolation(err)) {
         const done = await findCompletedAttempt(prisma, req.user!.id, key, "APPEND", req.params.id, sha256);

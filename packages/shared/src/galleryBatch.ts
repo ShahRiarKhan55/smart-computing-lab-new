@@ -208,7 +208,8 @@ export function isUncertainFailure(err: unknown): boolean {
  * known, every `upload` first re-sends that same create (callers reuse the image's idempotency key, so
  * the server answers with the original entry if it did commit) and never lets another image create a
  * second entry. A definite refusal (4xx) un-pins, so the next image creates the entry instead. An image
- * already stored (e.g. the pinned creator once its retry succeeded) is never sent again.
+ * already stored (e.g. the pinned creator once its retry succeeded) is never sent again. If the user removes
+ * the pinned image, `forget` clears the pin so the remaining images can create the entry.
  * Hold one uploader per submission (reset when the dialog reopens); `upload` is shaped for
  * `runGalleryBatch`.
  */
@@ -216,7 +217,7 @@ export function createEntryUploader(
   create: (id: string) => Promise<string>,
   append: (entryId: string, id: string) => Promise<void>,
   isUncertain: (err: unknown) => boolean = isUncertainFailure,
-): { upload: (id: string) => Promise<void>; entryId: () => string | null } {
+): { upload: (id: string) => Promise<void>; entryId: () => string | null; forget: (id: string) => boolean } {
   let entryId: string | null = null;
   let pinned: string | null = null; // the image whose create outcome is unknown
   const stored = new Set<string>(); // images known to be stored on the server
@@ -233,6 +234,18 @@ export function createEntryUploader(
   };
   return {
     entryId: () => entryId,
+    /**
+     * The user removed image `id` from the list. If it was the pinned creator (its create outcome unknown), the
+     * pin is cleared: its file is gone and cannot be re-sent, so keeping the pin would block every other image
+     * forever. Returns true in that case, because the removed image MAY already have created the entry — the
+     * caller should tell the user. Any other image is unaffected, and the pin of an image still in the list is
+     * never touched (it keeps blocking a second entry).
+     */
+    forget: (id) => {
+      if (pinned !== id) return false;
+      pinned = null;
+      return true;
+    },
     upload: async (id) => {
       if (stored.has(id)) return;
       if (entryId === null) {

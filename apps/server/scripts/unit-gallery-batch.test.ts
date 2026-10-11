@@ -361,6 +361,50 @@ const final = (events: Event[], id: string) => [...events].reverse().find((e) =>
     const retry = await runGalleryBatch(["b"], up.upload, statuses().on);
     t("... retrying b is answered from the original (still a,b,c, still one entry)", retry.succeeded === 1 && srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,c");
   }
+  // THE PINNED-CREATOR DEAD END: uncertain create -> the user REMOVES that image -> retry the rest.
+  {
+    const srv = makeIdempotentServer();
+    let down = true; // the connection is bad for the first image only
+    const up = createEntryUploader(async (id) => { if (down && id === "a") throw new TypeError("fetch failed"); return srv.create(id); }, srv.append);
+    const first = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("(setup) uncertain create of a: the whole run fails, nothing exists, nothing else created an entry", first.failed === 3 && srv.entries.size === 0);
+    t("while a is still in the list, the pin holds: b is NOT allowed to create a second entry", srv.calls.every((c) => !c.startsWith("create:b") && !c.startsWith("create:c")));
+    t("forget(a) reports that the removed image was the pinned creator", up.forget("a") === true);
+    down = false;
+    const retry = await runGalleryBatch(["b", "c"], up.upload, statuses().on);
+    t("after removing a, retrying b and c succeeds", retry.succeeded === 2 && retry.failed === 0);
+    t("... as ONE entry holding b and c (no duplicate entry)", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "b,c");
+    t("... b created it, c was appended (a was never re-sent)", srv.calls.filter((c) => c.startsWith("create")).join() === "create:b" && !srv.calls.some((c) => c.includes(":a") && c !== "create:a"));
+  }
+  // The pin of an image that is STILL in the list is untouched by removing a different image.
+  {
+    const srv = makeIdempotentServer();
+    const up = createEntryUploader(async (id) => { if (id === "a") throw new TypeError("fetch failed"); return srv.create(id); }, srv.append);
+    await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("removing a DIFFERENT image does not clear the pin (forget returns false)", up.forget("b") === false);
+    await runGalleryBatch(["c"], up.upload, statuses().on);
+    t("... so c still cannot create a second entry while a is unresolved", srv.entries.size === 0);
+  }
+  // forget() of an image that was never pinned / is already stored is a no-op
+  {
+    const srv = makeIdempotentServer();
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["a", "b"], up.upload, statuses().on);
+    t("forget of a stored image is a no-op", up.forget("a") === false && up.forget("zzz") === false);
+    await runGalleryBatch(["c"], up.upload, statuses().on);
+    t("... and the entry is unaffected", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,c");
+  }
+  // The removed pinned image's retry succeeded just before it was removed: nothing to clear, entry stays one.
+  {
+    const srv = makeIdempotentServer();
+    srv.lostResponses.add("create:a");
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["a"], up.upload, statuses().on);
+    t("(setup) a committed but its reply was lost", srv.entries.size === 1 && up.entryId() === null);
+    t("the user removes a; forget clears the pin", up.forget("a") === true);
+    await runGalleryBatch(["b"], up.upload, statuses().on);
+    t("KNOWN LIMIT: the removed image had in fact committed, so b starts a second entry (the UI warns the user)", srv.entries.size === 2);
+  }
   // isUncertainFailure + the key constants
   t("no status (network error) is an uncertain failure", isUncertainFailure(new TypeError("fetch failed")) && isUncertainFailure(new Error("x")));
   t("5xx is uncertain; 4xx is a definite refusal", isUncertainFailure(httpError(500)) && isUncertainFailure(httpError(502)) && !isUncertainFailure(httpError(400)) && !isUncertainFailure(httpError(409)) && !isUncertainFailure(httpError(404)));
@@ -389,7 +433,7 @@ const final = (events: Event[], id: string) => [...events].reverse().find((e) =>
 
 // ---- translations for the batch UI ------------------------------------------------------------
 {
-  const NEW_KEYS = ["gallery.progress", "gallery.uploadRemaining", "gallery.retryRemaining", "gallery.uploadCount", "gallery.batchHint", "gallery.batchStoppedUnavailable", "gallery.batchStoppedAuth", "gallery.batchSummary", "gallery.imageCount", "gallery.imagesInEntry", "gallery.showImageAria", "gallery.oneEntryHint", "gallery.entryCreatedLocked"] as const;
+  const NEW_KEYS = ["gallery.progress", "gallery.uploadRemaining", "gallery.retryRemaining", "gallery.uploadCount", "gallery.batchHint", "gallery.batchStoppedUnavailable", "gallery.batchStoppedAuth", "gallery.batchSummary", "gallery.imageCount", "gallery.removedMayBeUploaded", "gallery.dismissNotice", "gallery.imagesInEntry", "gallery.showImageAria", "gallery.oneEntryHint", "gallery.entryCreatedLocked"] as const;
   for (const lang of ["en", "ja"] as const) {
     const d = DICTIONARIES[lang] as Record<string, string>;
     t(`${lang}: all batch UI keys exist and are non-empty`, NEW_KEYS.every((k) => typeof d[k] === "string" && d[k].length > 0));

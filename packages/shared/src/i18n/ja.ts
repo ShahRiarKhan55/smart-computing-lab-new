@@ -500,6 +500,8 @@ export const ja: Record<keyof typeof en, string> = {
   "gallery.previousPhotoAria": "前の写真",
   "gallery.nextPhotoAria": "次の写真",
   "gallery.imageCount": "{count}枚",
+  "gallery.dismissNotice": "通知を閉じる",
+  "gallery.removedMayBeUploaded": "{name} を一覧から削除しましたが、接続が切れる前にすでにアップロードされた可能性があります。その写真だけのエントリーがギャラリーに表示された場合は、そこで削除してください。",
   "gallery.imagesInEntry": "このエントリーの写真",
   "gallery.showImageAria": "{total}枚中{current}枚目を表示",
   "gallery.oneEntryHint": "選択した画像はすべて、下のキャプション・カテゴリー・プロジェクトを共有する1つのギャラリーエントリーに追加されます。",
