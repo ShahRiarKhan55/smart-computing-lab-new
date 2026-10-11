@@ -165,24 +165,85 @@ export function batchSubmitAction(entries: readonly { id: string; status: BatchS
   return entries.some((e) => e.status === "waiting") ? "uploadRemaining" : "retry";
 }
 
+/** Request header carrying a client-generated key for ONE logical image upload attempt. The same key is
+ *  re-sent when that attempt is retried, so the server can recognise a retry whose first response was lost
+ *  and answer with the original result instead of storing the image twice. Optional: without it the
+ *  request behaves exactly as before. */
+export const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+/** 16-64 URL-safe characters (a UUID fits). Anything else is refused with 400 by the server. */
+export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+
+/**
+ * One idempotency key per image, stable for as long as the ring lives: `keyFor(id)` returns the SAME key
+ * every time it is asked about the same image (so a retry of that image re-sends it), and a different key
+ * for every other image. `generate` supplies the random key (the browser's `crypto.randomUUID`).
+ */
+export function createKeyRing(generate: () => string): { keyFor: (id: string) => string } {
+  const keys = new Map<string, string>();
+  return {
+    keyFor: (id) => {
+      let key = keys.get(id);
+      if (key === undefined) keys.set(id, (key = generate()));
+      return key;
+    },
+  };
+}
+
+/** True when a failed upload request MAY nevertheless have been committed by the server: no HTTP status
+ *  at all (network error, timeout, aborted/lost response) or a 5xx. A 4xx is a definite refusal. */
+export function isUncertainFailure(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status;
+  return typeof status !== "number" || status >= 500;
+}
+
 /**
  * Turns "upload these N images" into ONE gallery entry. The first image to succeed creates the entry
  * (`create` returns its id); every later image — including a retry after a failure — is appended to
- * that same entry (`append`). Because the entry id is remembered here, retrying a failed image can
- * never create a second entry. If the very first image fails nothing exists yet, so the next image
- * simply becomes the one that creates it. Hold one uploader per submission (reset when the dialog
- * reopens); `upload` is shaped for `runGalleryBatch`.
+ * that same entry (`append`). The entry id is remembered, so retrying a failed image can never create a
+ * second entry.
+ *
+ * Lost responses: if `create` fails in a way that may still have committed on the server
+ * (`isUncertain`, default `isUncertainFailure`), that image is PINNED as the creator. Until the entry is
+ * known, every `upload` first re-sends that same create (callers reuse the image's idempotency key, so
+ * the server answers with the original entry if it did commit) and never lets another image create a
+ * second entry. A definite refusal (4xx) un-pins, so the next image creates the entry instead. An image
+ * already stored (e.g. the pinned creator once its retry succeeded) is never sent again.
+ * Hold one uploader per submission (reset when the dialog reopens); `upload` is shaped for
+ * `runGalleryBatch`.
  */
 export function createEntryUploader(
   create: (id: string) => Promise<string>,
   append: (entryId: string, id: string) => Promise<void>,
+  isUncertain: (err: unknown) => boolean = isUncertainFailure,
 ): { upload: (id: string) => Promise<void>; entryId: () => string | null } {
   let entryId: string | null = null;
+  let pinned: string | null = null; // the image whose create outcome is unknown
+  const stored = new Set<string>(); // images known to be stored on the server
+  const doCreate = async (id: string) => {
+    try {
+      entryId = await create(id);
+      stored.add(id);
+      pinned = null;
+    } catch (err) {
+      if (isUncertain(err)) pinned = id;
+      else if (pinned === id) pinned = null;
+      throw err;
+    }
+  };
   return {
     entryId: () => entryId,
     upload: async (id) => {
-      if (entryId === null) entryId = await create(id);
-      else await append(entryId, id);
+      if (stored.has(id)) return;
+      if (entryId === null) {
+        const creator = pinned ?? id;
+        await doCreate(creator);
+        if (creator === id) return;
+      }
+      const target = entryId;
+      if (target === null) throw new Error("gallery entry id missing after create");
+      await append(target, id);
+      stored.add(id);
     },
   };
 }

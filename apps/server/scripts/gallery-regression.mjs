@@ -6,10 +6,18 @@
  *   # terminal 2:
  *   DATABASE_URL=file:/abs/path/to/copy.db API=http://localhost:4062 node scripts/gallery-regression.mjs
  *
+ * CONCURRENCY: the "simultaneous identical requests" checks exercise SQLite write contention. Start the server
+ * with a single database connection (append `?connection_limit=1` to its DATABASE_URL, as above but for the
+ * server only) and set SERIALIZED_DB=1 for this script: the duplicates then queue and ALL must answer 201.
+ * Without it (default pool) SQLite may answer some duplicates with a lock timeout (500); the script then only
+ * requires that no duplicate was stored and that one retry converges on the original.
+ *
  * Run it ONLY against a COPY of the database. Creates/removes fixtures prefixed "ZZ Gallery" /
  * p13gtest-*@example.test (also at start, in case a previous run was interrupted).
  */
+import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
+import net from "node:net";
 import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 
@@ -41,14 +49,15 @@ class Client {
     const json = await res.json().catch(() => null);
     return { status: res.status, json };
   }
-  async upload(path, fields, file) {
+  // `extra.headers` adds request headers (e.g. Idempotency-Key); `extra.base` targets another origin (the lossy proxy).
+  async upload(path, fields, file, extra = {}) {
     const form = new FormData();
     if (file) form.set("file", new Blob([file.buffer], { type: file.contentType }), file.filename);
     for (const [k, v] of Object.entries(fields ?? {})) form.set(k, v);
-    const res = await fetch(`${API}/api${path}`, { method: "POST", headers: this.cookie ? { cookie: this.cookie } : {}, body: form });
+    const res = await fetch(`${extra.base ?? API}/api${path}`, { method: "POST", headers: { ...(this.cookie ? { cookie: this.cookie } : {}), ...(extra.headers ?? {}) }, body: form });
     this.#saveCookie(res);
     const json = await res.json().catch(() => null);
-    return { status: res.status, json };
+    return { status: res.status, json, replayed: res.headers.get("idempotent-replayed") === "true" };
   }
   async raw(path) {
     const res = await fetch(`${API}/api${path}`, { headers: this.cookie ? { cookie: this.cookie } : {} });
@@ -72,6 +81,23 @@ const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(
 const PDF = Buffer.from(`%PDF-1.7\n${"x".repeat(64)}`, "latin1");
 const upload = (client, fields, buffer = JPEG, filename = "photo.jpg", contentType = "image/jpeg") =>
   client.upload("/gallery", fields, { buffer, filename, contentType });
+
+/**
+ * A loopback TCP proxy that forwards the request to the real server and then DROPS the response: the
+ * server runs the whole request (including its database commit) but the client only sees a network error.
+ * This is exactly "the request succeeded on the server but its response was lost".
+ */
+function startLossyProxy(targetPort) {
+  const server = net.createServer((client) => {
+    const upstream = net.connect(targetPort, "127.0.0.1");
+    client.on("data", (d) => upstream.write(d));
+    upstream.once("data", () => setTimeout(() => { client.destroy(); upstream.destroy(); }, 30)); // swallow the reply
+    client.on("error", () => upstream.destroy());
+    upstream.on("error", () => client.destroy());
+    client.on("close", () => upstream.destroy());
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ base: `http://127.0.0.1:${server.address().port}`, close: () => server.close() })));
+}
 
 async function cleanup() {
   const testUsers = await prisma.user.findMany({ where: { email: { startsWith: "p13gtest-" } }, select: { id: true } });
@@ -340,6 +366,183 @@ async function main() {
   // ---- mixed pagination: one card per entry
   const pageCheck = (await a.client.get("/gallery?limit=50")).json.items;
   check("no entry appears twice in a list page", new Set(pageCheck.map((i) => i.id)).size === pageCheck.length);
+
+  // ------------------------------------------------------------------
+  section("IDEMPOTENCY: a request that committed but whose response was lost");
+  const proxy = await startLossyProxy(Number(new URL(API).port));
+  const JPEG2 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 0x22)]); // different bytes, still a valid JPEG signature
+  const KEY = { header: "Idempotency-Key" };
+  const send = (client, path, fields, buffer, key, filename = "idem.jpg", extra = {}) =>
+    client.upload(path, fields, { buffer, filename, contentType: "image/jpeg" }, { headers: key ? { [KEY.header]: key } : {}, ...extra });
+  const lost = async (client, path, fields, buffer, key, filename) => {
+    try {
+      await send(client, path, fields, buffer, key, filename, { base: proxy.base });
+      return false; // the response arrived: the loss was not simulated
+    } catch {
+      return true;
+    }
+  };
+  const attempts = (key) => prisma.galleryUploadAttempt.count({ where: { key } });
+
+  // ---- create
+  const k1 = randomUUID();
+  const ICAP = "ZZ Gallery idem create";
+  const filesBefore1 = await storedFileCount();
+  const blobsBefore1 = blobCount();
+  check("(create) the response is lost: the client sees a network error, not a status", (await lost(a.client, "/gallery", { caption: ICAP }, JPEG, k1)) === true);
+  await new Promise((r) => setTimeout(r, 150));
+  check("(create) ... yet the server committed exactly ONE entry", (await entryCount(ICAP)) === 1);
+  check("(create) ... one attempt row, one StoredFile row", (await attempts(k1)) === 1 && (await storedFileCount()) === filesBefore1 + 1);
+  const blobsAfter1 = blobCount();
+  if (blobsBefore1 !== null) check("(create) ... and one blob", blobsAfter1 === blobsBefore1 + 1, `before ${blobsBefore1}, after ${blobsAfter1}`);
+  const retry1 = await send(a.client, "/gallery", { caption: ICAP }, JPEG, k1);
+  const entry1 = await prisma.galleryItem.findFirst({ where: { caption: ICAP } });
+  check("(create) the retry with the same key answers 201 with the ORIGINAL entry", retry1.status === 201 && retry1.json?.id === entry1.id && retry1.replayed === true, `${retry1.status} replayed=${retry1.replayed}`);
+  check("(create) ... still exactly one entry, one StoredFile, one attempt row", (await entryCount(ICAP)) === 1 && (await storedFileCount()) === filesBefore1 + 1 && (await attempts(k1)) === 1);
+  if (blobsBefore1 !== null) check("(create) ... and NO second blob", blobCount() === blobsAfter1, `after retry ${blobCount()}, expected ${blobsAfter1}`);
+  const retry1b = await send(a.client, "/gallery", { caption: ICAP }, JPEG, k1);
+  check("(create) a second and third retry are the same original entry", retry1b.status === 201 && retry1b.json?.id === entry1.id && (await entryCount(ICAP)) === 1);
+  check("(create) the replayed entry is the full entry (images present, owner can edit)", retry1.json.images.length === 1 && retry1.json.canEdit === true);
+
+  // ---- append
+  const k2 = randomUUID();
+  const filesBefore2 = await storedFileCount();
+  const blobsBefore2 = blobCount();
+  check("(append) the response is lost", (await lost(a.client, `/gallery/${entry1.id}/images`, {}, JPEG2, k2, "idem-2.jpg")) === true);
+  await new Promise((r) => setTimeout(r, 150));
+  check("(append) ... yet exactly ONE image was added", (await prisma.galleryImage.count({ where: { itemId: entry1.id } })) === 1 && (await storedFileCount()) === filesBefore2 + 1 && (await attempts(k2)) === 1);
+  const blobsAfter2 = blobCount();
+  if (blobsBefore2 !== null) check("(append) ... and one blob", blobsAfter2 === blobsBefore2 + 1);
+  const retry2 = await send(a.client, `/gallery/${entry1.id}/images`, {}, JPEG2, k2, "idem-2.jpg");
+  check("(append) the retry answers 201 with the same entry, now holding cover + 1 image", retry2.status === 201 && retry2.json?.id === entry1.id && retry2.json.images.length === 2 && retry2.replayed === true);
+  check("(append) ... no second image, StoredFile or attempt row", (await prisma.galleryImage.count({ where: { itemId: entry1.id } })) === 1 && (await storedFileCount()) === filesBefore2 + 1 && (await attempts(k2)) === 1);
+  if (blobsBefore2 !== null) check("(append) ... and NO second blob", blobCount() === blobsAfter2);
+  const retry2b = await send(a.client, `/gallery/${entry1.id}/images`, {}, JPEG2, k2, "idem-2.jpg");
+  check("(append) repeated retries stay the same", retry2b.status === 201 && retry2b.json.images.length === 2);
+
+  // ---- the lost response is the 10th image: the retry must succeed, not hit the cap
+  section("IDEMPOTENCY: the cap and replays");
+  while ((await a.client.get(`/gallery/${entry1.id}`)).json.images.length < 9) await append(a.client, entry1.id, JPEG, `cap-${randomUUID()}.jpg`);
+  const k10 = randomUUID();
+  const tenth = Buffer.concat([JPEG, Buffer.from([1, 2, 3])]);
+  await lost(a.client, `/gallery/${entry1.id}/images`, {}, tenth, k10, "tenth.jpg");
+  await new Promise((r) => setTimeout(r, 150));
+  check("the 10th image was committed although its response was lost", (await a.client.get(`/gallery/${entry1.id}`)).json.images.length === 10);
+  const retry10 = await send(a.client, `/gallery/${entry1.id}/images`, {}, tenth, k10, "tenth.jpg");
+  check("retrying the 10th image succeeds (201, replay) instead of failing the 10-image cap", retry10.status === 201 && retry10.replayed === true && retry10.json.images.length === 10, `${retry10.status}`);
+  const eleventh = await send(a.client, `/gallery/${entry1.id}/images`, {}, Buffer.concat([JPEG, Buffer.from([9, 9])]), randomUUID(), "eleventh.jpg");
+  check("a NEW key at the cap is still refused (409): the 10-image limit holds", eleventh.status === 409);
+  check("... and the entry still has exactly 10 images", (await prisma.galleryImage.count({ where: { itemId: entry1.id } })) === 9);
+
+  // ---- concurrent duplicates
+  section("IDEMPOTENCY: concurrent duplicate requests");
+  const kc = randomUUID();
+  const CCAP = "ZZ Gallery idem concurrent create";
+  const filesBeforeC = await storedFileCount();
+  const blobsBeforeC = blobCount();
+  const SERIALIZED = process.env.SERIALIZED_DB === "1";
+  const dup = await Promise.all(Array.from({ length: 6 }, () => send(a.client, "/gallery", { caption: CCAP }, JPEG, kc, "dup.jpg")));
+  if (SERIALIZED) {
+    check("(create) six simultaneous identical requests all answer 201", dup.every((r) => r.status === 201), dup.map((r) => r.status).join());
+    check("(create) ... all with the SAME entry id", new Set(dup.map((r) => r.json?.id)).size === 1);
+  } else {
+    check("(create) six simultaneous identical requests: each answers 201 or a retryable 500, never a duplicate", dup.every((r) => r.status === 201 || r.status === 500), dup.map((r) => r.status).join());
+  }
+  const dupSettle = await send(a.client, "/gallery", { caption: CCAP }, JPEG, kc, "dup.jpg");
+  check("(create) one retry afterwards converges on the single original entry", dupSettle.status === 201 && (await entryCount(CCAP)) === 1 && dup.filter((r) => r.status === 201).every((r) => r.json.id === dupSettle.json.id));
+  check("(create) ... exactly one entry, one StoredFile, one attempt row", (await entryCount(CCAP)) === 1 && (await storedFileCount()) === filesBeforeC + 1 && (await attempts(kc)) === 1);
+  if (blobsBeforeC !== null) check("(create) ... and exactly one blob remains (the losers' blobs were removed)", blobCount() === blobsBeforeC + 1, `before ${blobsBeforeC}, after ${blobCount()}`);
+  const concEntry = dupSettle.json.id;
+  const kca = randomUUID();
+  const filesBeforeCA = await storedFileCount();
+  const blobsBeforeCA = blobCount();
+  const dupA = await Promise.all(Array.from({ length: 6 }, () => send(a.client, `/gallery/${concEntry}/images`, {}, JPEG2, kca, "dupa.jpg")));
+  if (SERIALIZED) check("(append) six simultaneous identical requests all answer 201 for the same entry", dupA.every((r) => r.status === 201 && r.json?.id === concEntry), dupA.map((r) => r.status).join());
+  else check("(append) six simultaneous identical requests: each answers 201 or a retryable 500", dupA.every((r) => r.status === 201 || r.status === 500), dupA.map((r) => r.status).join());
+  const dupASettle = await send(a.client, `/gallery/${concEntry}/images`, {}, JPEG2, kca, "dupa.jpg");
+  check("(append) one retry afterwards converges on the original entry", dupASettle.status === 201 && dupASettle.json?.id === concEntry);
+  check("(append) ... exactly one image, one StoredFile, one attempt row", (await prisma.galleryImage.count({ where: { itemId: concEntry } })) === 1 && (await storedFileCount()) === filesBeforeCA + 1 && (await attempts(kca)) === 1);
+  if (blobsBeforeCA !== null) check("(append) ... and exactly one new blob", blobCount() === blobsBeforeCA + 1, `before ${blobsBeforeCA}, after ${blobCount()}`);
+  const distinct = await Promise.all([1, 2, 3].map((i) => send(a.client, "/gallery", { caption: "ZZ Gallery idem distinct" }, Buffer.concat([JPEG, Buffer.from([i])]), randomUUID(), `d${i}.jpg`)));
+  check("simultaneous requests with DIFFERENT keys are independent (three entries)", SERIALIZED ? distinct.every((r) => r.status === 201) && new Set(distinct.map((r) => r.json.id)).size === 3 : distinct.every((r) => r.status === 201 || r.status === 500));
+
+  // ---- a key is bound to its operation, entry and image
+  section("IDEMPOTENCY: keys are bound to the operation, the entry and the image");
+  const imgCount = (id) => prisma.galleryImage.count({ where: { itemId: id } });
+  const other = await upload(a.client, { caption: "ZZ Gallery idem other entry" });
+  const beforeBind = { entries: await prisma.galleryItem.count(), images: await imgCount(entry1.id), otherImages: await imgCount(other.json.id) };
+  const asAppend = await send(a.client, `/gallery/${other.json.id}/images`, {}, JPEG, k1, "x.jpg");
+  check("a CREATE key reused for an APPEND -> 409", asAppend.status === 409);
+  const asCreate = await send(a.client, "/gallery", { caption: "ZZ Gallery idem reuse" }, JPEG2, k2, "x.jpg");
+  check("an APPEND key reused for a CREATE -> 409, and no entry was created", asCreate.status === 409 && (await entryCount("ZZ Gallery idem reuse")) === 0);
+  const wrongEntry = await send(a.client, `/gallery/${other.json.id}/images`, {}, JPEG2, k2, "idem-2.jpg");
+  check("an APPEND key reused for a DIFFERENT entry -> 409 (cannot attach to the wrong entry)", wrongEntry.status === 409 && (await imgCount(other.json.id)) === beforeBind.otherImages);
+  const wrongBytes = await send(a.client, `/gallery/${entry1.id}/images`, {}, JPEG, k2, "other.jpg");
+  check("an APPEND key reused with a DIFFERENT image -> 409", wrongBytes.status === 409);
+  const wrongBytesCreate = await send(a.client, "/gallery", { caption: ICAP }, JPEG2, k1, "other.jpg");
+  check("a CREATE key reused with a DIFFERENT image -> 409", wrongBytesCreate.status === 409 && (await entryCount(ICAP)) === 1);
+  check("none of the refused requests changed anything", (await prisma.galleryItem.count()) === beforeBind.entries + 0 && (await imgCount(entry1.id)) === beforeBind.images);
+  const badKeys = ["short", "x".repeat(65), "has spaces in the key!!", "semi;colon;semi;colon;12"];
+  const badRes = [];
+  for (const bad of badKeys) {
+    badRes.push((await send(a.client, "/gallery", {}, JPEG, bad)).status);
+    badRes.push((await send(a.client, `/gallery/${other.json.id}/images`, {}, JPEG, bad)).status);
+  }
+  check("a malformed Idempotency-Key is refused with 400 on both routes", badRes.every((st) => st === 400), badRes.join());
+  check("... and nothing was stored", (await imgCount(other.json.id)) === 0);
+  check("a request WITHOUT a key still works exactly as before (201, not a replay)", (await send(a.client, "/gallery", { caption: "ZZ Gallery idem none" }, JPEG, null)).status === 201);
+
+  // ---- authorization
+  section("IDEMPOTENCY: keys are scoped to the account and never bypass authorization");
+  check("a guest sending a key -> 401 on create and append", (await send(guest, "/gallery", {}, JPEG, randomUUID())).status === 401 && (await send(guest, `/gallery/${entry1.id}/images`, {}, JPEG, randomUUID())).status === 401);
+  const bCreate = await send(b.client, "/gallery", { caption: ICAP }, JPEG, k1);
+  check("ANOTHER account using my create key gets its OWN new entry, never mine", bCreate.status === 201 && bCreate.json.id !== entry1.id && bCreate.replayed === false);
+  const bOwn = await prisma.galleryItem.findUnique({ where: { id: bCreate.json.id }, include: { file: true } });
+  check("... that entry belongs to the other account and mine is untouched", bOwn.file.ownerId !== entry1.id && (await entryCount(ICAP)) === 2 && (await attempts(k1)) === 2);
+  const bAppendMine = await send(b.client, `/gallery/${entry1.id}/images`, {}, JPEG2, k2, "idem-2.jpg");
+  check("ANOTHER member retrying my append key against MY entry -> 403 (authorization first), nothing exposed", bAppendMine.status === 403 && bAppendMine.json?.images === undefined);
+  const bAppendOwn = await send(b.client, `/gallery/${bCreate.json.id}/images`, {}, JPEG2, k2, "idem-2.jpg");
+  check("... and with my key against THEIR OWN entry it is simply their own new image (keys are per account)", bAppendOwn.status === 201 && bAppendOwn.replayed === false && bAppendOwn.json.images.length === 2);
+  const mgrTarget = await upload(a.client, { caption: "ZZ Gallery idem mgr target" });
+  const mgrRetry = await send(mgr.client, `/gallery/${mgrTarget.json.id}/images`, {}, JPEG2, k2, "idem-2.jpg");
+  check("a manager is a different account: the same key is NOT a replay of mine (a new image is added)", mgrRetry.status === 201 && mgrRetry.replayed === false && mgrRetry.json.images.length === 2);
+
+  // ---- deleted entries
+  section("IDEMPOTENCY: a retry after the entry was deleted never re-creates it");
+  const kd = randomUUID();
+  const DCAP = "ZZ Gallery idem deleted";
+  const dcreate = await send(a.client, "/gallery", { caption: DCAP }, JPEG, kd);
+  const dappendKey = randomUUID();
+  await send(a.client, `/gallery/${dcreate.json.id}/images`, {}, JPEG2, dappendKey, "d.jpg");
+  await a.client.del(`/gallery/${dcreate.json.id}`);
+  const filesBeforeD = await storedFileCount();
+  const blobsBeforeD = blobCount();
+  const rCreate = await send(a.client, "/gallery", { caption: DCAP }, JPEG, kd);
+  check("retrying a CREATE whose entry was deleted -> 404 and nothing is re-created", rCreate.status === 404 && (await entryCount(DCAP)) === 0);
+  const rAppend = await send(a.client, `/gallery/${dcreate.json.id}/images`, {}, JPEG2, dappendKey, "d.jpg");
+  check("retrying an APPEND whose entry was deleted -> 404", rAppend.status === 404);
+  check("... no StoredFile row and no blob was created by either", (await storedFileCount()) === filesBeforeD && (blobsBeforeD === null || blobCount() === blobsBeforeD));
+
+  // ---- cleanup on failures
+  section("IDEMPOTENCY: failures leave no attempt row, no record and no blob");
+  const kf = randomUUID();
+  const filesBeforeF = await storedFileCount();
+  const blobsBeforeF = blobCount();
+  const pdfKeyed = await a.client.upload("/gallery", {}, { buffer: PDF, filename: "doc.pdf", contentType: "application/pdf" }, { headers: { [KEY.header]: kf } });
+  check("a keyed PDF upload -> 400", pdfKeyed.status === 400);
+  const badField = await send(a.client, "/gallery", { category: "NOT_A_CATEGORY" }, JPEG, kf);
+  check("a keyed upload with invalid fields -> 400", badField.status === 400);
+  const badProject = await send(a.client, "/gallery", { projectId: "cmnotaproject0000000000000" }, JPEG, kf);
+  check("a keyed upload that fails INSIDE the transaction (unknown project) -> 400", badProject.status === 400, `${badProject.status}`);
+  check("... none of them left an attempt row, a StoredFile row or a blob", (await attempts(kf)) === 0 && (await storedFileCount()) === filesBeforeF && (blobsBeforeF === null || blobCount() === blobsBeforeF), `blobs ${blobsBeforeF} -> ${blobCount()}`);
+  const kfOk = await send(a.client, "/gallery", { caption: "ZZ Gallery idem after-failure" }, JPEG, kf);
+  check("a key whose attempts FAILED is not burned: the same key then succeeds (201, first time)", kfOk.status === 201 && kfOk.replayed === false && (await attempts(kf)) === 1);
+  const atCapFiles = await storedFileCount();
+  const atCapBlobs = blobCount();
+  const kcap = randomUUID();
+  const refused = await send(a.client, `/gallery/${entry1.id}/images`, {}, Buffer.concat([JPEG, Buffer.from([7, 7, 7])]), kcap, "over.jpg");
+  check("a keyed append refused by the 10-image cap -> 409, no attempt row, no StoredFile, no blob", refused.status === 409 && (await attempts(kcap)) === 0 && (await storedFileCount()) === atCapFiles && (atCapBlobs === null || blobCount() === atCapBlobs));
+  proxy.close();
 
   // ------------------------------------------------------------------
   section("SEARCH: gallery items are deliberately NOT part of global search (Phase 13 scope)");

@@ -41,11 +41,11 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
  * sets `multipart/form-data; boundary=...` itself from the FormData body, which a manual header
  * would break.
  */
-export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
+export async function apiUpload<T>(path: string, body: FormData, extraHeaders: Record<string, string> = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: "POST",
     credentials: "same-origin",
-    headers: { "X-Locale": currentStoredLocale() },
+    headers: { "X-Locale": currentStoredLocale(), ...extraHeaders },
     body,
   });
   const data = await res.json().catch(() => ({}));

@@ -25,6 +25,7 @@ import { paginate } from "../lib/forumSerializers.js";
 import { assertIsImage, uploadSingleFile, validateUpload } from "../lib/fileService.js";
 import { removeFile, saveFile } from "../lib/storage.js";
 import { changedFields, recordAudit, recordVisibilityChange } from "../lib/audit.js";
+import { findCompletedAttempt, isUniqueViolation, readIdempotencyKey, sha256Hex } from "../lib/galleryIdempotency.js";
 
 const router = Router();
 
@@ -102,6 +103,23 @@ async function loadDetail(id: string, viewer: Viewer): Promise<GalleryItem | nul
   return row ? toGalleryItem(row, viewer) : null;
 }
 
+/** Thrown inside the append transaction to roll it back when the Idempotency-Key was already completed. */
+class AttemptAlreadyDone extends Error {
+  constructor(readonly itemId: string) {
+    super("attempt already completed");
+  }
+}
+
+/** Answers a create/append with the full entry (201). `replayed` marks a retry answered from a previous
+ *  completed attempt. Runs AFTER the write transaction has committed and outside any blob-cleanup
+ *  `try`, so a failure here can never delete the blob of rows that are already committed. */
+async function respondWithEntry(res: Response, id: string, viewer: Viewer, replayed: boolean) {
+  const detail = await loadDetail(id, viewer);
+  if (!detail) throw new HttpError(404, "Not found");
+  if (replayed) res.setHeader("Idempotent-Replayed", "true");
+  res.status(201).json(detail);
+}
+
 // POST /api/gallery -> upload an image and create its gallery item together (any signed-in
 // member). multipart: field "file" (image only — see `assertIsImage`) plus the metadata fields
 // in `createGalleryItemFieldsSchema` (caption, category, projectId, visibility, takenAt).
@@ -116,12 +134,25 @@ router.post(
     const fields = parseOrThrow(createGalleryItemFieldsSchema, req.body ?? {});
     assertMayChangeVisibility(req.user!, fields.visibility);
 
+    // Optional Idempotency-Key: a retry of an attempt that already completed (its response was lost)
+    // is answered with the original entry BEFORE anything is written — no new blob, entry or file.
+    const key = readIdempotencyKey(req);
+    const sha256 = sha256Hex(upload.buffer);
+    if (key) {
+      const done = await findCompletedAttempt(prisma, req.user!.id, key, "CREATE", null, sha256);
+      if (done) return respondWithEntry(res, done, req.user!, true);
+    }
+
     // Blob written FIRST, outside the transaction; any failure below removes it immediately
     // rather than leaving an orphaned file with no database record (Phase 13 "Storage cleanup").
     const storageKey = await saveFile(upload.buffer);
+    const dropBlob = () => removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+    let itemId: string;
     try {
-      const id = await prisma.$transaction(async (tx) => {
-        await assertProjectSelectable(tx, req.user!, fields.projectId);
+      itemId = await prisma.$transaction(async (tx) => {
+        // The FIRST statement is a write, deliberately: two concurrent duplicates that both began with a
+        // read would each hold a shared lock and then deadlock trying to upgrade it (SQLite), whereas a
+        // write first makes the second transaction wait for the first to commit.
         const file = await tx.storedFile.create({
           data: {
             storageKey,
@@ -132,6 +163,7 @@ router.post(
             ownerId: req.user!.id,
           },
         });
+        await assertProjectSelectable(tx, req.user!, fields.projectId);
         const item = await tx.galleryItem.create({
           data: {
             fileId: file.id,
@@ -141,6 +173,9 @@ router.post(
             takenAt: fromIsoDate(fields.takenAt ?? null),
           },
         });
+        // Same transaction as the entry: the key exists if and only if the entry does. If a concurrent
+        // duplicate committed first, this insert violates (userId, key) and the whole transaction rolls back.
+        if (key) await tx.galleryUploadAttempt.create({ data: { userId: req.user!.id, key, operation: "CREATE", itemId: item.id, fileId: file.id, sha256 } });
         await recordAudit(tx, {
           actor: req.user!,
           action: "GALLERY_ITEM_CREATED",
@@ -150,11 +185,16 @@ router.post(
         });
         return item.id;
       });
-      res.status(201).json(await loadDetail(id, req.user!));
     } catch (err) {
-      await removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+      await dropBlob(); // nothing was committed, so the blob is unreferenced
+      if (key && isUniqueViolation(err)) {
+        // Lost a race against a concurrent duplicate of this very attempt: answer with the winner's entry.
+        const done = await findCompletedAttempt(prisma, req.user!.id, key, "CREATE", null, sha256);
+        if (done) return respondWithEntry(res, done, req.user!, true);
+      }
       throw err;
     }
+    return respondWithEntry(res, itemId, req.user!, false);
   }),
 );
 
@@ -184,9 +224,32 @@ router.post(
     const upload = validateUpload(req.file);
     assertIsImage(upload);
 
+    const key = readIdempotencyKey(req);
+    const sha256 = sha256Hex(upload.buffer);
+    if (key) {
+      const done = await findCompletedAttempt(prisma, req.user!.id, key, "APPEND", req.params.id, sha256);
+      if (done) return respondWithEntry(res, done, req.user!, true);
+    }
+
     const storageKey = await saveFile(upload.buffer);
+    const dropBlob = () => removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
     try {
       await prisma.$transaction(async (tx) => {
+        // The FIRST statement is a write (touching the entry): it takes the write lock, so concurrent appends
+        // to one entry — duplicates of one attempt, or different images — run one after another instead of
+        // deadlocking on a read-then-write lock upgrade, and every check below sees committed state.
+        try {
+          await tx.galleryItem.update({ where: { id: req.params.id }, data: { updatedAt: new Date() } });
+        } catch (err) {
+          if ((err as { code?: unknown })?.code === "P2025") throw new HttpError(404, "Not found");
+          throw err;
+        }
+        // A concurrent duplicate may have committed while we waited: roll this transaction back (the touch
+        // included) and answer with the original.
+        if (key) {
+          const done = await findCompletedAttempt(tx, req.user!.id, key, "APPEND", req.params.id, sha256);
+          if (done) throw new AttemptAlreadyDone(done);
+        }
         const item = await tx.galleryItem.findUnique({
           where: { id: req.params.id },
           include: { file: { select: { visibility: true, deletedAt: true } }, images: { select: { sortOrder: true, file: { select: { deletedAt: true } } } } },
@@ -209,6 +272,7 @@ router.post(
         await tx.galleryImage.create({
           data: { itemId: item.id, fileId: file.id, sortOrder: item.images.reduce((max, i) => Math.max(max, i.sortOrder), 0) + 1 },
         });
+        if (key) await tx.galleryUploadAttempt.create({ data: { userId: req.user!.id, key, operation: "APPEND", itemId: item.id, fileId: file.id, sha256 } });
         await recordAudit(tx, {
           actor: req.user!,
           action: "GALLERY_ITEM_UPDATED",
@@ -217,11 +281,16 @@ router.post(
           details: { imageAdded: true, imageCount: live.length + 2 },
         });
       });
-      res.status(201).json(await loadDetail(req.params.id, req.user!));
     } catch (err) {
-      await removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+      await dropBlob(); // nothing was committed for this upload (a replay's blob is unused too)
+      if (err instanceof AttemptAlreadyDone) return respondWithEntry(res, err.itemId, req.user!, true);
+      if (key && isUniqueViolation(err)) {
+        const done = await findCompletedAttempt(prisma, req.user!.id, key, "APPEND", req.params.id, sha256);
+        if (done) return respondWithEntry(res, done, req.user!, true);
+      }
       throw err;
     }
+    return respondWithEntry(res, req.params.id, req.user!, false);
   }),
 );
 

@@ -5,10 +5,12 @@ import {
   GALLERY_BATCH_MAX_FILES,
   GALLERY_BATCH_MAX_IMAGE_BYTES,
   GALLERY_CATEGORIES,
+  IDEMPOTENCY_KEY_HEADER,
   IMAGE_MIME_TYPES,
   batchProgress,
   batchSubmitAction,
   createEntryUploader,
+  createKeyRing,
   pendingBatchIds,
   planGallerySelection,
   runGalleryBatch,
@@ -21,6 +23,7 @@ import {
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { apiUpload } from "../lib/api";
+import { newIdempotencyKey } from "../lib/idempotency";
 import { apiErrorMessage } from "../i18n/errorMessages";
 import { formatBytes } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
@@ -78,6 +81,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
   const nextId = useRef(0);
   const uploaderRef = useRef<ReturnType<typeof createEntryUploader> | null>(null); // one per submission session; remembers the entry id for retries
   const createdItemRef = useRef<GalleryItem | null>(null);
+  const keysRef = useRef(createKeyRing(newIdempotencyKey)); // one idempotency key per image, reused on every retry of that image
   const formRef = useRef({ caption, category, projectId, visibility, canSetVisibility });
   formRef.current = { caption, category, projectId, visibility, canSetVisibility }; // read at send time, so a retry before the entry exists uses the current values
 
@@ -102,6 +106,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       setEntryCreated(false);
       uploaderRef.current = null;
       createdItemRef.current = null;
+      keysRef.current = createKeyRing(newIdempotencyKey);
       runningRef.current = false;
       cancelRef.current = false;
     }
@@ -160,6 +165,9 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
 
     const messages = new Map<string, string>();
     const fileFor = (id: string) => entriesRef.current.find((x) => x.id === id)?.file;
+    // The key is created once per image and stays the same when that image is retried, so a request that
+    // the server committed but whose response was lost is recognised and not stored twice.
+    const keyHeader = (id: string) => ({ [IDEMPOTENCY_KEY_HEADER]: keysRef.current.keyFor(id) });
     if (!uploaderRef.current) {
       uploaderRef.current = createEntryUploader(
         async (id) => {
@@ -172,7 +180,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           form.set("category", f.category);
           if (f.projectId) form.set("projectId", f.projectId);
           if (f.canSetVisibility) form.set("visibility", f.visibility);
-          const item = await apiUpload<GalleryItem>("/gallery", form);
+          const item = await apiUpload<GalleryItem>("/gallery", form, keyHeader(id));
           createdItemRef.current = item;
           setEntryCreated(true);
           return item.id;
@@ -182,7 +190,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           if (!file) throw new Error("missing file");
           const form = new FormData();
           form.set("file", file);
-          await apiUpload<GalleryItem>(`/gallery/${entryId}/images`, form);
+          await apiUpload<GalleryItem>(`/gallery/${entryId}/images`, form, keyHeader(id));
         },
       );
     }

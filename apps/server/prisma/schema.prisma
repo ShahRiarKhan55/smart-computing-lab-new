@@ -74,6 +74,7 @@ model User {
   notifications      Notification[]            @relation("NotificationRecipient")
   notificationsActed Notification[]            @relation("NotificationActor")
   files              StoredFile[]
+  galleryUploads     GalleryUploadAttempt[]
   eventsCreated      Event[]
   knowledgeDocs      KnowledgeDoc[]
   labResources       LabResource[]
@@ -572,6 +573,28 @@ model GalleryImage {
   file StoredFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@index([itemId, sortOrder])
+}
+
+// One row per COMPLETED gallery upload attempt that carried an `Idempotency-Key`. It is written in the
+// SAME transaction as the entry/image it describes, and the (userId, key) uniqueness is what makes a
+// retry (e.g. after a lost response) or two concurrent duplicates resolve to the original result
+// instead of a second entry/image. `operation` (CREATE | APPEND), `itemId` and `sha256` bind a key to
+// what it first did; reusing it for anything else is refused. `itemId`/`fileId` are plain ids with no
+// foreign key so the record outlives a deleted entry (a replay then answers 404, never re-creates).
+model GalleryUploadAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  operation String // CREATE | APPEND
+  itemId    String
+  fileId    String
+  sha256    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([createdAt])
 }
 
 // =====================================================================
