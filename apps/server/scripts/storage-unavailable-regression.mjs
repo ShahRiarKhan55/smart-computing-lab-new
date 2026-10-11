@@ -49,7 +49,7 @@ function startServer(env) {
   const child = spawn(process.execPath, [path.join(SERVER_ROOT, "..", "..", "node_modules", "tsx", "dist", "cli.mjs"), path.join(SERVER_ROOT, "src", "index.ts")], {
     cwd: SERVER_ROOT,
     // Test-environment safety: never let an ambient Turso/Blob credential redirect this server.
-    env: { ...env, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", BLOB_READ_WRITE_TOKEN: "" },
+    env: { ...env, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", BLOB_READ_WRITE_TOKEN: "", LAB_BLOB_READ_WRITE_TOKEN: "" },
   });
   children.add(child);
   child.on("exit", () => children.delete(child));

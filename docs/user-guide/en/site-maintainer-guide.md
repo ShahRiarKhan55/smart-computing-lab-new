@@ -52,7 +52,8 @@ Even with the libSQL adapter, Prisma 5.x's native "library" query engine still r
 | `TRUST_PROXY` | all | `0` (no reverse proxy) / `1` (exactly one trusted hop) — see Trust Proxy below |
 | `NODE_ENV` | all | `development` / `production` |
 | `PUBLIC_BASE_URL` | optional | enables `/sitemap.xml` and gives invitation links an absolute URL; omitted in local dev |
-| `BLOB_READ_WRITE_TOKEN` | production | `<provisioned automatically when Vercel Blob storage is attached>` |
+| `LAB_BLOB_READ_WRITE_TOKEN` | production | `<token of the PRIVATE Vercel Blob store>` — preferred; see Storage below |
+| `BLOB_READ_WRITE_TOKEN` | production | `<provisioned automatically when Vercel Blob storage is attached>` — fallback, used only when `LAB_BLOB_READ_WRITE_TOKEN` is unset or blank |
 
 Never commit real values for any secret-marked variable — see `apps/server/.env.example` for the full annotated list.
 
@@ -68,9 +69,11 @@ bcrypt password hashing (cost 10); a fixed dummy hash is compared against for an
 
 ## Storage
 
-Dual backend (`lib/storage.ts`): local filesystem in development, Vercel Blob (private access) in production, selected automatically by whether `BLOB_READ_WRITE_TOKEN` is set. Files are addressed by an opaque, server-generated `storageKey` — never a user-supplied name or path. `npm run storage:reconcile -w apps/server` finds and reports orphaned blobs/rows.
+Dual backend (`lib/storage.ts`): local filesystem in development, Vercel Blob (private access) in production, selected automatically by whether a Blob token is set (`LAB_BLOB_READ_WRITE_TOKEN`, else `BLOB_READ_WRITE_TOKEN`). Files are addressed by an opaque, server-generated `storageKey` — never a user-supplied name or path. `npm run storage:reconcile -w apps/server` finds and reports orphaned blobs/rows.
 
-**Vercel uploads need Blob.** A Vercel function's filesystem is read-only (and `/tmp` is ephemeral), so it is never persistent storage. Production (and Preview) uploads therefore require the Vercel Blob backend: attach a Blob store to the project so `BLOB_READ_WRITE_TOKEN` is set. Without the token, `POST /api/gallery` and `POST /api/files` return a controlled `503` ("File storage is not available right now…") instead of trying to write to the local disk; the rest of the site keeps working. Setting `STORAGE_DIR` on Vercel does not make that filesystem persistent and does not bypass this guard. Outside Vercel (local development, self-hosted servers) the local-disk backend is unchanged.
+**Vercel uploads need Blob.** A Vercel function's filesystem is read-only (and `/tmp` is ephemeral), so it is never persistent storage. Production (and Preview) uploads therefore require the Vercel Blob backend: attach a **Private** Blob store to the project so a Blob token is set. Without a token, `POST /api/gallery` and `POST /api/files` return a controlled `503` ("File storage is not available right now…") instead of trying to write to the local disk; the rest of the site keeps working. Setting `STORAGE_DIR` on Vercel does not make that filesystem persistent and does not bypass this guard. Outside Vercel (local development, self-hosted servers) the local-disk backend is unchanged.
+
+**Which token, and why a Private store.** The app writes every file with `access: "private"` and streams it to browsers itself through `GET /api/files/:id`, which enforces Public / Lab-only visibility; the Blob URL is never sent to a client. That only works against a **Private** Blob store (a Public store rejects it with "Cannot use private access on a public store"). The token is chosen by `resolveBlobToken` in `lib/storage.ts`: `LAB_BLOB_READ_WRITE_TOKEN` (trimmed) if set and not blank, otherwise `BLOB_READ_WRITE_TOKEN`. The selected token is passed explicitly to every Blob call (put, get, head, delete), so it takes priority over Vercel's OIDC / `BLOB_STORE_ID` lookup. Use the `LAB_` variable when the project also has another (for example an older Public) store connected, because that store owns the default `BLOB_READ_WRITE_TOKEN`. Never print or log either value. Changing a variable only affects new deployments.
 
 ## Build, test, seed, migrate
 

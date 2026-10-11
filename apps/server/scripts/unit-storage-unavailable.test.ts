@@ -12,10 +12,11 @@ let ok = 0;
 const failures: string[] = [];
 const t = (name: string, cond: boolean) => (cond ? ok++ : failures.push(name));
 
-// storage.ts reads STORAGE_DIR / BLOB_READ_WRITE_TOKEN once, at import: set them first.
+// storage.ts reads STORAGE_DIR / the Blob token variables once, at import: set them first.
 const dir = mkdtempSync(path.join(tmpdir(), "scl-storage-unavailable-test-"));
 process.env.STORAGE_DIR = dir;
 delete process.env.BLOB_READ_WRITE_TOKEN;
+delete process.env.LAB_BLOB_READ_WRITE_TOKEN;
 const { StorageUnavailableError, asStorageUnavailable, isPersistentStorageUnavailable, saveFile, removeFile } = await import("../src/lib/storage.js");
 const { HttpError } = await import("../src/lib/validate.js");
 
