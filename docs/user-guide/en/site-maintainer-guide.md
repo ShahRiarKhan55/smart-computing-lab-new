@@ -70,6 +70,8 @@ bcrypt password hashing (cost 10); a fixed dummy hash is compared against for an
 
 Dual backend (`lib/storage.ts`): local filesystem in development, Vercel Blob (private access) in production, selected automatically by whether `BLOB_READ_WRITE_TOKEN` is set. Files are addressed by an opaque, server-generated `storageKey` — never a user-supplied name or path. `npm run storage:reconcile -w apps/server` finds and reports orphaned blobs/rows.
 
+**Vercel uploads need Blob.** A Vercel function's filesystem is read-only (and `/tmp` is ephemeral), so it is never persistent storage. Production (and Preview) uploads therefore require the Vercel Blob backend: attach a Blob store to the project so `BLOB_READ_WRITE_TOKEN` is set. Without the token, `POST /api/gallery` and `POST /api/files` return a controlled `503` ("File storage is not available right now…") instead of trying to write to the local disk; the rest of the site keeps working. Setting `STORAGE_DIR` on Vercel does not make that filesystem persistent and does not bypass this guard. Outside Vercel (local development, self-hosted servers) the local-disk backend is unchanged.
+
 ## Build, test, seed, migrate
 
 ```
