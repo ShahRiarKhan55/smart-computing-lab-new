@@ -14,10 +14,11 @@ import { HttpError } from "./validate.js";
  * URL to a caller; every function here returns/accepts only the same opaque server-generated key
  * (`generateStorageKey`, a v4 UUID) regardless of which backend is active.
  *
- * TWO BACKENDS, selected once at module load by whether `BLOB_READ_WRITE_TOKEN` is set (the same
- * env var Vercel itself sets automatically when Blob storage is attached to a project, and the
- * same one `@vercel/blob`'s own functions read by default — this module doesn't invent a second
- * flag to mean the same thing):
+ * TWO BACKENDS, selected once at module load by whether a Blob token is configured — see
+ * `resolveBlobToken`: `LAB_BLOB_READ_WRITE_TOKEN` (the PRIVATE store's token, preferred) or, failing
+ * that, the standard `BLOB_READ_WRITE_TOKEN` Vercel sets when a store is attached. The selected
+ * token is passed EXPLICITLY to every SDK call below, so the SDK's own lookup (OIDC, `BLOB_STORE_ID`,
+ * the default env var) can never route a call to a different store than the one this app selected:
  *
  * - **Unset (local development — the existing behavior, unchanged)**: plain files under
  *   `STORAGE_ROOT` (`STORAGE_DIR` env var; defaults to `apps/server/storage/files`), outside
@@ -43,7 +44,19 @@ import { HttpError } from "./validate.js";
 const DEFAULT_ROOT = path.join(process.cwd(), "storage", "files");
 export const STORAGE_ROOT = path.resolve(process.env.STORAGE_DIR || DEFAULT_ROOT);
 
-const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
+/**
+ * The Vercel Blob token this app uses: `LAB_BLOB_READ_WRITE_TOKEN` (trimmed) if it is set and not
+ * blank, otherwise `BLOB_READ_WRITE_TOKEN` (trimmed) if set and not blank, otherwise `undefined`.
+ * The `LAB_` variable exists because a Vercel project that has a second (e.g. old Public) store
+ * connected already owns `BLOB_READ_WRITE_TOKEN`, and `access: "private"` only works against a
+ * Private store. Never log or return the value.
+ */
+export function resolveBlobToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.LAB_BLOB_READ_WRITE_TOKEN?.trim() || env.BLOB_READ_WRITE_TOKEN?.trim() || undefined;
+}
+
+const BLOB_TOKEN = resolveBlobToken();
+const USE_BLOB = !!BLOB_TOKEN;
 
 let rootReady: Promise<void> | null = null;
 async function ensureRoot(): Promise<void> {
@@ -81,7 +94,7 @@ export class StorageUnavailableError extends HttpError {
  * unaffected. Deliberately NOT a startup check: the rest of the site must run without a token.
  */
 export function isPersistentStorageUnavailable(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.NODE_ENV === "production" && !!env.VERCEL && !env.BLOB_READ_WRITE_TOKEN;
+  return env.NODE_ENV === "production" && !!env.VERCEL && !resolveBlobToken(env);
 }
 
 /**
@@ -128,12 +141,12 @@ export async function saveFile(bytes: Buffer): Promise<string> {
   const key = generateStorageKey();
 
   if (USE_BLOB) {
-    await put(key, bytes, { access: "private", addRandomSuffix: false });
+    await put(key, bytes, { access: "private", addRandomSuffix: false, token: BLOB_TOKEN });
     return key;
   }
 
   if (isPersistentStorageUnavailable()) {
-    console.error("[storage] upload refused: no persistent storage backend (BLOB_READ_WRITE_TOKEN is not set on Vercel)");
+    console.error("[storage] upload refused: no persistent storage backend (no Blob token is set on Vercel: LAB_BLOB_READ_WRITE_TOKEN / BLOB_READ_WRITE_TOKEN)");
     throw new StorageUnavailableError("no-persistent-backend");
   }
 
@@ -170,7 +183,7 @@ export async function openReadStream(storageKey: string): Promise<Readable> {
     // statusCode 200 vs 304 is a discriminated union in the SDK's types (304 -> stream: null),
     // relevant only when a caller passes `ifNoneMatch` — this call never does, so 200 is the only
     // reachable branch; the explicit check narrows the type rather than asserting past it.
-    const result = await get(storageKey, { access: "private" });
+    const result = await get(storageKey, { access: "private", token: BLOB_TOKEN });
     if (!result || result.statusCode !== 200) {
       const err = new Error(`Blob not found for storage key: ${storageKey}`) as NodeJS.ErrnoException;
       err.code = "ENOENT";
@@ -187,7 +200,7 @@ export async function openReadStream(storageKey: string): Promise<Readable> {
 export async function fileExists(storageKey: string): Promise<boolean> {
   if (USE_BLOB) {
     try {
-      await head(storageKey);
+      await head(storageKey, { token: BLOB_TOKEN });
       return true;
     } catch {
       return false;
@@ -205,7 +218,7 @@ export async function fileExists(storageKey: string): Promise<boolean> {
 export async function removeFile(storageKey: string): Promise<void> {
   if (USE_BLOB) {
     try {
-      await del(storageKey);
+      await del(storageKey, { token: BLOB_TOKEN });
     } catch {
       // Best-effort, matching the local-filesystem branch below: a blob that's already gone (or
       // a transient delete failure for one this app is about to lose track of anyway, since the
