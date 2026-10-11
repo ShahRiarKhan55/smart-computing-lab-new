@@ -1778,3 +1778,57 @@ button.notification-item--plain {
   justify-content: space-between;
   gap: var(--space-3);
 }
+
+/* Gallery multi-image upload (GalleryUploadModal): per-file list with a text status (never colour alone). */
+.gallery-batch {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.gallery-batch__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 6px;
+  font-size: var(--text-sm, 0.9rem);
+}
+
+.gallery-batch__name {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gallery-batch__size {
+  color: var(--muted);
+}
+
+.gallery-batch__status {
+  font-weight: 600;
+}
+
+.gallery-batch__item--failed .gallery-batch__status {
+  color: var(--danger);
+}
+
+.gallery-batch__item--cancelled .gallery-batch__status {
+  color: var(--muted);
+}
+
+.gallery-batch__error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.gallery-batch__rejections {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--danger);
+}
