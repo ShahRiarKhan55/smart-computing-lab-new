@@ -5,9 +5,12 @@ import {
   GALLERY_BATCH_MAX_FILES,
   GALLERY_BATCH_MAX_IMAGE_BYTES,
   GALLERY_CATEGORIES,
+  IDEMPOTENCY_KEY_HEADER,
   IMAGE_MIME_TYPES,
   batchProgress,
   batchSubmitAction,
+  createEntryUploader,
+  createKeyRing,
   pendingBatchIds,
   planGallerySelection,
   runGalleryBatch,
@@ -20,6 +23,7 @@ import {
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { apiUpload } from "../lib/api";
+import { newIdempotencyKey } from "../lib/idempotency";
 import { apiErrorMessage } from "../i18n/errorMessages";
 import { formatBytes } from "../lib/format";
 import { useLocale } from "../i18n/LocaleContext";
@@ -30,7 +34,7 @@ interface GalleryUploadModalProps {
   projects: { id: string; title: string }[];
   canSetVisibility: boolean;
   onClose: () => void;
-  /** Called once per batch with every item created in it (not once per file). */
+  /** Called once per submission with the ONE gallery entry it created (not once per file). */
   onUploaded: (items: GalleryItem[]) => void;
 }
 
@@ -48,8 +52,10 @@ const REJECT_KEY: Record<SelectionRejectReason, "gallery.rejectedType" | "galler
   batchFull: "gallery.rejectedBatchFull",
 };
 
-/** Add-photos form: choose up to GALLERY_BATCH_MAX_FILES images, one shared caption/category/project/
- *  visibility, uploaded one at a time through the existing single-file `POST /api/gallery`. Client-side
+/** Add-photos form: choose up to GALLERY_BATCH_MAX_FILES images that become ONE gallery entry with one
+ *  caption/category/project/visibility. The images are sent one request at a time (Vercel's 4.5 MB body
+ *  limit): the first successful one creates the entry via `POST /api/gallery`, the rest are appended with
+ *  `POST /api/gallery/:id/images` (see `createEntryUploader`), so a retry never creates a second entry. Client-side
  *  checks are a courtesy for fast feedback only — the server is the authority (magic-byte signature
  *  check, size limit, allow-list), so a rejected upload always shows the SERVER's error, never a
  *  fabricated success. Batch logic (selection rules, sequencing, stop-on-401/503, retry) lives in
@@ -67,11 +73,21 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
   const [cancelRequested, setCancelRequested] = useState(false);
   const [runIds, setRunIds] = useState<string[]>([]); // the files in the batch currently/last running (for "Uploading n of m")
   const [finished, setFinished] = useState<{ succeeded: number; failed: number; cancelled: number } | null>(null);
+  // Set when the user removes the image that may already have created the entry. Deliberately separate from
+  // `error` (which every pick/remove/submit clears): it stays through the next Upload attempt and goes away
+  // only when dismissed, replaced by another such warning, or when the dialog is reopened.
+  const [removedWarning, setRemovedWarning] = useState<string | null>(null);
+  const [entryCreated, setEntryCreated] = useState(false); // once true the shared details belong to the existing entry
   const fileInputRef = useRef<HTMLInputElement>(null);
   const entriesRef = useRef<BatchEntry[]>([]);
   const runningRef = useRef(false); // synchronous guard against a double-click starting two batches
   const cancelRef = useRef(false);
   const nextId = useRef(0);
+  const uploaderRef = useRef<ReturnType<typeof createEntryUploader> | null>(null); // one per submission session; remembers the entry id for retries
+  const createdItemRef = useRef<GalleryItem | null>(null);
+  const keysRef = useRef(createKeyRing(newIdempotencyKey)); // one idempotency key per image, reused on every retry of that image
+  const formRef = useRef({ caption, category, projectId, visibility, canSetVisibility });
+  formRef.current = { caption, category, projectId, visibility, canSetVisibility }; // read at send time, so a retry before the entry exists uses the current values
 
   function updateEntries(next: BatchEntry[]) {
     entriesRef.current = next;
@@ -87,10 +103,15 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
       setProjectId("");
       setVisibility("LAB_ONLY");
       setError(null);
+      setRemovedWarning(null);
       setRunning(false);
       setCancelRequested(false);
       setRunIds([]);
       setFinished(null);
+      setEntryCreated(false);
+      uploaderRef.current = null;
+      createdItemRef.current = null;
+      keysRef.current = createKeyRing(newIdempotencyKey);
       runningRef.current = false;
       cancelRef.current = false;
     }
@@ -119,10 +140,14 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
 
   function removeEntry(id: string) {
     if (runningRef.current) return;
+    // A removed image can no longer be re-sent: stop waiting for it to resolve an uncertain create.
+    const wasPinnedCreator = uploaderRef.current?.forget(id) ?? false;
+    const removedName = entriesRef.current.find((x) => x.id === id)?.file.name ?? "";
     updateEntries(entriesRef.current.filter((x) => x.id !== id));
     setRejections([]);
     setFinished(null);
     setError(null);
+    if (wasPinnedCreator) setRemovedWarning(t("gallery.removedMayBeUploaded", { name: removedName }));
   }
 
   function setStatus(id: string, status: BatchStatus, message?: string) {
@@ -147,21 +172,43 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
     setRunning(true);
     setCancelRequested(false);
 
-    const created: GalleryItem[] = [];
     const messages = new Map<string, string>();
+    const fileFor = (id: string) => entriesRef.current.find((x) => x.id === id)?.file;
+    // The key is created once per image and stays the same when that image is retried, so a request that
+    // the server committed but whose response was lost is recognised and not stored twice.
+    const keyHeader = (id: string) => ({ [IDEMPOTENCY_KEY_HEADER]: keysRef.current.keyFor(id) });
+    if (!uploaderRef.current) {
+      uploaderRef.current = createEntryUploader(
+        async (id) => {
+          const file = fileFor(id);
+          if (!file) throw Object.assign(new Error("missing file"), { status: 400 }); // a definite failure, never "uncertain"
+          const f = formRef.current;
+          const form = new FormData();
+          form.set("file", file);
+          form.set("caption", f.caption);
+          form.set("category", f.category);
+          if (f.projectId) form.set("projectId", f.projectId);
+          if (f.canSetVisibility) form.set("visibility", f.visibility);
+          const item = await apiUpload<GalleryItem>("/gallery", form, keyHeader(id));
+          createdItemRef.current = item;
+          setEntryCreated(true);
+          return item.id;
+        },
+        async (entryId, id) => {
+          const file = fileFor(id);
+          if (!file) throw Object.assign(new Error("missing file"), { status: 400 }); // a definite failure, never "uncertain"
+          const form = new FormData();
+          form.set("file", file);
+          await apiUpload<GalleryItem>(`/gallery/${entryId}/images`, form, keyHeader(id));
+        },
+      );
+    }
+    const uploader = uploaderRef.current;
     const outcome = await runGalleryBatch(
       ids,
       async (id) => {
-        const entry = entriesRef.current.find((x) => x.id === id);
-        if (!entry) return;
-        const form = new FormData();
-        form.set("file", entry.file);
-        form.set("caption", caption);
-        form.set("category", category);
-        if (projectId) form.set("projectId", projectId);
-        if (canSetVisibility) form.set("visibility", visibility);
         try {
-          created.push(await apiUpload<GalleryItem>("/gallery", form));
+          await uploader.upload(id);
         } catch (err) {
           messages.set(id, apiErrorMessage(err, t));
           throw err;
@@ -174,7 +221,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
     runningRef.current = false;
     setRunning(false);
     setCancelRequested(false);
-    if (created.length > 0) onUploaded(created); // refresh the Gallery once, even after a partial failure
+    if (createdItemRef.current) onUploaded([createdItemRef.current]); // refresh the Gallery once, even after a partial failure
 
     if (outcome.failed === 0 && outcome.cancelled === 0) {
       onClose();
@@ -214,6 +261,14 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           {error}
         </div>
       )}
+      {removedWarning && (
+        <div className="form-hint gallery-batch__warning" role="status">
+          {removedWarning}{" "}
+          <button type="button" className="btn btn--secondary btn--sm" onClick={() => setRemovedWarning(null)}>
+            {t("gallery.dismissNotice")}
+          </button>
+        </div>
+      )}
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-group">
           <label htmlFor="gallery_file">{t("gallery.imageFiles")}</label>
@@ -228,6 +283,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
             onChange={onPickFiles}
           />
           <p className="form-hint">{t("gallery.batchHint", { maxFiles: GALLERY_BATCH_MAX_FILES, max: formatBytes(GALLERY_BATCH_MAX_IMAGE_BYTES, locale) })}</p>
+          <p className="form-hint">{entryCreated ? t("gallery.entryCreatedLocked") : t("gallery.oneEntryHint")}</p>
           {rejections.length > 0 && (
             <ul className="form-hint gallery-batch__rejections" role="alert">
               {rejections.map((m, i) => (
@@ -260,13 +316,13 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
 
         <div className="form-group">
           <label htmlFor="gallery_caption">{t("gallery.caption")}</label>
-          <input id="gallery_caption" value={caption} maxLength={CAPTION_MAX} onChange={(e) => setCaption(e.target.value)} placeholder={t("gallery.optionalPlaceholder")} disabled={running} />
+          <input id="gallery_caption" value={caption} maxLength={CAPTION_MAX} onChange={(e) => setCaption(e.target.value)} placeholder={t("gallery.optionalPlaceholder")} disabled={running || entryCreated} />
         </div>
 
         <div className="form-row">
           <div className="form-group">
             <label htmlFor="gallery_category">{t("gallery.category")}</label>
-            <select id="gallery_category" value={category} onChange={(e) => setCategory(e.target.value as GalleryCategory)} disabled={running}>
+            <select id="gallery_category" value={category} onChange={(e) => setCategory(e.target.value as GalleryCategory)} disabled={running || entryCreated}>
               {GALLERY_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {t(GALLERY_CATEGORY_LABEL_KEY[c])}
@@ -276,7 +332,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           </div>
           <div className="form-group">
             <label htmlFor="gallery_project">{t("gallery.project")}</label>
-            <select id="gallery_project" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={running}>
+            <select id="gallery_project" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={running || entryCreated}>
               <option value="">{t("gallery.noneOption")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -287,7 +343,7 @@ export function GalleryUploadModal({ open, projects, canSetVisibility, onClose, 
           </div>
         </div>
 
-        {canSetVisibility && <VisibilityField id="gallery_visibility" value={visibility} onChange={setVisibility} disabled={running} />}
+        {canSetVisibility && <VisibilityField id="gallery_visibility" value={visibility} onChange={setVisibility} disabled={running || entryCreated} />}
 
         <div className="modal__actions">
           <button className="btn btn--primary form-submit" type="submit" disabled={running || pending === 0}>

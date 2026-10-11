@@ -89,7 +89,10 @@ export type StoredFileRef = z.infer<typeof storedFileRefSchema>;
 
 export const galleryItemSchema = z.object({
   id: z.string(),
+  /** The entry's cover (first) image. */
   file: storedFileRefSchema,
+  /** Every image of the entry in display order, cover first (always at least the cover). */
+  images: z.array(storedFileRefSchema),
   caption: z.string(),
   category: galleryCategorySchema,
   /** "YYYY-MM-DD", or null when not set. */

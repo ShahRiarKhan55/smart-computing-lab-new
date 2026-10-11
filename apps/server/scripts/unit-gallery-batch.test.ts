@@ -11,6 +11,11 @@ import {
   GALLERY_BATCH_STOP_STATUSES,
   batchProgress,
   batchSubmitAction,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_KEY_PATTERN,
+  createEntryUploader,
+  createKeyRing,
+  isUncertainFailure,
   pendingBatchIds,
   planGallerySelection,
   retryableBatchIds,
@@ -223,9 +228,212 @@ const final = (events: Event[], id: string) => [...events].reverse().find((e) =>
     }));
 }
 
+// ---- one submission = ONE gallery entry (createEntryUploader) -----------------------------------
+{
+  // A fake server: create() makes an entry, append() adds an image to it. Counting calls reproduces the
+  // reported bug (the old client called create() once PER image, i.e. N entries) and proves the fix.
+  const makeServer = (failOn: (call: string) => boolean = () => false) => {
+    const entries = new Map<string, string[]>();
+    const calls: string[] = [];
+    let seq = 0;
+    return {
+      entries,
+      calls,
+      create: async (id: string) => {
+        calls.push(`create:${id}`);
+        if (failOn(`create:${id}`)) throw httpError(500);
+        const entryId = `e${++seq}`;
+        entries.set(entryId, [id]);
+        return entryId;
+      },
+      append: async (entryId: string, id: string) => {
+        calls.push(`append:${entryId}:${id}`);
+        if (failOn(`append:${entryId}:${id}`)) throw httpError(500);
+        if (!entries.has(entryId)) throw httpError(404);
+        entries.get(entryId)!.push(id);
+      },
+    };
+  };
+  const statuses = () => {
+    const m = new Map<string, BatchStatus>();
+    return { m, on: (id: string, st: BatchStatus) => void m.set(id, st) };
+  };
+
+  // THE REPORTED BUG: uploading 4 images in one submission must produce exactly ONE entry holding 4 images.
+  {
+    const srv = makeServer();
+    const up = createEntryUploader(srv.create, srv.append);
+    const out = await runGalleryBatch(["a", "b", "c", "d"], up.upload, statuses().on);
+    t("4 images in one submission -> exactly ONE entry", srv.entries.size === 1);
+    t("... that entry holds all 4 images in selection order", JSON.stringify([...srv.entries.values()][0]) === JSON.stringify(["a", "b", "c", "d"]));
+    t("... via exactly one create and three appends", srv.calls.filter((c) => c.startsWith("create")).length === 1 && srv.calls.filter((c) => c.startsWith("append")).length === 3);
+    t("... and the run reports 4 succeeded", out.succeeded === 4 && out.failed === 0);
+    t("the uploader exposes the created entry id", up.entryId() === "e1");
+  }
+  // A single image keeps the old behaviour: one create, no append.
+  {
+    const srv = makeServer();
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["only"], up.upload, statuses().on);
+    t("a single image = one create and no append", srv.calls.length === 1 && srv.entries.size === 1);
+  }
+  // Partial failure then retry: the retry appends to the SAME entry; it never creates a second one.
+  {
+    let failC = true;
+    const srv = makeServer((c) => failC && c.endsWith(":c"));
+    const up = createEntryUploader(srv.create, srv.append);
+    const first = await runGalleryBatch(["a", "b", "c", "d"], up.upload, statuses().on);
+    t("a failed middle image fails alone (a, b, d succeed; c fails)", first.succeeded === 3 && first.failed === 1);
+    t("... still ONE entry, holding the three that succeeded", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,d");
+    failC = false;
+    const retry = await runGalleryBatch(["c"], up.upload, statuses().on);
+    t("retrying the failed image succeeds", retry.succeeded === 1);
+    t("... appended to the SAME entry (no duplicate entry created)", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,d,c");
+    t("... exactly one create call in total across both runs", srv.calls.filter((c) => c.startsWith("create")).length === 1);
+  }
+  // The very first image is DEFINITELY refused (4xx): nothing exists, so the next image creates the entry.
+  {
+    const srv = makeServer((c) => c === "create:a");
+    const up = createEntryUploader(async (id) => { try { return await srv.create(id); } catch { throw httpError(400); } }, srv.append);
+    await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("first image refused with a 4xx -> the second creates the entry, the third joins it", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "b,c");
+  }
+  // Idempotent fake server: remembers the outcome of each image (keyed by image id, as the real server keys by
+  // Idempotency-Key) and can lose the RESPONSE of a request it already committed.
+  const makeIdempotentServer = () => {
+    const entries = new Map<string, string[]>();
+    const byImage = new Map<string, string>(); // image id (== its key) -> entry id
+    const calls: string[] = [];
+    let seq = 0;
+    const lostResponses = new Set<string>(); // calls whose response is dropped AFTER the commit
+    return {
+      entries, calls, lostResponses,
+      create: async (id: string) => {
+        calls.push(`create:${id}`);
+        let entryId = byImage.get(id);
+        if (!entryId) { entryId = `e${++seq}`; entries.set(entryId, [id]); byImage.set(id, entryId); }
+        if (lostResponses.delete(`create:${id}`)) throw new TypeError("fetch failed"); // committed, response lost
+        return entryId;
+      },
+      append: async (entryId: string, id: string) => {
+        calls.push(`append:${entryId}:${id}`);
+        if (!byImage.has(id)) { entries.get(entryId)!.push(id); byImage.set(id, entryId); }
+        if (lostResponses.delete(`append:${id}`)) throw new TypeError("fetch failed");
+      },
+    };
+  };
+  // THE LOST-RESPONSE CASE (create): the server committed image a's create but the client never saw the reply.
+  {
+    const srv = makeIdempotentServer();
+    srv.lostResponses.add("create:a");
+    const up = createEntryUploader(srv.create, srv.append);
+    const out = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("lost create response: still exactly ONE entry (the others did not create a second one)", srv.entries.size === 1);
+    t("... holding a, b and c exactly once each", [...srv.entries.values()][0].join() === "a,b,c");
+    t("... a is retried with the same identity (create:a twice), b and c are appends", srv.calls.filter((c) => c === "create:a").length === 2 && srv.calls.filter((c) => c.startsWith("create")).length === 2);
+    t("... the run reports a failed, b and c succeeded", out.failed === 1 && out.succeeded === 2);
+    const retry = await runGalleryBatch(["a"], up.upload, statuses().on);
+    t("... retrying a afterwards succeeds without sending anything (it is known to be stored)", retry.succeeded === 1 && srv.calls.length === 4 && [...srv.entries.values()][0].join() === "a,b,c");
+  }
+  // Uncertain first create where the server did NOT commit: the pinned image is re-sent first, then the rest append.
+  {
+    const srv = makeServer();
+    let failures = 1;
+    const up = createEntryUploader(async (id) => { if (id === "a" && failures-- > 0) throw new TypeError("fetch failed"); return srv.create(id); }, srv.append);
+    await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("uncertain first create (nothing committed): a is re-created first, b and c append -> one entry a,b,c", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,c");
+  }
+  // The network stays down: nothing is created and no other image may start a second entry.
+  {
+    const srv = makeIdempotentServer();
+    const up = createEntryUploader(async () => { throw new TypeError("fetch failed"); }, srv.append);
+    const out = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("network down: every image fails, no entry exists, no append was attempted", out.failed === 3 && srv.entries.size === 0 && up.entryId() === null && srv.calls.length === 0);
+  }
+  // The lost response is on an APPEND: the retry re-sends the same image to the SAME entry and nothing is duplicated.
+  {
+    const srv = makeIdempotentServer();
+    srv.lostResponses.add("append:b");
+    const up = createEntryUploader(srv.create, srv.append);
+    const first = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("lost append response: b fails alone, a and c succeed", first.failed === 1 && first.succeeded === 2);
+    t("... but the server DID store b: exactly one entry a,b,c", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,c");
+    const retry = await runGalleryBatch(["b"], up.upload, statuses().on);
+    t("... retrying b is answered from the original (still a,b,c, still one entry)", retry.succeeded === 1 && srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,c");
+  }
+  // THE PINNED-CREATOR DEAD END: uncertain create -> the user REMOVES that image -> retry the rest.
+  {
+    const srv = makeIdempotentServer();
+    let down = true; // the connection is bad for the first image only
+    const up = createEntryUploader(async (id) => { if (down && id === "a") throw new TypeError("fetch failed"); return srv.create(id); }, srv.append);
+    const first = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("(setup) uncertain create of a: the whole run fails, nothing exists, nothing else created an entry", first.failed === 3 && srv.entries.size === 0);
+    t("while a is still in the list, the pin holds: b is NOT allowed to create a second entry", srv.calls.every((c) => !c.startsWith("create:b") && !c.startsWith("create:c")));
+    t("forget(a) reports that the removed image was the pinned creator", up.forget("a") === true);
+    down = false;
+    const retry = await runGalleryBatch(["b", "c"], up.upload, statuses().on);
+    t("after removing a, retrying b and c succeeds", retry.succeeded === 2 && retry.failed === 0);
+    t("... as ONE entry holding b and c (no duplicate entry)", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "b,c");
+    t("... b created it, c was appended (a was never re-sent)", srv.calls.filter((c) => c.startsWith("create")).join() === "create:b" && !srv.calls.some((c) => c.includes(":a") && c !== "create:a"));
+  }
+  // The pin of an image that is STILL in the list is untouched by removing a different image.
+  {
+    const srv = makeIdempotentServer();
+    const up = createEntryUploader(async (id) => { if (id === "a") throw new TypeError("fetch failed"); return srv.create(id); }, srv.append);
+    await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("removing a DIFFERENT image does not clear the pin (forget returns false)", up.forget("b") === false);
+    await runGalleryBatch(["c"], up.upload, statuses().on);
+    t("... so c still cannot create a second entry while a is unresolved", srv.entries.size === 0);
+  }
+  // forget() of an image that was never pinned / is already stored is a no-op
+  {
+    const srv = makeIdempotentServer();
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["a", "b"], up.upload, statuses().on);
+    t("forget of a stored image is a no-op", up.forget("a") === false && up.forget("zzz") === false);
+    await runGalleryBatch(["c"], up.upload, statuses().on);
+    t("... and the entry is unaffected", srv.entries.size === 1 && [...srv.entries.values()][0].join() === "a,b,c");
+  }
+  // The removed pinned image's retry succeeded just before it was removed: nothing to clear, entry stays one.
+  {
+    const srv = makeIdempotentServer();
+    srv.lostResponses.add("create:a");
+    const up = createEntryUploader(srv.create, srv.append);
+    await runGalleryBatch(["a"], up.upload, statuses().on);
+    t("(setup) a committed but its reply was lost", srv.entries.size === 1 && up.entryId() === null);
+    t("the user removes a; forget clears the pin", up.forget("a") === true);
+    await runGalleryBatch(["b"], up.upload, statuses().on);
+    t("KNOWN LIMIT: the removed image had in fact committed, so b starts a second entry (the UI warns the user)", srv.entries.size === 2);
+  }
+  // isUncertainFailure + the key constants
+  t("no status (network error) is an uncertain failure", isUncertainFailure(new TypeError("fetch failed")) && isUncertainFailure(new Error("x")));
+  t("5xx is uncertain; 4xx is a definite refusal", isUncertainFailure(httpError(500)) && isUncertainFailure(httpError(502)) && !isUncertainFailure(httpError(400)) && !isUncertainFailure(httpError(409)) && !isUncertainFailure(httpError(404)));
+  {
+    let n = 0;
+    const ring = createKeyRing(() => `generated-key-${String(++n).padStart(8, "0")}`);
+    const first = ring.keyFor("img1");
+    t("the key ring returns the SAME key for the same image (so a retry re-sends it)", ring.keyFor("img1") === first && ring.keyFor("img1") === first);
+    t("... a DIFFERENT key for a different image", ring.keyFor("img2") !== first);
+    t("... and generates a key only once per image", n === 2);
+    t("a fresh ring (dialog reopened) starts new keys", createKeyRing(() => "x".repeat(20)).keyFor("img1") !== undefined && n === 2);
+  }
+  t("the key header is Idempotency-Key", IDEMPOTENCY_KEY_HEADER === "Idempotency-Key");
+  t("a UUID is an acceptable key", IDEMPOTENCY_KEY_PATTERN.test("3f2504e0-4f89-41d3-9a0c-0305e82c3301"));
+  t("too short / too long / odd characters are not", !IDEMPOTENCY_KEY_PATTERN.test("short") && !IDEMPOTENCY_KEY_PATTERN.test("x".repeat(65)) && !IDEMPOTENCY_KEY_PATTERN.test("has space in it 123456") && !IDEMPOTENCY_KEY_PATTERN.test("semi;colon-semi;colon-12"));
+  // Nothing created yet -> no entry id.
+  t("a fresh uploader has no entry id", createEntryUploader(async () => "x", async () => {}).entryId() === null);
+  // A stop status (503) on the first image creates nothing and cancels the rest.
+  {
+    const srv = makeServer();
+    const up = createEntryUploader(async () => { throw httpError(503); }, srv.append);
+    const out = await runGalleryBatch(["a", "b", "c"], up.upload, statuses().on);
+    t("a 503 on the first image creates no entry and cancels the rest", out.failed === 1 && out.cancelled === 2 && out.stoppedBy === 503 && up.entryId() === null && srv.calls.length === 0);
+  }
+}
+
 // ---- translations for the batch UI ------------------------------------------------------------
 {
-  const NEW_KEYS = ["gallery.progress", "gallery.uploadRemaining", "gallery.retryRemaining", "gallery.uploadCount", "gallery.batchHint", "gallery.batchStoppedUnavailable", "gallery.batchStoppedAuth", "gallery.batchSummary"] as const;
+  const NEW_KEYS = ["gallery.progress", "gallery.uploadRemaining", "gallery.retryRemaining", "gallery.uploadCount", "gallery.batchHint", "gallery.batchStoppedUnavailable", "gallery.batchStoppedAuth", "gallery.batchSummary", "gallery.imageCount", "gallery.removedMayBeUploaded", "gallery.dismissNotice", "gallery.imagesInEntry", "gallery.showImageAria", "gallery.oneEntryHint", "gallery.entryCreatedLocked"] as const;
   for (const lang of ["en", "ja"] as const) {
     const d = DICTIONARIES[lang] as Record<string, string>;
     t(`${lang}: all batch UI keys exist and are non-empty`, NEW_KEYS.every((k) => typeof d[k] === "string" && d[k].length > 0));

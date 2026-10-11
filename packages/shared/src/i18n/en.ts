@@ -509,6 +509,13 @@ export const en = {
   "gallery.photoFallback": "Photo",
   "gallery.previousPhotoAria": "Previous photo",
   "gallery.nextPhotoAria": "Next photo",
+  "gallery.imageCount": "{count} photos",
+  "gallery.dismissNotice": "Dismiss",
+  "gallery.removedMayBeUploaded": "{name} was removed, but it may already have been uploaded before the connection dropped. If a one-photo entry for it appears in the gallery, delete that entry there.",
+  "gallery.imagesInEntry": "Photos in this entry",
+  "gallery.showImageAria": "Show photo {current} of {total}",
+  "gallery.oneEntryHint": "All selected images are added to ONE gallery entry that shares the caption, category and project below.",
+  "gallery.entryCreatedLocked": "The entry was created. Caption, category, project and visibility now apply to the whole entry; change them later with Edit.",
 
   // ---- schedule ----------------------------------------------------------------------------
   "schedule.eyebrow": "Members only",

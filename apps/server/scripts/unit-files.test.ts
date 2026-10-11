@@ -144,9 +144,19 @@ const galleryRow = {
   createdAt: now,
   updatedAt: now,
   file: { id: "f1", originalName: "photo.jpg", mimeType: "image/jpeg", sizeBytes: 12345, visibility: "LAB_ONLY", ownerId: "owner-1" },
+  images: [] as { file: { id: string; originalName: string; mimeType: string; sizeBytes: number; deletedAt: Date | null } }[],
   project: { id: "p1", slug: "proj", title: "Hidden Project", status: "ACTIVE", visibility: "LAB_ONLY" },
 };
 const guestView = toGalleryItem(galleryRow, null);
+t("toGalleryItem: a single-image row lists exactly its cover in `images`", guestView.images.length === 1 && guestView.images[0].id === "f1" && guestView.file.id === "f1");
+{
+  const extra = (id: string, deletedAt: Date | null = null) => ({ file: { id, originalName: `${id}.jpg`, mimeType: "image/jpeg", sizeBytes: 1, deletedAt } });
+  const multi = toGalleryItem({ ...galleryRow, images: [extra("f2"), extra("f3", new Date()), extra("f4")] }, null);
+  t("toGalleryItem: a multi-image row lists the cover first, then its extras in the given order", multi.images.map((i) => i.id).join() === "f1,f2,f4");
+  t("toGalleryItem: a soft-deleted extra image is dropped", !multi.images.some((i) => i.id === "f3"));
+  t("toGalleryItem: `file` stays the cover (backward compatible)", multi.file.id === "f1");
+  t("toGalleryItem: every image url is the proxy route, never a storage key or blob URL", multi.images.every((i) => /^\/api\/files\/f\d$/.test(i.url)) && !JSON.stringify(multi).includes("blob"));
+}
 t("toGalleryItem: a hidden project's ref is null'd out for a guest", guestView.project === null);
 t("toGalleryItem: visibility is never sent to a guest/member (manager-only field)", guestView.visibility === undefined);
 t("toGalleryItem: output never contains an account/user id string", !JSON.stringify(guestView).includes("owner-1"));

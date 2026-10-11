@@ -27,6 +27,8 @@ interface GalleryRow {
   createdAt: Date;
   updatedAt: Date;
   file: { id: string; originalName: string; mimeType: string; sizeBytes: number; visibility: string; ownerId: string | null };
+  /** Additional images (the cover is `file`), already ordered; soft-deleted ones are dropped here. */
+  images: { file: { id: string; originalName: string; mimeType: string; sizeBytes: number; deletedAt: Date | null } }[];
   project: { id: string; slug: string; title: string; status: string; visibility: string } | null;
 }
 
@@ -39,6 +41,7 @@ export function toGalleryItem(row: GalleryRow, viewer: Viewer): GalleryItem {
   return {
     id: row.id,
     file: toStoredFileRef(row.file),
+    images: [toStoredFileRef(row.file), ...row.images.filter((i) => !i.file.deletedAt).map((i) => toStoredFileRef(i.file))],
     caption: row.caption,
     category: row.category as GalleryItem["category"],
     takenAt: row.takenAt ? row.takenAt.toISOString().slice(0, 10) : null,

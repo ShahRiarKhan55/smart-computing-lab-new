@@ -74,6 +74,7 @@ model User {
   notifications      Notification[]            @relation("NotificationRecipient")
   notificationsActed Notification[]            @relation("NotificationActor")
   files              StoredFile[]
+  galleryUploads     GalleryUploadAttempt[]
   eventsCreated      Event[]
   knowledgeDocs      KnowledgeDoc[]
   labResources       LabResource[]
@@ -525,8 +526,9 @@ model StoredFile {
   deletedAt    DateTime? // soft delete; the blob is purged by a cleanup job
   createdAt    DateTime  @default(now())
 
-  owner       User?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  galleryItem GalleryItem?
+  owner        User?         @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  galleryItem  GalleryItem?
+  galleryImage GalleryImage?
 
   @@index([entityType, entityId])
   @@index([ownerId])
@@ -549,10 +551,50 @@ model GalleryItem {
   file    StoredFile       @relation(fields: [fileId], references: [id], onDelete: Cascade)
   event   Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
   project ResearchProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  images  GalleryImage[]
 
   @@index([eventId])
   @@index([projectId])
   @@index([category, sortOrder])
+}
+
+// Additional images of ONE gallery entry. `GalleryItem.fileId` stays the entry's cover (first)
+// image, so every pre-existing single-image row is already a complete entry and needs no data
+// migration; a multi-image entry is the cover plus these rows, ordered by `sortOrder`. Every
+// image's file shares the cover file's visibility (kept in sync by the gallery routes).
+model GalleryImage {
+  id        String   @id @default(cuid())
+  itemId    String
+  fileId    String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  item GalleryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  file StoredFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, sortOrder])
+}
+
+// One row per COMPLETED gallery upload attempt that carried an `Idempotency-Key`. It is written in the
+// SAME transaction as the entry/image it describes, and the (userId, key) uniqueness is what makes a
+// retry (e.g. after a lost response) or two concurrent duplicates resolve to the original result
+// instead of a second entry/image. `operation` (CREATE | APPEND), `itemId` and `sha256` bind a key to
+// what it first did; reusing it for anything else is refused. `itemId`/`fileId` are plain ids with no
+// foreign key so the record outlives a deleted entry (a replay then answers 404, never re-creates).
+model GalleryUploadAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  operation String // CREATE | APPEND
+  itemId    String
+  fileId    String
+  sha256    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([createdAt])
 }
 
 // =====================================================================

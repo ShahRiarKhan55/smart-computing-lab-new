@@ -31,6 +31,7 @@ export function GalleryCard({ item, onOpen, onEdit, onDelete }: GalleryCardProps
         <div className="gallery-tile__row">
           <Badge>{t(GALLERY_CATEGORY_LABEL_KEY[item.category])}</Badge>
           <VisibilityBadge visibility={item.visibility} />
+          {item.images.length > 1 && <Badge>{t("gallery.imageCount", { count: item.images.length })}</Badge>}
         </div>
         {item.caption && <p className="gallery-tile__caption">{item.caption}</p>}
         {item.project && (

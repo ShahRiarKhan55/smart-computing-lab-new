@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import type { Prisma } from "@prisma/client";
 import {
   GALLERY_MANAGER_ONLY_KEYS,
@@ -9,6 +9,7 @@ import {
   galleryQuerySchema,
   isManager,
   updateGalleryItemSchema,
+  GALLERY_BATCH_MAX_FILES,
   type GalleryItem,
   type GalleryListResponse,
 } from "@scl/shared";
@@ -24,6 +25,8 @@ import { paginate } from "../lib/forumSerializers.js";
 import { assertIsImage, uploadSingleFile, validateUpload } from "../lib/fileService.js";
 import { removeFile, saveFile } from "../lib/storage.js";
 import { changedFields, recordAudit, recordVisibilityChange } from "../lib/audit.js";
+import { releaseUploadedBlob } from "../lib/galleryBlobCleanup.js";
+import { findCompletedAttempt, isUniqueViolation, readIdempotencyKey, sha256Hex } from "../lib/galleryIdempotency.js";
 
 const router = Router();
 
@@ -34,12 +37,20 @@ const router = Router();
  * never a client-supplied value): any member may create an item, but editing/deleting is the
  * owner or a manager, the same "owned content" shape as a forum post — see
  * @scl/shared/permissions.ts `canEditGalleryItem`.
+ *
+ * An item is ONE entry with one or more images. `GalleryItem.fileId` is the cover (first) image;
+ * further images are `GalleryImage` rows appended with `POST /:id/images`. Every image's file
+ * carries the same visibility (propagated on edit), and deleting the entry deletes all of them.
  */
 
 function galleryInclude() {
   return {
     file: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, visibility: true, ownerId: true, deletedAt: true } },
     project: { select: { id: true, slug: true, title: true, status: true, visibility: true } },
+    images: {
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      select: { file: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, deletedAt: true } } },
+    },
   } satisfies Prisma.GalleryItemInclude;
 }
 
@@ -93,6 +104,23 @@ async function loadDetail(id: string, viewer: Viewer): Promise<GalleryItem | nul
   return row ? toGalleryItem(row, viewer) : null;
 }
 
+/** Thrown inside the append transaction to roll it back when the Idempotency-Key was already completed. */
+class AttemptAlreadyDone extends Error {
+  constructor(readonly itemId: string) {
+    super("attempt already completed");
+  }
+}
+
+/** Answers a create/append with the full entry (201). `replayed` marks a retry answered from a previous
+ *  completed attempt. Runs AFTER the write transaction has committed and outside any blob-cleanup
+ *  `try`, so a failure here can never delete the blob of rows that are already committed. */
+async function respondWithEntry(res: Response, id: string, viewer: Viewer, replayed: boolean) {
+  const detail = await loadDetail(id, viewer);
+  if (!detail) throw new HttpError(404, "Not found");
+  if (replayed) res.setHeader("Idempotent-Replayed", "true");
+  res.status(201).json(detail);
+}
+
 // POST /api/gallery -> upload an image and create its gallery item together (any signed-in
 // member). multipart: field "file" (image only — see `assertIsImage`) plus the metadata fields
 // in `createGalleryItemFieldsSchema` (caption, category, projectId, visibility, takenAt).
@@ -107,12 +135,28 @@ router.post(
     const fields = parseOrThrow(createGalleryItemFieldsSchema, req.body ?? {});
     assertMayChangeVisibility(req.user!, fields.visibility);
 
+    // Optional Idempotency-Key: a retry of an attempt that already completed (its response was lost)
+    // is answered with the original entry BEFORE anything is written — no new blob, entry or file.
+    const key = readIdempotencyKey(req);
+    const sha256 = sha256Hex(upload.buffer);
+    if (key) {
+      const done = await findCompletedAttempt(prisma, req.user!.id, key, "CREATE", null, sha256);
+      if (done) return respondWithEntry(res, done, req.user!, true);
+    }
+
     // Blob written FIRST, outside the transaction; any failure below removes it immediately
     // rather than leaving an orphaned file with no database record (Phase 13 "Storage cleanup").
     const storageKey = await saveFile(upload.buffer);
+    // Set as the callback's LAST step: the callback has completed, so Prisma goes on to commit. If the
+    // transaction then reports an error, whether it committed is UNCERTAIN, so the blob must be kept
+    // (see releaseUploadedBlob).
+    let commitAttempted = false;
+    let itemId: string;
     try {
-      const id = await prisma.$transaction(async (tx) => {
-        await assertProjectSelectable(tx, req.user!, fields.projectId);
+      itemId = await prisma.$transaction(async (tx) => {
+        // The FIRST statement is a write, deliberately: two concurrent duplicates that both began with a
+        // read would each hold a shared lock and then deadlock trying to upgrade it (SQLite), whereas a
+        // write first makes the second transaction wait for the first to commit.
         const file = await tx.storedFile.create({
           data: {
             storageKey,
@@ -123,6 +167,7 @@ router.post(
             ownerId: req.user!.id,
           },
         });
+        await assertProjectSelectable(tx, req.user!, fields.projectId);
         const item = await tx.galleryItem.create({
           data: {
             fileId: file.id,
@@ -132,6 +177,9 @@ router.post(
             takenAt: fromIsoDate(fields.takenAt ?? null),
           },
         });
+        // Same transaction as the entry: the key exists if and only if the entry does. If a concurrent
+        // duplicate committed first, this insert violates (userId, key) and the whole transaction rolls back.
+        if (key) await tx.galleryUploadAttempt.create({ data: { userId: req.user!.id, key, operation: "CREATE", itemId: item.id, fileId: file.id, sha256 } });
         await recordAudit(tx, {
           actor: req.user!,
           action: "GALLERY_ITEM_CREATED",
@@ -139,13 +187,116 @@ router.post(
           entityId: item.id,
           details: { caption: item.caption, category: item.category, visibility: file.visibility, projectId: item.projectId },
         });
+        commitAttempted = true;
         return item.id;
       });
-      res.status(201).json(await loadDetail(id, req.user!));
     } catch (err) {
-      await removeFile(storageKey).catch((cleanupErr) => console.error(`[gallery] cleanup failed for orphaned blob ${storageKey}:`, cleanupErr));
+      await releaseUploadedBlob(storageKey, commitAttempted); // removes it only if the callback never completed (no commit can have been issued)
+      if (key && isUniqueViolation(err)) {
+        // Lost a race against a concurrent duplicate of this very attempt: answer with the winner's entry.
+        const done = await findCompletedAttempt(prisma, req.user!.id, key, "CREATE", null, sha256);
+        if (done) return respondWithEntry(res, done, req.user!, true);
+      }
       throw err;
     }
+    return respondWithEntry(res, itemId, req.user!, false);
+  }),
+);
+
+// POST /api/gallery/:id/images -> add one more image to an existing entry (the entry's owner or a
+// manager). One image per request, like POST /api/gallery: Vercel rejects request bodies over 4.5 MB,
+// so a multi-image submission is the first image creating the entry plus one append per further
+// image. The new file takes the entry's visibility (never a client value). Blob first, outside the
+// transaction, and removed again if the database write fails — same discipline as the create route.
+async function authorizeGalleryAppend(req: Request, res: Response, next: NextFunction) {
+  try {
+    assertValidId(req.params.id);
+    const { isOwner } = await loadEditableGalleryItem(req.params.id, req.user!.id);
+    if (!canEditGalleryItem(req.user!, isOwner)) throw new HttpError(403, "Forbidden");
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+router.post(
+  "/:id/images",
+  requireAuth,
+  authorizeGalleryAppend, // before the body is buffered: a stranger's upload is rejected without reading it
+  uploadSingleFile,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new HttpError(400, 'No image was uploaded (expected multipart field "file").');
+    const upload = validateUpload(req.file);
+    assertIsImage(upload);
+
+    const key = readIdempotencyKey(req);
+    const sha256 = sha256Hex(upload.buffer);
+    if (key) {
+      const done = await findCompletedAttempt(prisma, req.user!.id, key, "APPEND", req.params.id, sha256);
+      if (done) return respondWithEntry(res, done, req.user!, true);
+    }
+
+    const storageKey = await saveFile(upload.buffer);
+    let commitAttempted = false; // see the create route / releaseUploadedBlob
+    try {
+      await prisma.$transaction(async (tx) => {
+        // The FIRST statement is a write (touching the entry): it takes the write lock, so concurrent appends
+        // to one entry — duplicates of one attempt, or different images — run one after another instead of
+        // deadlocking on a read-then-write lock upgrade, and every check below sees committed state.
+        try {
+          await tx.galleryItem.update({ where: { id: req.params.id }, data: { updatedAt: new Date() } });
+        } catch (err) {
+          if ((err as { code?: unknown })?.code === "P2025") throw new HttpError(404, "Not found");
+          throw err;
+        }
+        // A concurrent duplicate may have committed while we waited: roll this transaction back (the touch
+        // included) and answer with the original.
+        if (key) {
+          const done = await findCompletedAttempt(tx, req.user!.id, key, "APPEND", req.params.id, sha256);
+          if (done) throw new AttemptAlreadyDone(done);
+        }
+        const item = await tx.galleryItem.findUnique({
+          where: { id: req.params.id },
+          include: { file: { select: { visibility: true, deletedAt: true } }, images: { select: { sortOrder: true, file: { select: { deletedAt: true } } } } },
+        });
+        if (!item || item.file.deletedAt) throw new HttpError(404, "Not found");
+        const live = item.images.filter((i) => !i.file.deletedAt);
+        if (1 + live.length >= GALLERY_BATCH_MAX_FILES) {
+          throw new HttpError(409, `A gallery entry can hold at most ${GALLERY_BATCH_MAX_FILES} images.`);
+        }
+        const file = await tx.storedFile.create({
+          data: {
+            storageKey,
+            originalName: upload.originalName,
+            mimeType: upload.mimeType,
+            sizeBytes: upload.sizeBytes,
+            visibility: item.file.visibility,
+            ownerId: req.user!.id,
+          },
+        });
+        await tx.galleryImage.create({
+          data: { itemId: item.id, fileId: file.id, sortOrder: item.images.reduce((max, i) => Math.max(max, i.sortOrder), 0) + 1 },
+        });
+        if (key) await tx.galleryUploadAttempt.create({ data: { userId: req.user!.id, key, operation: "APPEND", itemId: item.id, fileId: file.id, sha256 } });
+        await recordAudit(tx, {
+          actor: req.user!,
+          action: "GALLERY_ITEM_UPDATED",
+          entityType: "GALLERY_ITEM",
+          entityId: item.id,
+          details: { imageAdded: true, imageCount: live.length + 2 },
+        });
+        commitAttempted = true;
+      });
+    } catch (err) {
+      await releaseUploadedBlob(storageKey, commitAttempted); // a replay's or a refused upload's blob is unused; a possibly-committed one is kept
+      if (err instanceof AttemptAlreadyDone) return respondWithEntry(res, err.itemId, req.user!, true);
+      if (key && isUniqueViolation(err)) {
+        const done = await findCompletedAttempt(prisma, req.user!.id, key, "APPEND", req.params.id, sha256);
+        if (done) return respondWithEntry(res, done, req.user!, true);
+      }
+      throw err;
+    }
+    return respondWithEntry(res, req.params.id, req.user!, false);
   }),
 );
 
@@ -194,7 +345,11 @@ router.put(
         where: { id: existing.id },
         data: { ...itemFields, ...(takenAt !== undefined && { takenAt: fromIsoDate(takenAt) }) },
       });
-      if (visibility !== undefined) await tx.storedFile.update({ where: { id: existing.fileId }, data: { visibility } });
+      if (visibility !== undefined) {
+        await tx.storedFile.update({ where: { id: existing.fileId }, data: { visibility } });
+        // Every further image of the entry follows the cover, so one entry never mixes visibilities.
+        await tx.storedFile.updateMany({ where: { galleryImage: { itemId: existing.id } }, data: { visibility } });
+      }
 
       const before = { ...existing, takenAt: existing.takenAt ? existing.takenAt.toISOString().slice(0, 10) : null };
       const changed = changedFields(before, body, ["caption", "category", "projectId", "sortOrder", "takenAt"]);
@@ -220,14 +375,27 @@ router.delete(
     if (!canDeleteGalleryItem(req.user!, isOwner)) throw new HttpError(403, "Forbidden");
 
     const removed = await prisma.$transaction(async (tx) => {
-      const existing = await tx.galleryItem.findUnique({ where: { id: req.params.id }, include: { file: { select: { id: true, storageKey: true, deletedAt: true } } } });
+      const existing = await tx.galleryItem.findUnique({
+        where: { id: req.params.id },
+        include: { file: { select: { id: true, storageKey: true, deletedAt: true } }, images: { select: { file: { select: { id: true, storageKey: true, deletedAt: true } } } } },
+      });
       if (!existing || existing.file.deletedAt) throw new HttpError(404, "Not found");
-      await tx.galleryItem.delete({ where: { id: existing.id } });
-      await tx.storedFile.update({ where: { id: existing.fileId }, data: { deletedAt: new Date() } });
-      await recordAudit(tx, { actor: req.user!, action: "GALLERY_ITEM_DELETED", entityType: "GALLERY_ITEM", entityId: existing.id, details: { fileId: existing.fileId, caption: existing.caption } });
-      return existing.file;
+      // The cover plus every further image: all soft-deleted together so none stays fetchable by id.
+      const files = [existing.file, ...existing.images.map((i) => i.file).filter((f) => !f.deletedAt)];
+      await tx.galleryItem.delete({ where: { id: existing.id } }); // cascades the GalleryImage rows
+      await tx.storedFile.updateMany({ where: { id: { in: files.map((f) => f.id) } }, data: { deletedAt: new Date() } });
+      await recordAudit(tx, {
+        actor: req.user!,
+        action: "GALLERY_ITEM_DELETED",
+        entityType: "GALLERY_ITEM",
+        entityId: existing.id,
+        details: { fileId: existing.fileId, caption: existing.caption, imageCount: files.length },
+      });
+      return files;
     });
-    await removeFile(removed.storageKey).catch((err) => console.error(`[gallery] failed to remove blob for deleted item ${req.params.id}:`, err));
+    for (const f of removed) {
+      await removeFile(f.storageKey).catch((err) => console.error(`[gallery] failed to remove blob for deleted item ${req.params.id}:`, err));
+    }
     res.json({ success: true });
   }),
 );
