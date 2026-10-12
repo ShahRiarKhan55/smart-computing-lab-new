@@ -1,5 +1,6 @@
 /**
- * Applies the reviewed gallery multi-image migrations to a libSQL/Turso database (or a local SQLite file).
+ * Applies the reviewed additive migrations (gallery multi-image x2, Phase 2.2 OAuth identity) to a libSQL/Turso database
+ * (or a local SQLite file). Only migrations pinned by SHA-256 in REVIEWED_MIGRATIONS (src/lib/tursoMigrate.ts) are ever run.
  * See docs/architecture/turso-migration-executor.md for the full procedure, recovery notes and the limits of
  * what this tool can prove.
  *

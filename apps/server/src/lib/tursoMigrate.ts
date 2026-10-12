@@ -4,9 +4,10 @@ import path from "node:path";
 import { createClient, type Client, type Transaction } from "@libsql/client";
 
 /**
- * Executor for the gallery multi-image migrations against a libSQL/Turso database.
+ * Executor for the REVIEWED additive migrations (the two gallery multi-image migrations and the Phase 2.2 OAuth
+ * identity migration) against a libSQL/Turso database.
  *
- * `prisma migrate deploy` cannot talk to Turso (docs/user-guide/en/site-maintainer-guide.md), so these two
+ * `prisma migrate deploy` cannot talk to Turso (docs/user-guide/en/site-maintainer-guide.md), so these
  * ADDITIVE migrations need a deliberate, repeatable way in. This module is the importable core (no side
  * effects, no environment access); `scripts/turso-migrate.ts` is the command-line wrapper.
  *
@@ -38,6 +39,9 @@ export interface ReviewedMigration {
 export const REVIEWED_MIGRATIONS: readonly ReviewedMigration[] = [
   { name: "20261011130000_gallery_item_images", sha256: "aee1e5aa992ef1c0db9c66133326a6b9503f27d3a52edf4e7d6968bf6ecc6728" },
   { name: "20261011140000_gallery_upload_attempts", sha256: "20d099cc1dd7f7c30deaabf92a10ed12355b982e627435142efb17c585228e81" },
+  // Phase 2.2: additive OAuthIdentity table (1 table + 2 unique indexes, FK to User ON DELETE CASCADE). Reviewed hash of the
+  // exact file; any edit to it is refused until this entry is re-reviewed. Chronological order matters (applied in order).
+  { name: "20261012100000_oauth_identity", sha256: "7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e" },
 ];
 
 /** Tables that must already exist in the target for it to be this application's database. */

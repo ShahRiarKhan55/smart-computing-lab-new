@@ -19,6 +19,8 @@ export type AuditAction =
   | "USER_LINKED"
   | "USER_UNLINKED"
   | "PASSWORD_CHANGED"
+  | "OAUTH_IDENTITY_LINKED"
+  | "OAUTH_IDENTITY_UNLINKED"
   // researcher onboarding invitations
   | "INVITATION_CREATED"
   | "INVITATION_REVOKED"

@@ -1,11 +1,11 @@
 import express from "express";
 import type { ErrorRequestHandler } from "express";
-import { Prisma } from "@prisma/client";
 import { createSessionMiddleware } from "./lib/session.js";
 import { ValidationError, HttpError } from "./lib/validate.js";
 import { multerErrorMessage } from "./lib/fileService.js";
 import { resolveTrustProxy } from "./lib/trustProxy.js";
 import { securityHeaders } from "./lib/security.js";
+import { mapKnownDatabaseError } from "./lib/dbErrors.js";
 import apiRoutes from "./routes/index.js";
 import sitemapRoutes from "./routes/sitemap.routes.js";
 
@@ -70,20 +70,12 @@ export function createApp() {
       res.status(multerMessage === "File is too large." ? 413 : 400).json({ error: multerMessage });
       return;
     }
-    // Rows removed/created concurrently between our check and the write.
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      if (err.code === "P2025") {
-        res.status(404).json({ error: "Not found" });
-        return;
-      }
-      if (err.code === "P2003") {
-        res.status(400).json({ error: "A referenced record does not exist." });
-        return;
-      }
-      if (err.code === "P2002") {
-        res.status(409).json({ error: "That record already exists." });
-        return;
-      }
+    // Rows removed/created concurrently between our check and the write (lib/dbErrors.ts also recognises the
+    // untyped `SQLITE_CONSTRAINT` shape that Turso/libSQL produces, without guessing for unknown constraint types).
+    const dbError = mapKnownDatabaseError(err);
+    if (dbError) {
+      res.status(dbError.status).json({ error: dbError.error });
+      return;
     }
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
