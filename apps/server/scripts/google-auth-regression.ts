@@ -543,6 +543,119 @@ const memberRoleBefore = (await prisma.user.findUnique({ where: { id: member.id 
   t("signin rejects: expired transaction", late.location === "/login?google_error=failed");
 }
 
+// ---- privacy-safe callback diagnostics: every refusal logs ONE fixed label, nothing else -------------------------------
+{
+  const PREFIX = "[google-auth] callback refused ";
+  const LABEL = /^\[google-auth\] callback refused (signin|link|unknown) [a-z-]+$/;
+  const FORBIDDEN = [SUB_A, SUB_B, SUB_C, SUB_UNKNOWN, "member.google@gmail.com", "stranger@gmail.com", "x@gmail.com", "y@gmail.com", "c@gmail.com", "code-", "eyJ", "scl.sid", "secret", PW, "state=", "nonce="];
+  const seen: string[] = [];
+  /** Runs `run`, returns what the app logged meanwhile. */
+  async function logs(run: () => Promise<unknown>): Promise<string[]> {
+    const from = logged.length;
+    await run();
+    const lines = logged.slice(from);
+    seen.push(...lines);
+    return lines;
+  }
+  const exactly = (lines: string[], label: string) => lines.length === 1 && lines[0] === PREFIX + label;
+  const GOOD = { sub: SUB_A, email: "member.google@gmail.com" };
+  const cbq = (url: string, who: { sub: string; email: string }, opts: Parameters<typeof approve>[2] = {}) => `/api/auth/google/callback?${approve(url, who, opts)}`;
+
+  // sign-in refusals, one label each; the user-facing redirect stays the generic one
+  let b = new Browser(flow.base);
+  let { url } = await signInStart(b);
+  let res: Awaited<ReturnType<typeof b.get>> | undefined;
+  let l = await logs(async () => { res = await b.get("/api/auth/google/callback?error=access_denied&state=x"); });
+  t("label: provider error parameter", exactly(l, "signin provider-error-or-missing-parameters") && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  l = await logs(async () => { res = await b.get(`/api/auth/google/callback?state=${new URL(url).searchParams.get("state")}`); });
+  t("label: missing code", exactly(l, "signin provider-error-or-missing-parameters") && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  l = await logs(async () => { res = await new Browser(flow.base).get("/api/auth/google/callback?code=x&state=y"); });
+  t("label: no transaction (purpose unknown)", exactly(l, "unknown no-transaction") && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  l = await logs(async () => { res = await b.get(cbq(url, GOOD, { stateOverride: "forged" })); });
+  t("label: state mismatch", exactly(l, "signin state-mismatch") && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  clockOffsetMs = TRANSACTION_TTL_MS + 60_000;
+  l = await logs(async () => { res = await b.get(cbq(url, GOOD)); });
+  clockOffsetMs = 0;
+  t("label: transaction expired", exactly(l, "signin transaction-expired") && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  failNextExchange = true;
+  l = await logs(async () => { res = await b.get(cbq(url, GOOD)); });
+  t("label: token exchange failed (the error text is never logged)", exactly(l, "signin token-exchange-failed") && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  const verifyCases: [string, Parameters<typeof approve>[2], string][] = [
+    ["wrong audience", { over: { aud: OTHER_CLIENT_ID } }, "invalid-audience"],
+    ["nonce mismatch", { nonceOverride: "other" }, "invalid-nonce"],
+    ["unverified email", { over: { email_verified: false } }, "email-not-verified"],
+    ["expired token", { over: { iat: nowS() - 7200, exp: nowS() - 3600 } }, "expired"],
+    ["wrong issuer", { over: { iss: "https://evil.example.com" } }, "invalid-issuer"],
+  ];
+  for (const [name, opts, reason] of verifyCases) {
+    b = new Browser(flow.base);
+    ({ url } = await signInStart(b));
+    l = await logs(async () => { res = await b.get(cbq(url, GOOD, opts)); });
+    t(`label: token rejected (${name})`, exactly(l, `signin token-rejected-${reason}`) && res?.location === "/login?google_error=failed", JSON.stringify(l));
+  }
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  l = await logs(async () => { res = await b.get(cbq(url, GOOD, { key: evil.privateKey })); });
+  t("label: token rejected (signature from another key) is a token-rejected label", l.length === 1 && /^\[google-auth\] callback refused signin token-rejected-[a-z-]+$/.test(l[0]) && res?.location === "/login?google_error=failed", JSON.stringify(l));
+
+  // an unlinked identity is a labelled refusal that writes nothing (no automatic linking, even for a matching e-mail)
+  const before = await counts();
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  l = await logs(async () => { res = await b.get(cbq(url, { sub: SUB_UNKNOWN, email: "g-admin@example.org" })); });
+  t("label: identity not linked (matching e-mail is still not linked)", exactly(l, "signin identity-not-linked") && res?.location === "/login?google_error=not_linked", JSON.stringify(l));
+  t("label: the not-linked refusal wrote nothing", JSON.stringify(await counts()) === JSON.stringify(before));
+
+  // success logs nothing
+  b = new Browser(flow.base);
+  ({ url } = await signInStart(b));
+  l = await logs(async () => { res = await b.get(cbq(url, GOOD)); });
+  t("label: a successful sign-in logs no refusal", l.length === 0 && res?.location === "/profile", JSON.stringify(l));
+
+  // link refusals
+  const lb = new Browser(flow.base);
+  await lb.login("g-member2@example.org", PW);
+  l = await logs(async () => { res = (await link(lb, GOOD)).cb; });
+  t("label: link, identity already used by another account", exactly(l, "link link-identity-in-use") && res?.location === "/profile?google=in_use", JSON.stringify(l));
+  l = await logs(async () => { res = (await link(lb, { sub: SUB_C, email: "c@gmail.com" }, { over: { aud: OTHER_CLIENT_ID } })).cb; });
+  t("label: link, token rejected", exactly(l, "link token-rejected-invalid-audience") && res?.location === "/profile?google=failed", JSON.stringify(l));
+  l = await logs(async () => { res = (await link(lb, { sub: SUB_C, email: "c@gmail.com" }, { stateOverride: "forged" })).cb; });
+  t("label: link, state mismatch", exactly(l, "link state-mismatch") && res?.location === "/profile?google=failed", JSON.stringify(l));
+
+  const m3b = new Browser(flow.base);
+  await m3b.login("g-member3@example.org", PW);
+  const SUB_X2 = "100000000000000000501";
+  const SUB_Y2 = "100000000000000000502";
+  let st = await m3b.post("/api/auth/google/link/start", LS);
+  await prisma.oAuthIdentity.create({ data: { userId: member3.id, provider: "google", subject: SUB_X2 } });
+  l = await logs(async () => { res = await m3b.get(cbq(st.json.url, { sub: SUB_X2, email: "x@gmail.com" })); });
+  t("label: link, same account already linked", exactly(l, "link link-already-linked") && res?.location === "/profile?google=already_linked", JSON.stringify(l));
+  await prisma.oAuthIdentity.deleteMany({ where: { userId: member3.id } });
+  st = await m3b.post("/api/auth/google/link/start", LS);
+  await prisma.oAuthIdentity.create({ data: { userId: member3.id, provider: "google", subject: SUB_X2 } });
+  l = await logs(async () => { res = await m3b.get(cbq(st.json.url, { sub: SUB_Y2, email: "y@gmail.com" })); });
+  t("label: link, account already linked to a different identity", exactly(l, "link link-account-has-other") && res?.location === "/profile?google=has_other", JSON.stringify(l));
+  await prisma.oAuthIdentity.deleteMany({ where: { userId: member3.id } });
+
+  // hygiene: every line has the fixed shape and carries no request value, subject, e-mail, token, cookie or password
+  t("labels: every diagnostic line has the fixed shape", seen.length > 0 && seen.every((m) => LABEL.test(m)), JSON.stringify(seen.filter((m) => !LABEL.test(m))));
+  t("labels: no line contains a subject, e-mail, code, token, cookie, state, nonce or password", !seen.some((m) => FORBIDDEN.some((x) => m.includes(x))));
+}
+
 // ---- redirects are fixed, never request-controlled ---------------------------------------------------------------
 {
   const b = new Browser(flow.base);
@@ -982,7 +1095,13 @@ PrismaSessionStore.prototype.get = protoGet;
   t("static: never creates or edits users", !/prisma\.user\.(create|update|upsert|delete)|db\.user\./.test(routes + oauth + identity));
   t("static: no email-based lookup of accounts", !/user\.(findUnique|findFirst|findMany)\(\{\s*where:\s*\{\s*email/.test(routes));
   t("static: never writes roles or password hashes", !/data:\s*\{[^}]*(role|passwordHash)/.test(routes + oauth));
-  t("static: no console logging of flow values", !/console\.(log|info|debug)/.test(routes + oauth + identity) && [...(routes + oauth + identity).matchAll(/console\.\w+\(([^)]*)\)/g)].every((m) => /^"[^"$]*"$/.test(m[1].trim())));
+  // The ONLY non-literal console call is the single label logger below. Its two interpolated values are `FlowPurpose | "unknown"` and
+  // `CallbackStage`, closed unions of constants (plus the closed GoogleIdentityFailureReason), never request or token data.
+  const LABEL_LOGGER = "console.error(`[google-auth] callback refused ${purpose} ${stage}`)";
+  const consoleCalls = [...(routes + oauth + identity).matchAll(/console\.\w+\(([^)]*)\)/g)];
+  t("static: no console logging of flow values", !/console\.(log|info|debug)/.test(routes + oauth + identity) && consoleCalls.every((m) => /^"[^"$]*"$/.test(m[1].trim()) || m[0] === LABEL_LOGGER));
+  t("static: the label logger is the single exception and exists exactly once", consoleCalls.filter((m) => m[0] === LABEL_LOGGER).length === 1 && consoleCalls.filter((m) => !/^"[^"$]*"$/.test(m[1].trim())).length === 1);
+  t("static: label logger arguments are typed closed unions", /function logRefusal\(purpose: FlowPurpose \| "unknown", stage: CallbackStage\)/.test(routes));
   t("static: redirects use only fixed destinations", [...routes.matchAll(/res\.redirect\(([^)]*)\)/g)].every((m) => /SIGNED_IN_PATH|\burl\b|\$\{(LOGIN_PATH|PROFILE_PATH)\}/.test(m[1])));
   t("static: no request value feeds a redirect", !/req\.(query|body|params)\.(next|redirect|returnTo|return_url|redirect_uri)/.test(routes));
   t("static: identity module still reads no environment", !/process\.env/.test(identity));

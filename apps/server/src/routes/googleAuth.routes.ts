@@ -76,6 +76,42 @@ function toProfile(res: Response, code: LinkResultCode): void {
   res.redirect(302, `${PROFILE_PATH}?google=${code}`);
 }
 
+/**
+ * Fixed diagnostic labels for the callback: one per place a callback can stop short of success (the `google_error` /
+ * `google` code shown to the user is intentionally generic, so these are the only way to tell the causes apart). The log
+ * line is built from these constants and the closed `GoogleIdentityFailureReason` union only: never from a request value,
+ * a token, a subject, an e-mail address, an error message or anything else a caller could influence.
+ */
+type CallbackStage =
+  | "config-unavailable"
+  | "session-store-error"
+  | "provider-error-or-missing-parameters"
+  | "no-transaction"
+  | "transaction-expired"
+  | "state-mismatch"
+  | "token-exchange-failed"
+  | `token-rejected-${string}`
+  | "database-error"
+  | "identity-not-linked"
+  | "session-regenerate-failed"
+  | "link-session-mismatch"
+  | "link-identity-in-use"
+  | "link-account-has-other"
+  | "link-already-linked"
+  | "link-write-failed";
+
+function logRefusal(purpose: FlowPurpose | "unknown", stage: CallbackStage): void {
+  console.error(`[google-auth] callback refused ${purpose} ${stage}`);
+}
+
+/** The link outcomes that are refusals (a successful `linked` is not logged). */
+function logLinkOutcome(code: LinkResultCode): void {
+  if (code === "in_use") logRefusal("link", "link-identity-in-use");
+  else if (code === "has_other") logRefusal("link", "link-account-has-other");
+  else if (code === "already_linked") logRefusal("link", "link-already-linked");
+  else if (code === "failed") logRefusal("link", "link-write-failed");
+}
+
 function queryString(req: Request, name: string, max: number): string | null {
   const v = req.query[name];
   return typeof v === "string" && v.length > 0 && v.length <= max ? v : null;
@@ -229,25 +265,32 @@ export function createGoogleAuthRouter(overrides: Partial<GoogleAuthDeps> = {}):
       try {
         tx = await consumeTransaction(req);
       } catch {
-        console.error("[google-auth] session store error during callback");
+        logRefusal("unknown", "session-store-error");
         return toLogin(res, "failed");
       }
       const linking = tx?.purpose === "link";
       const fail = (loginCode: LoginErrorCode, linkCode: LinkResultCode) => (linking ? toProfile(res, linkCode) : toLogin(res, loginCode));
-      const refuse = () => fail("failed", "failed");
+      const purposeLabel: FlowPurpose | "unknown" = tx?.purpose ?? "unknown";
+      const refuse = (stage: CallbackStage) => {
+        logRefusal(purposeLabel, stage);
+        return fail("failed", "failed");
+      };
 
       const config = deps.getConfig();
-      if (!config) return fail("unavailable", "unavailable");
+      if (!config) {
+        logRefusal(purposeLabel, "config-unavailable");
+        return fail("unavailable", "unavailable");
+      }
 
       // No per-IP failure counter here by design: a callback without a valid browser-bound transaction does no work and
       // writes nothing, and every callback WITH one needed a rate-limited start (or a verified password), so one client
       // cannot lock other users out of completing their own flow.
       const state = queryString(req, "state", 512);
       const code = queryString(req, "code", 2048);
-      if (req.query.error !== undefined || !state || !code) return refuse();
-      if (!tx) return refuse();
-      if ((deps.nowMs ?? Date.now)() > tx.expiresAt) return refuse();
-      if (!safeEqual(tx.state, state)) return refuse();
+      if (req.query.error !== undefined || !state || !code) return refuse("provider-error-or-missing-parameters");
+      if (!tx) return refuse("no-transaction");
+      if ((deps.nowMs ?? Date.now)() > tx.expiresAt) return refuse("transaction-expired");
+      if (!safeEqual(tx.state, state)) return refuse("state-mismatch");
 
       let subject: string;
       try {
@@ -260,9 +303,9 @@ export function createGoogleAuthRouter(overrides: Partial<GoogleAuthDeps> = {}):
         });
         subject = identity.subject;
       } catch (err) {
-        // GoogleIdentityError carries only a reason code; anything else (network, token endpoint) is equally opaque to the user.
-        if (!(err instanceof GoogleIdentityError)) console.error("[google-auth] code exchange failed");
-        return refuse();
+        // GoogleIdentityError carries only a reason code from a closed set; anything else (network, token endpoint) is equally
+        // opaque to the user and is labelled generically. The error object itself is never logged.
+        return refuse(err instanceof GoogleIdentityError ? `token-rejected-${err.reason.replace(/_/g, "-")}` : "token-exchange-failed");
       }
 
       if (tx.purpose === "signin") {
@@ -273,17 +316,20 @@ export function createGoogleAuthRouter(overrides: Partial<GoogleAuthDeps> = {}):
             select: { userId: true },
           });
         } catch {
-          console.error("[google-auth] database error during callback");
+          logRefusal("signin", "database-error");
           return toLogin(res, "failed");
         }
-        if (!found) return toLogin(res, "not_linked"); // no user is created, nothing is written
+        if (!found) {
+          logRefusal("signin", "identity-not-linked");
+          return toLogin(res, "not_linked"); // no user is created, nothing is written
+        }
         try {
           // Fresh session id on sign-in (session fixation), exactly like password login, and persisted BEFORE the redirect.
           await new Promise<void>((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
           req.session.userId = found.userId;
           await saveSession(req);
         } catch {
-          console.error("[google-auth] session store error during callback");
+          logRefusal("signin", "session-regenerate-failed");
           delete req.session.userId; // never let the end-of-request save turn a failed sign-in into a session
           return toLogin(res, "failed");
         }
@@ -295,10 +341,13 @@ export function createGoogleAuthRouter(overrides: Partial<GoogleAuthDeps> = {}):
       try {
         user = await getSessionUser(req);
       } catch {
-        console.error("[google-auth] database error during callback");
+        logRefusal("link", "database-error");
         return fail("failed", "failed");
       }
-      if (!user || !tx.userId || user.id !== tx.userId) return fail("failed", "session");
+      if (!user || !tx.userId || user.id !== tx.userId) {
+        logRefusal("link", "link-session-mismatch");
+        return fail("failed", "session");
+      }
 
       let outcome: LinkResultCode;
       try {
@@ -324,7 +373,7 @@ export function createGoogleAuthRouter(overrides: Partial<GoogleAuthDeps> = {}):
         // foreign-key or other constraint failure can never be reported as a conflict.
         const kind = constraintKind(err);
         if (kind === null) {
-          console.error("[google-auth] database error during callback");
+          logRefusal("link", "link-write-failed");
           return toProfile(res, "failed"); // never reports success for a write that did not happen
         }
         let resolved: LinkResultCode | null = null;
@@ -333,12 +382,15 @@ export function createGoogleAuthRouter(overrides: Partial<GoogleAuthDeps> = {}):
           if (mine) resolved = mine.subject === subject ? "already_linked" : "has_other";
           else if (await prisma.oAuthIdentity.findUnique({ where: { provider_subject: { provider: GOOGLE_PROVIDER, subject } }, select: { id: true } })) resolved = "in_use";
         } catch {
-          console.error("[google-auth] database error during callback");
+          logRefusal("link", "database-error");
           return toProfile(res, "failed");
         }
         // Re-read found nothing: trust only an explicit unique-violation classification (the row may have been removed since).
-        return toProfile(res, resolved ?? (kind === "unique" ? "in_use" : "failed"));
+        const final = resolved ?? (kind === "unique" ? "in_use" : "failed");
+        logLinkOutcome(final);
+        return toProfile(res, final);
       }
+      logLinkOutcome(outcome);
       return toProfile(res, outcome);
     }),
   );
