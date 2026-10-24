@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
+import { constraintKind } from "../lib/dbErrors.js";
 import {
   FORUM_COMMENTS_DEFAULT_LIMIT,
   FORUM_TOPIC_MANAGER_ONLY_KEYS,
@@ -621,7 +622,8 @@ router.delete(
 // prevented by the DB's own `@@unique([userId, postId, kind])` / `@@unique([userId, commentId, kind])`.
 // ---------------------------------------------------------------------------
 function isDuplicateReaction(err: unknown): boolean {
-  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+  // Typed P2002 on local SQLite, untyped SQLITE_CONSTRAINT with a UNIQUE driver message on Turso/libSQL (lib/dbErrors.ts).
+  return constraintKind(err) === "unique";
 }
 
 router.post(

@@ -5,6 +5,8 @@
  * schemas. No server, no database.
  *   npm run test:unit -w apps/server
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   DICTIONARIES,
   DEFAULT_LOCALE,
@@ -81,6 +83,26 @@ const wideSchema = translationsField({ title: 2000, description: 2000 });
 for (const hostile of ["<script>alert(1)</script>", "<img src=x onerror=alert(1)>"]) {
   const parsed = wideSchema.safeParse({ ja: { title: hostile } });
   t(`accepts hostile text unchanged as ORDINARY DATA (rendering safety is React's text nodes, never dangerouslySetInnerHTML): ${hostile}`, parsed.success && parsed.data.ja?.title === hostile);
+}
+
+// ---- Phase 2.2.1: the Google linking API messages are in the known-error table, in both locales -----------------------
+{
+  const serverSrc = (p: string) => readFileSync(path.resolve(import.meta.dirname, "..", "src", p), "utf8");
+  const errorsTable = readFileSync(path.resolve(import.meta.dirname, "..", "..", "web", "src", "i18n", "errorMessages.ts"), "utf8");
+  const sent = serverSrc("routes/googleAuth.routes.ts") + serverSrc("lib/sameOrigin.ts");
+  const mapped: [string, string][] = [
+    ["A Google account is already connected.", "error.googleAlreadyConnected"],
+    ["No Google account is connected.", "error.googleNotConnected"],
+    ["Request must be JSON.", "error.requestMustBeJson"],
+    ["Google sign-in is not available.", "error.googleUnavailable"],
+  ];
+  for (const [message, key] of mapped) {
+    t(`"${message}" is sent by the API`, sent.includes(`"${message}"`));
+    t(`"${message}" maps to ${key} in the known-error table`, errorsTable.includes(`"${message}": "${key}"`));
+    t(`${key} exists in both locales; English is the exact server message`, DICTIONARIES.en[key as TranslationKey] === message && typeof DICTIONARIES.ja[key as TranslationKey] === "string");
+    t(`${key} has a Japanese (kana/kanji) translation, not the English text`, /[぀-ヿ一-鿿]/.test(DICTIONARIES.ja[key as TranslationKey]) && DICTIONARIES.ja[key as TranslationKey] !== message);
+  }
+  t("the pre-existing mappings are untouched", errorsTable.includes('"Request body must be a JSON object.": "error.requestBodyInvalid"') && errorsTable.includes('"Current password is incorrect.": "profile.password.err.incorrect"'));
 }
 
 console.log(`${ok} i18n unit checks passed, ${failures.length} failed.`);

@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { constraintKind } from "../lib/dbErrors.js";
 import {
   conversationsQuerySchema,
   createConversationSchema,
@@ -113,7 +114,8 @@ async function getOrCreateDirectConversation(userIdA: string, userIdB: string) {
       data: { directKey, participants: { create: [{ userId: userIdA }, { userId: userIdB }] } },
     });
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    // Typed P2002 (local SQLite) or the untyped SQLITE_CONSTRAINT unique shape (Turso/libSQL); see lib/dbErrors.ts.
+    if (constraintKind(err) === "unique") {
       const existing = await prisma.conversation.findUnique({ where: { directKey } });
       if (existing) return existing;
     }

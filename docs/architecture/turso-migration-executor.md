@@ -1,10 +1,20 @@
-# Applying the gallery migrations to Turso (`migrate:turso`)
+# Applying the reviewed migrations to Turso (`migrate:turso`)
 
-`prisma migrate deploy` cannot talk to Turso (see the site maintainer guide, "Deployment"). The two migrations that
-the gallery multi-image release needs are therefore applied with a small, reviewed executor:
+`prisma migrate deploy` cannot talk to Turso (see the site maintainer guide, "Deployment"). The additive migrations
+that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these three,
+in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 
-- `20261011130000_gallery_item_images` (creates `GalleryImage`)
-- `20261011140000_gallery_upload_attempts` (creates `GalleryUploadAttempt`)
+| Migration | Creates | Reviewed SHA-256 (CRLF normalised to LF) |
+|---|---|---|
+| `20261011130000_gallery_item_images` | `GalleryImage` | `aee1e5aa992ef1c0db9c66133326a6b9503f27d3a52edf4e7d6968bf6ecc6728` |
+| `20261011140000_gallery_upload_attempts` | `GalleryUploadAttempt` | `20d099cc1dd7f7c30deaabf92a10ed12355b982e627435142efb17c585228e81` |
+| `20261012100000_oauth_identity` (Phase 2.2) | `OAuthIdentity` (FK to `User` ON DELETE CASCADE; unique `(provider, subject)` and `(userId, provider)`) | `7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e` |
+
+A migration directory that is not in this table is never read or run, a pinned file whose bytes differ (even by a
+trailing space) is refused, and even a file whose hash matches must still consist only of plain additive
+`CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements. Adding a migration to this release path means a reviewed code
+change to `REVIEWED_MIGRATIONS` (and its tests); there is no configuration switch. Listing a migration here does NOT apply
+it anywhere: applying is a separate, explicitly approved, operator-run step against a confirmed target.
 
 Code: `apps/server/src/lib/tursoMigrate.ts` (core) and `apps/server/scripts/turso-migrate.ts` (command line).
 Tests: `apps/server/scripts/unit-turso-migrate.test.ts` (part of `npm run test:unit -w apps/server`).
@@ -13,7 +23,7 @@ Tests: `apps/server/scripts/unit-turso-migrate.test.ts` (part of `npm run test:u
 
 | Property | How |
 |---|---|
-| Only reviewed SQL runs | Each migration file's SHA-256 (CRLF-normalised) is pinned in `REVIEWED_MIGRATIONS`. A changed file is refused. |
+| Only reviewed SQL runs | Each migration file's SHA-256 (CRLF-normalised) is pinned in `REVIEWED_MIGRATIONS` (table above). A changed file is refused; an unpinned directory is ignored. |
 | Only additive SQL runs | Only `CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements are accepted; `DROP`, `ALTER`, `INSERT`, `UPDATE`, `DELETE`, `PRAGMA`, triggers, views, quotes and block comments are refused. |
 | Explicit target | The target comes ONLY from `MIGRATE_TARGET_URL` / `MIGRATE_TARGET_TOKEN`. `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `DATABASE_URL` are never read. No target = refused. |
 | Identity confirmed before any SQL | `--expect-target` is mandatory (even to inspect) and must equal the target's host (remote) or absolute path (file) exactly. A remote URL must be `libsql://` or `https://`, a `*.turso.io` host, with no credentials, path or query in the URL. |
@@ -51,9 +61,21 @@ MIGRATE_TARGET_URL=file:/abs/path/copy.db npm run migrate:turso -w apps/server -
 Exit codes: `0` ok / nothing to do / planned; `2` refused before touching the database (bad target, hash mismatch,
 unsafe state); `3` verification or COMMIT problem; `4` unexpected error.
 
+## The Phase 2.2 OAuth identity migration
+
+`20261012100000_oauth_identity` is additive (one table, two unique indexes, no change to existing tables or rows). On a
+database where the gallery migrations are already applied (the expected Production shape), inspect-only reports
+`applied, applied, absent` and `--apply` runs ONLY the OAuth migration. On a database that has none of the three (for
+example a fresh Preview database that predates the gallery release), all three are applied in order. The code that uses
+`OAuthIdentity` must not be deployed to an environment before its table exists. The same gates below apply (explicit
+target, recovery point, rehearsal on a local copy, inspect before apply, independent re-inspection); the "Production"
+gate text was written for the gallery release; read "both migrations" there as "the migrations the inspect-only run reports as `absent`".
+Preview must use its own database: confirm the Preview-scoped `TURSO_DATABASE_URL` host differs from Production's before
+selecting a target, because the executor identifies a target only by the host the operator confirms.
+
 ## Production procedure (gates)
 
-1. **Repository.** The PR is approved and checks are green; the release commit contains the two migrations with the
+1. **Repository.** The PR is approved and checks are green; the release commit contains the reviewed migrations with the
    hashes pinned in `REVIEWED_MIGRATIONS` (the executor refuses otherwise). Do NOT merge yet: merging deploys Production.
 2. **Target identity.** In the Turso dashboard, open the database that the Production Vercel project uses
    (compare the `TURSO_DATABASE_URL` host shown in Vercel's Production environment variables with the database's
@@ -66,8 +88,8 @@ unsafe state); `3` verification or COMMIT problem; `4` unexpected error.
    recovery point. If PITR is not available on the plan, take and verify another copy of the database first, or stop.
 5. **Rehearse.** Run the apply command against a local copy of a production-shaped database (see "Rehearsal"), then
    run it again (it must say "Nothing to do").
-6. **Inspect production** with the inspect-only command. Expect both migrations `absent`. Anything else: stop.
-7. **Apply** with `--apply` and the recovery point. Expect `APPLIED: both migrations`, state after `applied`, and equal
+6. **Inspect production** with the inspect-only command. Expect exactly the migrations you intend to apply to be `absent` (already-released ones `applied`). Anything else: stop.
+7. **Apply** with `--apply` and the recovery point. Expect `APPLIED:` followed by exactly the migrations that were `absent`, state after `applied`, and equal
    row counts.
 8. **Independent check.** Re-run the inspect-only command: expect "Nothing to do". Optionally confirm in the Turso shell
    that `GalleryImage` and `GalleryUploadAttempt` exist.
@@ -90,10 +112,17 @@ Start every recovery with the inspect-only command; it never writes.
 
 ## Limits of the evidence
 
-The tests use disposable local SQLite files only. They prove the executor's logic, its refusals and its rollback
+The tests use disposable local SQLite files only (the checks in `unit-turso-migrate.test.ts` include the OAuth
+migration's pin, its tamper variants, its partial/divergent states and the gallery-already-applied shape). They prove the executor's logic, its refusals and its rollback
 behaviour on SQLite. They do NOT prove that a remote Turso database honours transactional DDL, how it reports a lost
 COMMIT reply, how it handles an interrupted stream, or that a given credential really belongs to Production. For those
 reasons the executor never trusts a single signal: it classifies before, verifies inside the transaction, and
 re-inspects afterwards, and it needs the operator's independent confirmation of the target and the recovery point.
 It does not create a backup and cannot verify one. It does not record the migrations anywhere (Prisma's migration
 table is not maintained on Turso); the schema itself is the record, and the inspect-only command is how to read it.
+
+Also NOT proven by local SQLite, and relevant to the Phase 2.2 code that this migration supports: that
+`@prisma/adapter-libsql` runs the application's raw `json_remove` / `json_extract` session statement
+(`$executeRaw`) and reports affected rows exactly as local SQLite does, and that a remote Turso database enforces the
+`ON DELETE CASCADE` foreign key. These need a rehearsal against a throwaway (non-Production) Turso database before
+relying on them.

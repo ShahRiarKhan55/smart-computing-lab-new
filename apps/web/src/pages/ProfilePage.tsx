@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { updateOwnProfileSchema, changePasswordSchema, type TeamMember } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useApiResource } from "../hooks/useApiResource";
@@ -54,9 +54,98 @@ export function ProfilePage() {
         {/* Account security (password change) is an ACCOUNT action, not a team-profile one, so it
             is always available here even when this account has no linked team profile yet
             (status === 404 above) — see apps/server/src/routes/auth.routes.ts POST /auth/password. */}
+        <GoogleLinkSection />
         <PasswordChangeSection />
       </div>
     </>
+  );
+}
+
+const GOOGLE_RESULT_CODES = ["linked", "already_linked", "in_use", "has_other", "session", "failed", "unavailable"] as const;
+
+/** Connect a Google account to the signed-in account. Rendered only when the server has Google configured. */
+function GoogleLinkSection() {
+  const t = useT();
+  const [searchParams] = useSearchParams();
+  const result = GOOGLE_RESULT_CODES.find((c) => c === searchParams.get("google"));
+  const [state, setState] = useState<{ enabled: boolean; linked: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [disconnected, setDisconnected] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ enabled: boolean; linked: boolean }>("/auth/google/link")
+      .then((r) => !cancelled && setState(r))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [result]);
+
+  if (!state?.enabled) return null;
+
+  async function connect() {
+    setBusy(true);
+    setError(null);
+    try {
+      // Started by this signed-in session after re-verifying the account password; the server returns Google's
+      // authorization URL for this exact account.
+      const { url } = await apiFetch<{ url: string }>("/auth/google/link/start", { method: "POST", body: JSON.stringify({ currentPassword: password }) });
+      setPassword("");
+      window.location.assign(url);
+    } catch (err) {
+      setError(apiErrorMessage(err, t));
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/auth/google/unlink", { method: "POST", body: JSON.stringify({ currentPassword: password }) });
+      setPassword("");
+      setDisconnected(true);
+      setState({ enabled: true, linked: false });
+    } catch (err) {
+      setError(apiErrorMessage(err, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="detail-section" aria-labelledby="profile-google">
+      <h2 id="profile-google">{t("profile.google.heading")}</h2>
+      <p className="sub">{t("profile.google.description")}</p>
+      {result && (
+        <div className={result === "linked" || result === "already_linked" ? "form-success" : "form-error"} role="status">
+          {t(`profile.google.result.${result}`)}
+        </div>
+      )}
+      {disconnected && (
+        <div className="form-success" role="status">
+          {t("profile.google.disconnected")}
+        </div>
+      )}
+      {error && <ErrorState message={error} />}
+      <p>{state.linked ? t("profile.google.linked") : t("profile.google.notLinked")}</p>
+      <div className="form-group">
+        <label htmlFor="google_pw">{t("profile.google.password")}</label>
+        <input id="google_pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </div>
+      {state.linked ? (
+        <button className="btn" type="button" onClick={disconnect} disabled={busy || !password} aria-busy={busy}>
+          {t("profile.google.disconnect")}
+        </button>
+      ) : (
+        <button className="btn btn--primary" type="button" onClick={connect} disabled={busy || !password} aria-busy={busy}>
+          {busy ? t("profile.google.connecting") : t("profile.google.connect")}
+        </button>
+      )}
+    </section>
   );
 }
 

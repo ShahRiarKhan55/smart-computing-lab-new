@@ -3,6 +3,7 @@ import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_PATTERN } from "@scl/shared";
 import { createHash } from "node:crypto";
 import { prisma } from "./prisma.js";
 import { HttpError } from "./validate.js";
+import { constraintKind } from "./dbErrors.js";
 
 /**
  * Idempotency for the two gallery upload requests (`POST /api/gallery` creates an entry,
@@ -52,7 +53,12 @@ export async function findCompletedAttempt(
   return row.itemId;
 }
 
-/** A unique-constraint violation (P2002) — the signature of a concurrent duplicate losing the race. */
+/**
+ * A unique-constraint violation — the signature of a concurrent duplicate losing the race. Recognises the typed `P2002` of
+ * local SQLite AND the untyped `SQLITE_CONSTRAINT` that Turso/libSQL produces (lib/dbErrors.ts). Only an explicit unique
+ * classification counts: a foreign-key failure, an unknown constraint or any other error is not a lost race. Callers still
+ * re-read `GalleryUploadAttempt` and answer only if a completed attempt exists.
+ */
 export function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2002";
+  return constraintKind(err) === "unique";
 }

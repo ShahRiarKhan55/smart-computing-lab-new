@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { isSafeRedirectPath } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorState } from "../components/ErrorState";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
+import { apiFetch } from "../lib/api";
+
+// The server redirects back here with one of these fixed codes; anything else is ignored.
+const GOOGLE_ERROR_CODES = ["not_linked", "failed", "unavailable", "rate_limited"] as const;
 
 export function LoginPage() {
   const t = useT();
@@ -18,6 +22,20 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [searchParams] = useSearchParams();
+  const googleCode = GOOGLE_ERROR_CODES.find((c) => c === searchParams.get("google_error"));
+
+  // The Google option is shown only when the server reports it is configured; otherwise the page is unchanged.
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ enabled: boolean }>("/auth/google/status")
+      .then((r) => !cancelled && setGoogleEnabled(r.enabled === true))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const requestedFrom = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
   // Phase 25 open-redirect guard: `requestedFrom` traces back to ProtectedRoute's `location.pathname`,
@@ -51,6 +69,7 @@ export function LoginPage() {
         <p className="sub">{t("auth.subtitle")}</p>
 
         {error && <ErrorState message={error} />}
+        {!error && googleCode && <ErrorState message={t(`auth.google.error.${googleCode}`)} />}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -65,6 +84,17 @@ export function LoginPage() {
             {submitting ? t("auth.loggingIn") : t("auth.login")}
           </button>
         </form>
+
+        {googleEnabled && (
+          <div className="auth-card__alt">
+            <p className="sub">{t("auth.google.or")}</p>
+            {/* A plain navigation to the server, which redirects to Google; the destination is never taken from the URL. */}
+            <a className="btn btn--lg btn--block" href="/api/auth/google/start">
+              {t("auth.google.button")}
+            </a>
+            <p className="sub">{t("auth.google.hint")}</p>
+          </div>
+        )}
 
         <p className="auth-card__foot">
           {t("auth.noAccount")}{" "}

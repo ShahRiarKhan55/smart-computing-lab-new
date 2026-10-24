@@ -23,6 +23,11 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "Bad request": "error.badRequest",
   "Nothing to update.": "error.nothingToUpdate",
   "Request body must be a JSON object.": "error.requestBodyInvalid",
+  // Google account linking (Phase 2.2).
+  "A Google account is already connected.": "error.googleAlreadyConnected",
+  "No Google account is connected.": "error.googleNotConnected",
+  "Request must be JSON.": "error.requestMustBeJson",
+  "Google sign-in is not available.": "error.googleUnavailable",
   "Incorrect email or password.": "auth.invalidCredentials",
   // Events (Phase 16): the fixed validation/permission messages the events API and the shared
   // event schema can produce, so the form and the API errors read the same in both locales.

@@ -86,6 +86,7 @@ model User {
   conversations      ConversationParticipant[]
   sentMessages       Message[]
   invitationsSent    AccountInvitation[]
+  oauthIdentities    OAuthIdentity[]
 
   @@index([role])
 }
@@ -149,6 +150,27 @@ model AccountInvitation {
 
   @@index([email])
   @@index([expiresAt])
+}
+
+/// A third-party (currently only Google) identity linked to an EXISTING lab account (Phase 2.2).
+///
+/// There is no sign-up path: a row exists only because the already-authenticated owner of `userId` proved
+/// control of a Google account (verified ID token) while signed in. Sign-in matches on `(provider, subject)`
+/// ONLY — `subject` is Google's stable `sub`; an email address is never an identifier and is deliberately not
+/// stored. `@@unique([provider, subject])` makes one Google account usable by at most one lab account;
+/// `@@unique([userId, provider])` allows at most one Google account per lab account, so a link is never
+/// silently replaced. Rows are additive: deleting a user cascades to its links; nothing else references them.
+model OAuthIdentity {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  subject   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@unique([userId, provider])
 }
 
 model HistoryEntry {

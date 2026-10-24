@@ -1,0 +1,54 @@
+# Phase 2.2 — Google account linking and sign-in
+
+Status: implemented on branch `feat/google-signin-linking`; **not merged, not deployed, migration not applied anywhere hosted.**
+
+## Policy
+- Google is only a way to sign in to an **existing** lab account that has been **linked** to it. No sign-up, no automatic account creation, no linking by email match, no role changes. Roles stay `MEMBER` / `LAB_MANAGER` / `ADMIN`; password login, logout, sessions and rate limits are unchanged.
+- A verified Google identity grants nothing by itself. The account (and its role) found by `(provider, sub)` decides what the session can do, re-read on every request as before.
+
+## Data model
+`OAuthIdentity(id, userId → User ON DELETE CASCADE, provider, subject, createdAt)`, `UNIQUE(provider, subject)`, `UNIQUE(userId, provider)`. Additive; `subject` is Google's stable `sub`; the email is not stored and never used as a key. One Google account ↔ one lab account, and an existing link is never silently replaced. There is no unlink endpoint in this phase.
+
+Migration: `apps/server/prisma/migrations/20261012100000_oauth_identity/migration.sql` (one `CREATE TABLE` + two `CREATE UNIQUE INDEX`; SHA-256 of the LF-normalised file: `7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e`).
+
+### Applying it (NOT done; needs approval)
+Production/Preview migrations are applied only through the reviewed executor (`npm run migrate:turso -w apps/server`), which runs **only** migrations pinned by SHA-256 in `REVIEWED_MIGRATIONS` (`src/lib/tursoMigrate.ts`) and only plain `CREATE TABLE`/`CREATE INDEX` statements. As of Phase 2.2.1 this migration IS pinned there (hash above; any edit to the file is refused). Pinning is a code change only: **nothing has been applied to any database.** Order when approved: confirm the target host (Preview must be a different database from Production) → back up / record a recovery point → rehearse on a local copy → inspect-only → apply → deploy the code. The code must not be deployed before the table exists (the new routes query it; password login does not). See `docs/architecture/turso-migration-executor.md`.
+
+## Configuration (all optional; absent/invalid ⇒ Google is simply not offered)
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` — redirect must be https (http only for localhost/127.0.0.1 outside production), exact path `/api/auth/google/callback`, no query/credentials. Hosted values and the Google Cloud OAuth client are **not** created by this phase.
+
+## Flow (all under `/api/auth/google`)
+| Endpoint | Purpose |
+|---|---|
+| `GET /status` | `{enabled}` — drives the login-page button |
+| `GET /start` | begins **sign-in**: 302 to Google |
+| `POST /link/start` (signed in) | begins **linking** for the session's own account → `{url}` (POST so a cross-site page cannot trigger it) |
+| `GET /link` (signed in) | `{enabled, linked}` for the profile page |
+| `GET /callback` | single redirect URI for both purposes; the purpose comes from the stored transaction, never from the URL |
+
+Authorization-code flow with `openid email` scope, PKCE (S256, via google-auth-library), `state` and OIDC `nonce`. The transaction (state, nonce, PKCE verifier, expiry, purpose, initiating user) lives in the initiating browser's **server-side session**, expires after 10 minutes, and is **removed and persisted before anything else happens** in the callback, so replays and failed callbacks cannot reuse it. The ID token is verified by the Phase 2.1 verifier (library signature check, issuer, exact audience, expiry, `sub`, verified email) plus the transaction's nonce.
+- **Sign-in:** account found by `(google, sub)` only → `session.regenerate()`, then `/profile`. Unknown identity → `/login?google_error=not_linked`; no user, identity or audit row is created or changed.
+- **Link:** requires the browser to still be signed in as the account that started the flow; refused if that sub is linked to another account (`in_use`) or the account already has a different Google link (`has_other`); same sub again is `already_linked`; concurrent races lose to the unique constraints. Success writes the identity and an `OAUTH_IDENTITY_LINKED` audit row (no token/sub in it).
+- Redirect targets are fixed paths (`/login?google_error=…`, `/profile`, `/profile?google=…`); no request value selects a destination. Failed callbacks count against a separate in-memory limiter key (`google-oauth`), so password login is not affected.
+- Nothing sensitive is logged (only fixed messages).
+
+## Remediation after the security checkpoint
+- **Anonymous initiation (M1).** `GET /start` is limited per client (`lib/oauthStartRateLimit.ts`: 20 per 10 min, IPv6 bucketed by /64, bounded memory; the key is `req.ip`, which follows `TRUST_PROXY`, so client-supplied `X-Forwarded-For` entries cannot choose a bucket) and capped globally (2000 live pending sessions, counted in the shared database, a cross-instance bound). A session created only to carry an anonymous sign-in transaction lives 12 minutes (row expiry and cookie); signed-in sessions and the post-sign-in session keep the normal 7-day policy. Expired session rows are now swept by `PrismaSessionStore` (at most 500 per sweep, at most one sweep per 10 minutes per instance, piggy-backed on session writes, index-driven, re-checking `expiresAt` so an active session is never deleted). Limits: the per-client limiter is in memory per instance (N serverless instances allow up to N times the budget); the global cap bounds the worst case; a client behind a shared address shares one bucket.
+- **Re-authentication and unlink (M2).** `lib/sameOrigin.ts` adds the project's first Origin/CSRF guard for these state-changing routes: `Origin` must equal the request's own origin (or the configured redirect URI's origin; any localhost port outside production), or `Sec-Fetch-Site: same-origin` when no Origin is sent; the body must be JSON. Password checks reuse the `POST /auth/password` conventions and limiter; an unusable hash never verifies and there is no administrator bypass. A linked account cannot start another link (409).
+- **Database/session errors in the callback (L3).** Lookup, link-write, role/session reads and session saves are caught: the browser is sent to the fixed failure path, success is never reported for a failed write, and only fixed log messages are written (no Prisma errors, SQL, subjects, codes or tokens).
+- **L1.** The transaction is consumed with one atomic statement on the session row (`json_remove … WHERE the same state is still present`), so two concurrent callbacks cannot both consume it; exactly one authorization-code exchange occurs. No new table was needed. Residual: express-session saves whole documents, so a concurrent request that loaded the session before the removal and saves after it could write the old document back; completing a flow still needs a fresh single-use Google code bound to this PKCE challenge. `json_remove`/`json_extract` are SQLite JSON functions, verified on local SQLite only (not on Turso/libSQL).
+- **L2.** If the store cannot be written, `start` and the callback redirect to the failure path and no authentication response is produced. If the removal of a consumed transaction fails at the store, the transaction remains until it expires (no code was exchanged).
+- **L4.** After `regenerate()` the session is saved explicitly before the redirect; on failure `userId` is cleared and the browser is sent to the failure path, never to the signed-in destination.
+- **L5.** The per-IP callback failure counter was removed: a callback without a valid browser-bound transaction does no work and writes nothing, and every callback with one required a rate-limited start or a verified password, so one client cannot lock others out of completing a flow.
+
+## Turso constraint-error compatibility (Phase 2.2.4)
+The Phase 2.2.3 rehearsal on a disposable Turso database showed that Prisma 5.22 with `@prisma/adapter-libsql` 5.22 does not produce `P2002`/`P2003` for remote constraint failures: the adapter only types a driver error that carries a numeric `rawCode`, which remote errors lack. Prisma then raises a `PrismaClientKnownRequestError` with `code: "SQLITE_CONSTRAINT"` (no `meta.target`) for unique, foreign-key, NOT NULL and CHECK failures alike; the driver's own text (e.g. `UNIQUE constraint failed: …`) is the LAST line of its message. `lib/dbErrors.ts` classifies conservatively: `P2002`/`P2003` and the extended codes (`SQLITE_CONSTRAINT_UNIQUE`/`_PRIMARYKEY`/`_FOREIGNKEY`) directly; plain `SQLITE_CONSTRAINT` only from the final message line; anything else is an unknown constraint failure that is never treated as a duplicate. The global handler's 409/400/404 contract is unchanged and now also covers the remote shape (unknown constraint types and all other errors stay a generic 500). The link route decides its outcome by re-reading the committed rows (`in_use` / `already_linked` / `has_other`) instead of trusting the error text; with nothing to find it answers `in_use` only for an explicit unique classification, otherwise `failed`. Not verified: the exact message text of a real Turso error (only a rawCode-stripped simulation through the real engine and adapter was tested). Phase 2.2.6 moved the remaining `P2002`-only checks (gallery idempotency `isUniqueViolation`, forum duplicate reactions, direct-conversation race recovery) onto the same classifier and added `scripts/turso-shape-regression.ts` (`npm run test:turso-shape -w apps/server`), which runs the real routes through the real adapter path on a LOCAL file with the `rawCode` stripped from real constraint errors. It also stops a numbered Prisma code-frame line from being read as driver text when the driver message is empty. Still unverified: the exact message wording of a real Turso error (the phrase match is deliberately not anchored to the line start), and `P2025`, which comes from the query engine rather than the driver mapping (`gallery.routes.ts`).
+
+## Known limitations
+- Session-store rows (the pending transaction, its removal, the post-login session) are the only database writes for an unknown or failed Google attempt; they are the mechanism that makes the transaction one-time.
+- The start limiter is in-memory per instance (same limitation as the existing login limiter); see the remediation notes for the global cap.
+- No "designated admin" email restriction (not requested).
+- Verified against real Google endpoints: **not** done (tests use simulated Google); requires the Google Cloud client and hosted variables.
+
+## Tests
+`npx tsx scripts/unit-google-identity.test.ts` (also in `npm run test:unit`) and `npm run test:google-auth -w apps/server` (needs a local seeded `prisma/dev.db` containing the new table; copies it to a temp file, refuses to run with Turso variables set).
