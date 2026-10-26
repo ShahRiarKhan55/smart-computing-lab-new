@@ -1,3 +1,4 @@
+import { countVisibleMembers, publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
 import {
   canDeleteContent,
@@ -56,7 +57,7 @@ router.get(
           where: { project: visible },
           include: { project: { select: { id: true, slug: true, title: true, summary: true, status: true, sortOrder: true } } },
         },
-        researcherLinks: { include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
+        researcherLinks: { where: { teamMember: publishedMemberWhere(viewer) }, include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
       },
     });
     if (!row) throw new HttpError(404, "Not found");
@@ -105,10 +106,11 @@ router.put(
     await prisma.$transaction(async (tx) => {
       const area = await tx.researchArea.findUnique({ where: { id: req.params.id }, select: { id: true, title: true } });
       if (!area) throw new HttpError(404, "Not found");
-      if (teamMemberIds.length > 0 && (await tx.teamMember.count({ where: { id: { in: teamMemberIds } } })) !== teamMemberIds.length) {
+      if (teamMemberIds.length > 0 && (await countVisibleMembers(tx, req.user, teamMemberIds)) !== teamMemberIds.length) {
         throw new HttpError(400, "One or more team members do not exist.");
       }
-      const current = (await tx.researcherArea.findMany({ where: { researchAreaId: area.id }, select: { teamMemberId: true } })).map((c) => c.teamMemberId);
+      // Hidden (unpublished) members take no part in the replacement: they are neither listed nor removed.
+      const current = (await tx.researcherArea.findMany({ where: { researchAreaId: area.id, teamMember: publishedMemberWhere(req.user) }, select: { teamMemberId: true } })).map((c) => c.teamMemberId);
       const { toAdd, toRemove } = diffLinks(current, teamMemberIds);
 
       if (toRemove.length > 0) await tx.researcherArea.deleteMany({ where: { researchAreaId: area.id, teamMemberId: { in: toRemove } } });

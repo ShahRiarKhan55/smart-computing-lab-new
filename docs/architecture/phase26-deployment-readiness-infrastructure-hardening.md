@@ -40,7 +40,9 @@ the existing regression scripts' conventions (`api-regression.mjs`, `unit-sessio
   This app had **no deployment documentation of any kind** before this phase (no Dockerfile, no
   README, no `docs/architecture/*deploy*`) — §20 below is the first place this topology is written
   down explicitly, not assumed.
-- `TeamMember` has no `visibility` column at all (the roster is unconditionally public); `GalleryItem`'s
+- `TeamMember` has no `visibility` column (when this was written the roster was unconditionally public; since Phase 3B a
+  profile has a publication flag, `isPublished`, and unpublished profiles are hidden from the public pages, APIs, search and sitemap: see
+  `phase3b-alumni-directory.md`); `GalleryItem`'s
   visibility is entirely inherited from its `StoredFile.visibility` (no gallery item detail route
   exists in the frontend router at all — only the `/gallery` list). Both facts mattered for §14.
 - There is **no password-change endpoint anywhere in this codebase** — only account creation (admin
@@ -441,7 +443,8 @@ checklist item (§20: cache Vite's hashed `/assets/*` far-future/immutable, neve
 
 `GET /api/files/:id` (this app's one real "asset" route) was re-verified, not changed: authorization
 happens before any byte is streamed, `Cache-Control` is `public, max-age=3600` only for a `PUBLIC`
-file and `private, no-store` for everything else, and the new global `/api/*` default of
+file that is not a profile photo and `private, no-store` for everything else (profile photos, Phase 3A/3B,
+are always `private, no-store` and follow their profile's visibility), and the new global `/api/*` default of
 `Cache-Control: no-store` (§5) never overrides that later, more specific header — confirmed by the
 sitemap/session-cookie/API regression scripts, all of which exercise file responses indirectly
 without a regression.

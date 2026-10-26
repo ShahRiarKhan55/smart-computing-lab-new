@@ -1,3 +1,4 @@
+import { publishedMemberWhere } from "./memberVisibility.js";
 import type { Prisma } from "@prisma/client";
 import {
   WORKSPACE_LIMITS,
@@ -114,10 +115,10 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
               where: { researchArea: visible },
               select: { researchArea: { select: { id: true, icon: true, title: true, tag: true, sortOrder: true } } },
             },
-            members: { where: { role: "LEAD" }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
+            members: { where: { role: "LEAD", teamMember: publishedMemberWhere(viewer) }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
             _count: {
               select: {
-                members: true,
+                members: { where: { teamMember: publishedMemberWhere(viewer) } },
                 publications: { where: { publication: visible } },
                 events: { where: { ...visible, ...eventScopeWhere("upcoming", now) } },
               },
@@ -139,8 +140,8 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
             id: true,
             name: true,
             visibility: true,
-            members: { where: { role: "LEAD" }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
-            _count: { select: { members: true } },
+            members: { where: { role: "LEAD", teamMember: publishedMemberWhere(viewer) }, select: { teamMember: { select: { id: true, name: true, initials: true } } } },
+            _count: { select: { members: { where: { teamMember: publishedMemberWhere(viewer) } } } },
             projects: { where: visible, select: { id: true, areaLinks: { where: { researchArea: visible }, select: { researchAreaId: true } } } },
           },
         },
@@ -174,19 +175,20 @@ export async function loadWorkspace(viewer: NonNullable<Viewer>, locale: Locale,
     prisma.newsItem.count({ where: newsWhere }),
 
     // Collaborators: the OTHER researchers on the same visible projects / groups / areas. Only public
-    // profile columns are selected (a TeamMember row has no visibility and these are the /team fields).
+    // profile columns are selected (a TeamMember row has no `visibility` column; it has a publication flag, applied below with
+    // publishedMemberWhere, and these are the /team fields).
     prisma.projectMember.findMany({
-      where: { teamMemberId: { not: me.id }, project: { ...visible, members: { some: mine } } },
+      where: { teamMemberId: { not: me.id }, teamMember: publishedMemberWhere(viewer), project: { ...visible, members: { some: mine } } },
       select: { projectId: true, teamMember: { select: { id: true, name: true, initials: true, role: true } } },
       take: COLLAB_SCAN,
     }),
     prisma.groupMember.findMany({
-      where: { teamMemberId: { not: me.id }, group: { ...visible, members: { some: mine } } },
+      where: { teamMemberId: { not: me.id }, teamMember: publishedMemberWhere(viewer), group: { ...visible, members: { some: mine } } },
       select: { groupId: true, teamMember: { select: { id: true, name: true, initials: true, role: true } } },
       take: COLLAB_SCAN,
     }),
     prisma.researcherArea.findMany({
-      where: { teamMemberId: { not: me.id }, researchArea: { ...visible, researcherLinks: { some: mine } } },
+      where: { teamMemberId: { not: me.id }, teamMember: publishedMemberWhere(viewer), researchArea: { ...visible, researcherLinks: { some: mine } } },
       select: { researchAreaId: true, teamMember: { select: { id: true, name: true, initials: true, role: true } } },
       take: COLLAB_SCAN,
     }),

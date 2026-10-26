@@ -82,7 +82,7 @@ export function PublicationDetailPage() {
   async function openManageAuthors() {
     setActionError(null);
     try {
-      const [{ teamMemberIds }, members] = await Promise.all([apiFetch<PublicationAuthorsResponse>(`/publications/${pub!.id}/authors`), apiFetch<TeamMember[]>("/team")]);
+      const [{ teamMemberIds }, members] = await Promise.all([apiFetch<PublicationAuthorsResponse>(`/publications/${pub!.id}/authors`), apiFetch<TeamMember[]>("/team?includeAlumni=1")]);
       setTeam(members);
       setAuthorIds(teamMemberIds);
     } catch (err) {

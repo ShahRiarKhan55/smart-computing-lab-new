@@ -35,12 +35,23 @@ export const localeSchema = z.enum(LOCALES, {
 });
 export type Locale = z.infer<typeof localeSchema>;
 
-export const categorySchema = z.enum(["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"], {
-  errorMap: () => ({ message: "Category must be one of FACULTY, PHD, MSC, BSC or RESEARCH." }),
+export const categorySchema = z.enum(["FACULTY", "PHD", "MSC", "BSC", "RESEARCH", "ALUMNI"], {
+  errorMap: () => ({ message: "Category must be one of FACULTY, PHD, MSC, BSC, RESEARCH or ALUMNI." }),
 });
 export type Category = z.infer<typeof categorySchema>;
 
+/**
+ * Categories a profile may have WHILE it has (or is created together with) a login account. ALUMNI is a public
+ * directory entry, never an account (Phase 3B): schemas that create a profile together with an account or an
+ * invitation use this one, so ALUMNI is refused at validation as well as by the server's account-linking checks.
+ */
+export const accountCategorySchema = categorySchema.exclude(["ALUMNI"], {
+  errorMap: () => ({ message: "Category must be one of FACULTY, PHD, MSC, BSC or RESEARCH." }),
+});
+
+/** The roster groups on the team page, in display order. ALUMNI is deliberately NOT here: alumni have their own directory. */
 export const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"];
+export const ALUMNI_CATEGORY = "ALUMNI" satisfies Category;
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   FACULTY: "Faculty",
@@ -48,4 +59,5 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   MSC: "MSc Students",
   BSC: "BSc Students",
   RESEARCH: "Research Students",
+  ALUMNI: "Alumni",
 };

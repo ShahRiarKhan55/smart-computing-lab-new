@@ -1,7 +1,7 @@
 # Applying the reviewed migrations to Turso (`migrate:turso`)
 
 `prisma migrate deploy` cannot talk to Turso (see the site maintainer guide, "Deployment"). The additive migrations
-that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these three,
+that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these four,
 in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 
 | Migration | Creates | Reviewed SHA-256 (CRLF normalised to LF) |
@@ -9,10 +9,11 @@ in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 | `20261011130000_gallery_item_images` | `GalleryImage` | `aee1e5aa992ef1c0db9c66133326a6b9503f27d3a52edf4e7d6968bf6ecc6728` |
 | `20261011140000_gallery_upload_attempts` | `GalleryUploadAttempt` | `20d099cc1dd7f7c30deaabf92a10ed12355b982e627435142efb17c585228e81` |
 | `20261012100000_oauth_identity` (Phase 2.2) | `OAuthIdentity` (FK to `User` ON DELETE CASCADE; unique `(provider, subject)` and `(userId, provider)`) | `7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e` |
+| `20261020120000_team_member_is_published` (Phase 3B) | one column: `TeamMember.isPublished BOOLEAN NOT NULL DEFAULT true` (see "Column additions" below) | `502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b` |
 
 A migration directory that is not in this table is never read or run, a pinned file whose bytes differ (even by a
 trailing space) is refused, and even a file whose hash matches must still consist only of plain additive
-`CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements. Adding a migration to this release path means a reviewed code
+`CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements, or of the single `ALTER TABLE ... ADD COLUMN` form described under "Column additions". Adding a migration to this release path means a reviewed code
 change to `REVIEWED_MIGRATIONS` (and its tests); there is no configuration switch. Listing a migration here does NOT apply
 it anywhere: applying is a separate, explicitly approved, operator-run step against a confirmed target.
 
@@ -24,7 +25,7 @@ Tests: `apps/server/scripts/unit-turso-migrate.test.ts` (part of `npm run test:u
 | Property | How |
 |---|---|
 | Only reviewed SQL runs | Each migration file's SHA-256 (CRLF-normalised) is pinned in `REVIEWED_MIGRATIONS` (table above). A changed file is refused; an unpinned directory is ignored. |
-| Only additive SQL runs | Only `CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements are accepted; `DROP`, `ALTER`, `INSERT`, `UPDATE`, `DELETE`, `PRAGMA`, triggers, views, quotes and block comments are refused. |
+| Only additive SQL runs | Only `CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements and the one `ADD COLUMN` form below are accepted; `DROP`, every other `ALTER`, `INSERT`, `UPDATE`, `DELETE`, `PRAGMA`, triggers, views, quotes and block comments are refused. |
 | Explicit target | The target comes ONLY from `MIGRATE_TARGET_URL` / `MIGRATE_TARGET_TOKEN`. `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `DATABASE_URL` are never read. No target = refused. |
 | Identity confirmed before any SQL | `--expect-target` is mandatory (even to inspect) and must equal the target's host (remote) or absolute path (file) exactly. A remote URL must be `libsql://` or `https://`, a `*.turso.io` host, with no credentials, path or query in the URL. |
 | No credentials printed | The token is read from the environment only (never a flag), URL/token are redacted from error text, and refusal messages never include them. |
@@ -126,3 +127,29 @@ Also NOT proven by local SQLite, and relevant to the Phase 2.2 code that this mi
 (`$executeRaw`) and reports affected rows exactly as local SQLite does, and that a remote Turso database enforces the
 `ON DELETE CASCADE` foreign key. These need a rehearsal against a throwaway (non-Production) Turso database before
 relying on them.
+
+## Column additions (Phase 3B)
+The executor accepts exactly one `ALTER` form, matched by an anchored regular expression (`ADD_COLUMN` in `src/lib/tursoMigrate.ts`):
+
+    ALTER TABLE "T" ADD COLUMN "c" BOOLEAN|INTEGER NOT NULL DEFAULT true|false|<integer>
+
+That is a metadata-only change in SQLite (constant default, no table copy, no data rewrite). Refused: a nullable column, a missing, quoted, expression
+or `CURRENT_TIMESTAMP` default, any other type, `REFERENCES`, `UNIQUE`, `PRIMARY KEY`, `CHECK`, `RENAME`, `DROP COLUMN`, several clauses in one
+statement, unquoted or hostile identifiers, a second statement, a repeated column, and mixing `ALTER` with `CREATE` in one migration.
+
+How the existing protections apply to a column:
+* **Pinned hash** — as for every migration; the Phase 3B file's pin is in the table above.
+* **State classification** — `absent` (column not there), `applied` (there with the exact declared type, `NOT NULL` and default text), `divergent`
+  (there but different: the run is refused and nothing is written). A column cannot be `partial`.
+* **Prerequisite** — the table must already exist (`PREREQUISITE` refusal otherwise).
+* **In the write transaction** — after the `ALTER` the executor re-inspects the column, requires the row count of the altered table to be unchanged,
+  and requires that **every existing row holds the default** (so, for `isPublished`, every current profile stays published); otherwise it rolls back.
+* **COMMIT uncertainty and idempotency** — unchanged: the database is re-read, and a second run is `nothing-to-do`.
+
+Tests: `scripts/unit-turso-migrate.test.ts` section 9 (accepted and refused statements, hash edits, apply, idempotency, divergence, missing table,
+injected COMMIT failure), on disposable local files only. **Not tested against any remote Turso database.** Whether Turso applies this `ALTER`
+transactionally and how it reports a lost COMMIT reply remain unverified; the checks above exist for exactly that reason.
+
+## Release runbook for Phase 3A + 3B
+The remote verification procedure (disposable target only), the migration-before-code deployment order, smoke tests, recovery and rollback limits for the
+`isPublished` migration are in `phase3-release-runbook.md`. That document is preparation only: nothing in it has been executed against a remote database.

@@ -43,7 +43,25 @@ const section = (t: string) => console.log(`\n# ${t}`);
 // ---- fault injection: the transaction commits, then the caller is told it failed ------------------------
 let armed = false;
 const realTransaction = prisma.$transaction.bind(prisma) as (...a: unknown[]) => Promise<unknown>;
+/** The OTHER ambiguous shape: the callback COMPLETES (so Prisma goes on to commit) but the transaction is then rolled back and reported as
+ *  an expired transaction (Prisma P2028 "a commit cannot be executed on an expired transaction"). Nothing is committed, yet the application
+ *  cannot know that: it must still keep the blob. */
+let armedExpire = false;
+class ForcedRollback extends Error {}
 (prisma as unknown as { $transaction: unknown }).$transaction = async (...args: unknown[]) => {
+  if (armedExpire && typeof args[0] === "function") {
+    armedExpire = false;
+    const callback = args[0] as (tx: unknown) => Promise<unknown>;
+    try {
+      await realTransaction(async (tx: unknown) => {
+        await callback(tx);
+        throw new ForcedRollback();
+      }, ...args.slice(1));
+    } catch (err) {
+      if (!(err instanceof ForcedRollback)) throw err;
+    }
+    throw Object.assign(new Error("simulated: Transaction already closed: A commit cannot be executed on an expired transaction"), { code: "P2028" });
+  }
   const result = await realTransaction(...args);
   if (armed) {
     armed = false;
@@ -158,6 +176,25 @@ try {
   const blobs5 = blobCount();
   const replayOther = await Promise.all([1, 2, 3].map(() => post("/gallery", jpeg(0x70), { caption: `${TAG} dup` }, dupKey)));
   check("duplicates of a completed attempt are answered from the original and leave no extra blob", winner.status === 201 && replayOther.every((r) => r.status === 201 && r.json?.id === winner.json.id) && blobCount() === blobs5);
+  // ------------------------------------------------------------------------------------------------
+  section("CREATE: the callback completes, the commit never happens (expired transaction) - the exact shape seen under contention");
+  const k6 = randomUUID();
+  const CAP6 = `${TAG} expired`;
+  const bytes6 = jpeg(0x77);
+  const blobs6 = blobCount();
+  const files6 = await prisma.storedFile.count();
+  armedExpire = true;
+  const r6 = await post("/gallery", bytes6, { caption: CAP6 }, k6);
+  check("(setup) the caller is told the request failed (500)", r6.status === 500, `got ${r6.status}`);
+  check("NOTHING was committed: no entry, no StoredFile, no attempt row", (await prisma.galleryItem.count({ where: { caption: CAP6 } })) === 0 && (await prisma.storedFile.count()) === files6 && (await prisma.galleryUploadAttempt.count({ where: { key: k6 } })) === 0);
+  check("the blob was nevertheless KEPT (non-reference is not known, so it is never deleted): one new blob, a possible orphan", blobCount() === blobs6 + 1, `before ${blobs6}, after ${blobCount()}`);
+  const retry6 = await post("/gallery", bytes6, { caption: CAP6 }, k6);
+  check("retrying with the same key creates the entry normally (201, not a replay)", retry6.status === 201 && retry6.replayed === false, `${retry6.status} ${retry6.replayed}`);
+  check("... exactly one entry; the earlier kept blob is the only leak (2 new blobs in total)", (await prisma.galleryItem.count({ where: { caption: CAP6 } })) === 1 && blobCount() === blobs6 + 2, `after ${blobCount()}`);
+  const item6 = await prisma.galleryItem.findFirst({ where: { caption: CAP6 } });
+  const s6 = item6 ? await served(item6.fileId) : { status: 0, length: 0 };
+  check("... and the committed image is served intact", s6.status === 200 && s6.length === bytes6.length, `${s6.status}/${s6.length}`);
+
 } finally {
   await cleanup().catch((e) => console.log("cleanup failed:", e instanceof Error ? e.message : e));
   server.close();

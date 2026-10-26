@@ -1,3 +1,4 @@
+import { publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
 import type { Prisma } from "@prisma/client";
 import {
@@ -18,7 +19,7 @@ import {
   diffLinks,
   type LinkActor,
 } from "../lib/authorLinks.js";
-import { assertMayChangeVisibility, visibleTo } from "../lib/visibility.js";
+import { assertMayChangeVisibility, visibleTo, type Viewer } from "../lib/visibility.js";
 import { toNewsItem } from "../lib/serializers.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
@@ -58,8 +59,8 @@ router.get(
 // Author links (NewsAuthor join table). Replaces the full set of linked
 // team members; only the join rows change, never the NewsItem.
 // -----------------------------------------------------------------
-async function listAuthorIds(tx: Prisma.TransactionClient, newsItemId: string) {
-  const links = await tx.newsAuthor.findMany({ where: { newsItemId }, select: { teamMemberId: true } });
+async function listAuthorIds(tx: Prisma.TransactionClient, newsItemId: string, viewer: Viewer) {
+  const links = await tx.newsAuthor.findMany({ where: { newsItemId, teamMember: publishedMemberWhere(viewer) }, select: { teamMemberId: true } });
   return links.map((l) => l.teamMemberId).sort();
 }
 
@@ -70,9 +71,9 @@ async function replaceAuthors(
   newsItemId: string,
   requestedIds: string[],
 ) {
-  const current = await listAuthorIds(tx, newsItemId);
+  const current = await listAuthorIds(tx, newsItemId, actor);
   await assertMayChangeLinks(tx, actor, current, requestedIds);
-  await assertTeamMembersExist(tx, requestedIds);
+  await assertTeamMembersExist(tx, requestedIds, actor);
 
   const { toAdd, toRemove } = diffLinks(current, requestedIds);
   if (toRemove.length > 0) {
@@ -111,7 +112,7 @@ router.get(
       select: { id: true },
     });
     if (!row) throw new HttpError(404, "Not found");
-    const body: NewsAuthorsResponse = { teamMemberIds: await listAuthorIds(prisma, row.id) };
+    const body: NewsAuthorsResponse = { teamMemberIds: await listAuthorIds(prisma, row.id, req.user ?? null) };
     res.json(body);
   }),
 );
@@ -130,7 +131,7 @@ router.put(
       if (!existing) throw new HttpError(404, "Not found");
       const diff = await replaceAuthors(tx, req.user!, existing.id, teamMemberIds);
       await auditAuthorChange(tx, req.user!, existing.id, diff);
-      return listAuthorIds(tx, existing.id);
+      return listAuthorIds(tx, existing.id, req.user!);
     });
 
     const body: NewsAuthorsResponse = { teamMemberIds: linked };

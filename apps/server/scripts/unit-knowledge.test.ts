@@ -133,7 +133,7 @@ const row = (over: Partial<KnowledgeRow> = {}): KnowledgeRow =>
     project: { id: "p1", title: "Hidden Project", visibility: "LAB_ONLY" },
     researchArea: { id: "a1", title: "Public Area", visibility: "PUBLIC" },
     group: { id: "g1", name: "Hidden Group", visibility: "LAB_ONLY" },
-    teamMember: { id: "t1", name: "Grace" },
+    teamMember: { id: "t1", name: "Grace", isPublished: true },
     ...over,
   }) as KnowledgeRow;
 
@@ -142,6 +142,10 @@ async function main() {
   const [g] = await serializeKnowledge([row()], guest, "en");
   t("serialize: a guest is never given a LAB_ONLY project or group (nor its title)", g.project === null && g.group === null && !JSON.stringify(g).includes("Hidden"));
   t("serialize: a PUBLIC area and the researcher ARE shown to a guest", g.researchArea?.title === "Public Area" && g.researcher?.name === "Grace");
+  const [hiddenResearcher] = await serializeKnowledge([row({ teamMember: { id: "t2", name: "Unpublished Person", isPublished: false } } as Partial<KnowledgeRow>)], guest, "en");
+  const [unknownStatus] = await serializeKnowledge([row({ teamMember: { id: "t2", name: "Unknown Status" } } as unknown as Partial<KnowledgeRow>)], guest, "en");
+  const [adminSees] = await serializeKnowledge([row({ teamMember: { id: "t2", name: "Unpublished Person", isPublished: false } } as Partial<KnowledgeRow>)], { id: "a", role: "ADMIN" }, "en");
+  t("serialize: an UNPUBLISHED researcher is never named to a guest, and a missing status fails closed", hiddenResearcher.researcher === null && unknownStatus.researcher === null && !JSON.stringify(hiddenResearcher).includes("Unpublished") && adminSees.researcher?.name === "Unpublished Person");
   t("serialize: a list item carries an excerpt and no body", g.excerpt === "Line one Line two" && !("body" in g));
   t("serialize: a guest gets no `visibility`", !("visibility" in g));
   t("serialize: no account id anywhere (only the public team profile)", !JSON.stringify(g).includes("u-author") && g.author?.id === "tm-author");

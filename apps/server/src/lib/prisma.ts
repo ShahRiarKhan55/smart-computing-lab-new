@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
 import { createClient } from "@libsql/client";
+import { guardEmbeddedLibsql, interactiveTransactionOptionsFor } from "./libsqlGuard.js";
 
 /**
  * The single place `PrismaClient` is constructed (Vercel deployment adapter).
@@ -33,12 +34,22 @@ function createPrismaClient(): PrismaClient {
     return new PrismaClient();
   }
 
-  const libsql = createClient({
-    url: tursoUrl,
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  });
+  const libsql = guardEmbeddedLibsql(
+    createClient({
+      url: tursoUrl,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    }),
+    tursoUrl,
+  );
   const adapter = new PrismaLibSQL(libsql);
   return new PrismaClient({ adapter });
 }
 
 export const prisma = createPrismaClient();
+
+/**
+ * Options for the interactive transactions of the profile-photo write routes: wider limits for an EMBEDDED libSQL database (whose
+ * synchronous busy-wait would otherwise let Prisma's 5 s timer expire a transaction whose commit then succeeds); `undefined`
+ * (Prisma's defaults, unchanged) for the plain local SQLite file and for a remote Turso/libSQL database.
+ */
+export const interactiveTransactionOptions = interactiveTransactionOptionsFor(process.env.TURSO_DATABASE_URL);

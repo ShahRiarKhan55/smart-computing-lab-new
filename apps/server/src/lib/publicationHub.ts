@@ -1,3 +1,4 @@
+import { publishedMemberWhere } from "./memberVisibility.js";
 import type { Prisma } from "@prisma/client";
 import {
   DEFAULT_LOCALE,
@@ -51,7 +52,7 @@ function textWhere(terms: string[], translatedIds: Set<string> | null): Prisma.P
         { title: { contains: term } },
         { authors: { contains: term } },
         { venue: { contains: term } },
-        { authorLinks: { some: { teamMember: { name: { contains: term } } } } },
+        { authorLinks: { some: { teamMember: { isPublished: true, name: { contains: term } } } } },
         ...(/^\d{4}$/.test(term) ? [{ year: Number(term) }] : []),
       ],
     })),
@@ -67,7 +68,7 @@ export async function browsePublications(query: PublicationListQuery, viewer: Vi
   const and: Prisma.PublicationWhereInput[] = [visible];
   if (query.year !== undefined) and.push({ year: query.year });
   if (query.visibility) and.push({ visibility: query.visibility });
-  if (query.researcher) and.push({ authorLinks: { some: { teamMemberId: query.researcher } } });
+  if (query.researcher) and.push({ authorLinks: { some: { teamMemberId: query.researcher, teamMember: publishedMemberWhere(viewer) } } });
 
   // One linked project must satisfy every project-side filter, and only a project the viewer may see counts.
   if (query.project || query.area || query.group) {
@@ -107,7 +108,7 @@ export async function loadPublicationDetail(id: string, viewer: Viewer, locale: 
   const row = await prisma.publication.findFirst({
     where: { id, ...visible },
     include: {
-      authorLinks: { include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
+      authorLinks: { where: { teamMember: publishedMemberWhere(viewer) }, include: { teamMember: { select: { id: true, name: true, initials: true, role: true, sortOrder: true } } } },
       projectLinks: {
         where: { project: visible },
         include: {

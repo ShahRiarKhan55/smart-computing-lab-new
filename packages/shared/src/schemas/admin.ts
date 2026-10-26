@@ -21,7 +21,7 @@ import { isTranslatableEntityType, TRANSLATABLE_FIELDS, type TranslatableEntityT
 // ---- content types ------------------------------------------------------------
 export const ADMIN_CONTENT_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge", "resource", "team-member"] as const;
 export type AdminContentType = (typeof ADMIN_CONTENT_TYPES)[number];
-/** The types whose table has a `visibility` column (a team profile has none: it is always public). */
+/** The types whose table has a `visibility` column (a team profile has none: it has `isPublished` instead, and the visibility bulk action does not apply to it). */
 export const ADMIN_VISIBILITY_TYPES = ["research-area", "project", "group", "publication", "news", "event", "knowledge", "resource"] as const;
 export type AdminVisibilityType = (typeof ADMIN_VISIBILITY_TYPES)[number];
 export const hasVisibility = (t: AdminContentType): t is AdminVisibilityType => (ADMIN_VISIBILITY_TYPES as readonly string[]).includes(t);

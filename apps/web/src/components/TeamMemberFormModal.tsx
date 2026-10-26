@@ -13,7 +13,8 @@ export interface TeamMemberFormValues {
   role: string;
   department: string;
   bio: string;
-  photoUrl: string;
+  /** Omitted when unchanged on an edit (see handleSubmit). */
+  photoUrl?: string;
   category: Category;
   sortOrder: number;
   translations?: { ja: Record<string, string> };
@@ -25,20 +26,26 @@ interface TeamMemberFormModalProps {
   initial?: Partial<TeamMember> | null;
   /** Category and sort order are admin-only fields, mirroring the reference's permission rules. */
   showAdminFields: boolean;
+  /** Offer the Alumni category (administrators only; the API re-checks). */
+  allowAlumni?: boolean;
   onClose: () => void;
   onSubmit: (values: TeamMemberFormValues) => Promise<void>;
 }
 
 const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"];
+const CATEGORY_ORDER_WITH_ALUMNI: Category[] = [...CATEGORY_ORDER, "ALUMNI"];
 
-function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberFormValues, "translations"> {
+/** An uploaded photo is a same-site storage path; it is never shown in the URL field as if it were a photo URL. */
+const isUploadedPhoto = (photoUrl: string | undefined) => (photoUrl ?? "").startsWith("/api/files/");
+
+function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberFormValues, "translations" | "photoUrl"> & { photoUrl: string } {
   return {
     name: initial?.name ?? "",
     initials: initial?.initials ?? "",
     role: initial?.role ?? "",
     department: initial?.department ?? "",
     bio: initial?.bio ?? "",
-    photoUrl: initial?.photoUrl ?? "",
+    photoUrl: isUploadedPhoto(initial?.photoUrl) ? "" : initial?.photoUrl ?? "",
     category: initial?.category ?? "BSC",
     sortOrder: initial?.sortOrder ?? 0,
   };
@@ -49,6 +56,7 @@ export function TeamMemberFormModal({
   title,
   initial,
   showAdminFields,
+  allowAlumni = false,
   onClose,
   onSubmit,
 }: TeamMemberFormModalProps) {
@@ -56,12 +64,14 @@ export function TeamMemberFormModal({
   const [values, setValues] = useState(() => toFormValues(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const { values: ja, setField: setJa, base } = useEntityTranslations("TEAM_MEMBER", initial?.id, open);
 
   useEffect(() => {
     if (open) {
       setValues(toFormValues(initial));
       setError(null);
+      setRemovePhoto(false); // the modal stays mounted between opens: a pending removal must never carry over to another open or member
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
@@ -81,7 +91,12 @@ export function TeamMemberFormModal({
     e.preventDefault();
     setError(null);
 
-    const validation = createTeamMemberSchema.safeParse(values);
+    // An uploaded profile photo is a same-site /api/files/ path, which the external-URL rule rightly rejects. On an edit the
+    // value is validated and sent only if this form changed it, so it is never written back over a newer upload.
+    const photoChanged = !initial?.id || values.photoUrl !== toFormValues(initial).photoUrl;
+    const { photoUrl: _photo, ...rest } = values;
+    const payload = removePhoto ? { ...rest, photoUrl: "" } : photoChanged ? values : rest;
+    const validation = createTeamMemberSchema.safeParse(payload);
     if (!validation.success) {
       setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
       return;
@@ -89,7 +104,7 @@ export function TeamMemberFormModal({
 
     setSubmitting(true);
     try {
-      await onSubmit({ ...values, ...(initial?.id ? { translations: { ja } } : {}) });
+      await onSubmit({ ...payload, ...(initial?.id ? { translations: { ja } } : {}) });
       onClose();
     } catch (err) {
       setError(apiErrorMessage(err, t));
@@ -143,12 +158,13 @@ export function TeamMemberFormModal({
               value={values.category}
               onChange={(e) => set("category", e.target.value as Category)}
             >
-              {CATEGORY_ORDER.map((cat) => (
+              {(allowAlumni ? CATEGORY_ORDER_WITH_ALUMNI : CATEGORY_ORDER).map((cat) => (
                 <option key={cat} value={cat}>
                   {t(CATEGORY_LABEL_KEY[cat])}
                 </option>
               ))}
             </select>
+            {values.category === "ALUMNI" && <p className="form-hint">{t("alumni.formNote")}</p>}
           </div>
         )}
 
@@ -162,9 +178,23 @@ export function TeamMemberFormModal({
           <input
             id="tm_photoUrl"
             value={values.photoUrl}
-            onChange={(e) => set("photoUrl", e.target.value)}
+            onChange={(e) => {
+              set("photoUrl", e.target.value);
+              if (e.target.value) setRemovePhoto(false); // typing a replacement supersedes a pending removal
+            }}
             placeholder="https://..."
+            aria-describedby={isUploadedPhoto(initial?.photoUrl) ? "tm_photoUrl_hint" : undefined}
           />
+          {isUploadedPhoto(initial?.photoUrl) && (
+            <p className="card-note" id="tm_photoUrl_hint">
+              {removePhoto ? t("team.photoWillBeRemoved") : t("team.photoUploadedInUse")}
+            </p>
+          )}
+          {initial?.id && initial.photoUrl && (
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => setRemovePhoto((v) => !v)} aria-pressed={removePhoto}>
+              {removePhoto ? t("team.photoKeep") : t("profile.photo.remove")}
+            </button>
+          )}
         </div>
 
         {showAdminFields && (

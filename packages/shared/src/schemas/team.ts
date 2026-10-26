@@ -22,6 +22,11 @@ export const teamMemberSchema = z.object({
   bio: z.string(),
   photoUrl: z.string(),
   sortOrder: z.number(),
+  /**
+   * Public-display consent (Phase 3B). Present ONLY for an administrator (the one viewer who can see unpublished profiles and
+   * change this); every other viewer's response keeps its previous shape and never learns that the flag exists.
+   */
+  isPublished: z.boolean().optional(),
 });
 export type TeamMember = z.infer<typeof teamMemberSchema>;
 
@@ -63,6 +68,23 @@ export const updateTeamMemberSchema = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
 export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>;
+
+/**
+ * The fixed English API messages for the alumni rules. The web client maps each to a translation key
+ * (apps/web/src/i18n/errorMessages.ts) so they read correctly in both locales.
+ */
+export const ALUMNI_MESSAGES = {
+  noAccount: "Alumni profiles can't have a login account.",
+  hasAccount: "A profile with a login account can't be moved to Alumni. Unlink the account first.",
+  adminOnly: "Only an administrator can manage alumni profiles.",
+  publicationField: "Publication status can only be changed with the publish action.",
+  alumniOnlyPublication: "Only alumni profiles have a publication setting.",
+  publicationConflict: "This profile was changed by someone else while you were saving. Reload it and try again.",
+} as const;
+
+/** Explicit publish / unpublish of a profile's public display (admin only, `PUT /api/team/:id/publication`). */
+export const setPublicationSchema = z.object({ isPublished: z.boolean({ required_error: "isPublished is required.", invalid_type_error: "isPublished must be true or false." }) }).strict();
+export type SetPublicationInput = z.infer<typeof setPublicationSchema>;
 
 export const historyEntrySchema = z.object({
   id: z.string(),

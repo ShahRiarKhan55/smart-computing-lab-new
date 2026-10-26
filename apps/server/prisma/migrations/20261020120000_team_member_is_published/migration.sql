@@ -1,0 +1,12 @@
+-- Phase 3B: public-display consent for team profiles (alumni directory).
+--
+-- ADDITIVE and metadata-only: one plain `ALTER TABLE ... ADD COLUMN` with a constant default. No table copy, no
+-- DROP, no data rewrite (the same form as the Phase 8 `visibility` columns). Every EXISTING row reads back as
+-- `true`, so every current profile keeps exactly the visibility it has today; new ALUMNI profiles are written with
+-- `false` explicitly by the API (src/lib/memberVisibility.ts), never by this default.
+--
+-- ROLL-OUT ORDER: apply this migration BEFORE deploying code that selects or filters on "isPublished". Old code
+-- keeps working against the migrated database (it never names the column; inserts take the default `true`).
+-- Turso: applied by the reviewed executor (docs/architecture/turso-migration-executor.md), which accepts exactly this
+-- form of ALTER and pins this file by SHA-256. Not yet run against any remote database.
+ALTER TABLE "TeamMember" ADD COLUMN "isPublished" BOOLEAN NOT NULL DEFAULT true;

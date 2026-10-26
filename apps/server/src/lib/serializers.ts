@@ -1,4 +1,4 @@
-import { canEditOwnProfile } from "@scl/shared";
+import { canEditOwnProfile, isAdmin } from "@scl/shared";
 import type {
   AreaRef,
   NewsItem,
@@ -34,6 +34,7 @@ export function toTeamMember(
     bio: string;
     photoUrl: string;
     sortOrder: number;
+    isPublished: boolean;
   },
   viewer: Viewer,
 ): TeamMember {
@@ -48,6 +49,9 @@ export function toTeamMember(
     bio: row.bio,
     photoUrl: row.photoUrl,
     sortOrder: row.sortOrder,
+    // Administrators only (they alone can see an unpublished profile or change the flag); the shape for everyone else is unchanged.
+    // Strict: anything but `true` reads back as false.
+    ...(isAdmin(viewer) ? { isPublished: row.isPublished === true } : {}),
   };
 }
 

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import {
+  ALUMNI_CATEGORY,
   canManageInvitations,
   createInvitationSchema,
   acceptInvitationSchema,
@@ -14,6 +15,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { assertValidId } from "../lib/authorLinks.js";
 import { recordAudit } from "../lib/audit.js";
+import { assertProfileMayHaveAccount } from "../lib/alumni.js";
 import { generateInvitationToken, hashInvitationToken } from "../lib/invitationToken.js";
 import { isInvitationRateLimited, recordInvitationAttempt } from "../lib/invitationRateLimit.js";
 import { normalizeBaseUrl } from "../lib/sitemap.js";
@@ -102,8 +104,9 @@ router.post(
       if (existingPending) throw new HttpError(409, "There is already a pending invitation for that email. Revoke it before sending a new one.");
 
       if (body.teamMemberId) {
-        const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true } });
+        const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true, category: true } });
         if (!member) throw new HttpError(400, "Selected team member does not exist.");
+        assertProfileMayHaveAccount(member); // alumni are never invited
         if (member.userId) throw new HttpError(409, "That team member already has a linked account.");
       }
 
@@ -246,7 +249,8 @@ router.post(
       if (existingUser) throw new HttpError(409, "An account with that email already exists. Please log in instead.");
 
       if (current.teamMemberId) {
-        const member = await tx.teamMember.findUnique({ where: { id: current.teamMemberId }, select: { userId: true } });
+        const member = await tx.teamMember.findUnique({ where: { id: current.teamMemberId }, select: { userId: true, category: true } });
+        if (member) assertProfileMayHaveAccount(member); // re-checked at acceptance: the profile may have become an alumnus since
         if (!member || member.userId) throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
       }
 
@@ -262,11 +266,12 @@ router.post(
 
       if (current.teamMemberId) {
         const linked = await tx.teamMember.updateMany({
-          where: { id: current.teamMemberId, userId: null },
+          where: { id: current.teamMemberId, userId: null, NOT: { category: ALUMNI_CATEGORY } },
           data: { userId: createdUser.id },
         });
         if (linked.count !== 1) throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
       } else if (current.name && current.initials && current.memberRole && current.category) {
+        assertProfileMayHaveAccount({ category: current.category }); // a stored ALUMNI category never becomes an account
         await tx.teamMember.create({
           data: {
             userId: createdUser.id,

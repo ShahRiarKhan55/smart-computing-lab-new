@@ -1,4 +1,4 @@
-import { KNOWLEDGE_CATEGORIES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
+import { ALUMNI_MESSAGES, KNOWLEDGE_CATEGORIES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -22,6 +22,13 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   Conflict: "error.conflict",
   "Bad request": "error.badRequest",
   "Nothing to update.": "error.nothingToUpdate",
+  // Alumni (Phase 3B): the fixed messages of the alumni rules (ALUMNI_MESSAGES in @scl/shared).
+  [ALUMNI_MESSAGES.noAccount]: "error.alumniNoAccount",
+  [ALUMNI_MESSAGES.hasAccount]: "error.alumniHasAccount",
+  [ALUMNI_MESSAGES.adminOnly]: "error.alumniAdminOnly",
+  [ALUMNI_MESSAGES.publicationField]: "error.alumniPublicationField",
+  [ALUMNI_MESSAGES.alumniOnlyPublication]: "error.alumniOnlyPublication",
+  [ALUMNI_MESSAGES.publicationConflict]: "error.publicationConflict",
   "Request body must be a JSON object.": "error.requestBodyInvalid",
   // Google account linking (Phase 2.2).
   "A Google account is already connected.": "error.googleAlreadyConnected",
@@ -83,8 +90,23 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   "This invitation has expired. Ask your administrator for a new one.": "invite.err.expired",
   "This invitation is no longer valid.": "invite.err.noLongerValid",
   "Too many requests. Please wait a few minutes and try again.": "error.tooManyRequests",
+  // Transient database lock contention (503 + Retry-After): lib/dbErrors.ts SERVICE_BUSY_MESSAGE.
+  "The service is busy. Please try again in a moment.": "error.serviceBusy",
   // Self-service password change.
   "Current password is incorrect.": "profile.password.err.incorrect",
+  // Profile photo upload (Phase 3A): the fixed messages the upload route, the size/type checks and the sanitizer can send. The
+  // numbers mirror PROFILE_PHOTO_LIMITS and the 5 MB image cap in the server. Any OTHER sanitizer message (one of ~60 structural
+  // details) is replaced by profile.photo.err.invalid in PhotoUploader.
+  "The image is too small (at least 16 x 16 pixels).": "profile.photo.err.tooSmall",
+  "The image is too large (at most 6000 pixels on a side).": "profile.photo.err.tooLarge",
+  "The image has too many pixels (at most 24 megapixels).": "profile.photo.err.tooManyPixels",
+  "File is too large (max 5.0 MB for this file type).": "profile.photo.err.size",
+  "Unsupported or unrecognised file type. Allowed: JPEG, PNG, WEBP, GIF images and PDF documents.": "profile.photo.err.type",
+  "Only image files (JPEG, PNG, WEBP, GIF) are accepted here.": "profile.photo.err.type",
+  "Your profile changed while the photo was uploading. Please try again.": "profile.photo.err.conflict",
+  "No team profile is linked to your account yet. Ask the admin to link one.": "profile.noLinkedProfile",
+  "Animated images are not supported for profile photos. Please upload a still image.": "profile.photo.err.animated",
+  "This photo's rotation information is damaged or ambiguous, so it cannot be used safely. Please re-save the photo (or take a screenshot of it) and upload that.": "profile.photo.err.orientation",
   "Too many attempts. Please wait a few minutes and try again.": "error.tooManyAttempts",
 };
 

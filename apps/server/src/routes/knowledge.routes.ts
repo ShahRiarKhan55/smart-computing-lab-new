@@ -1,4 +1,6 @@
+import { publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
+import type { Prisma } from "@prisma/client";
 import {
   canCreateKnowledge,
   canDeleteKnowledge,
@@ -23,6 +25,9 @@ const router = Router();
 
 const AUDITED_FIELDS = ["title", "body", "category", "projectId", "researchAreaId", "groupId", "teamMemberId", "visibility"] as const;
 
+/** The shared client, or the transaction client when called inside `prisma.$transaction` (see assertLinks). */
+type Db = typeof prisma | Prisma.TransactionClient;
+
 interface Links {
   projectId?: string | null;
   researchAreaId?: string | null;
@@ -35,23 +40,26 @@ type Current = { projectId: string | null; researchAreaId: string | null; groupI
  * A link may only point at a record that exists AND that the author may see (a project, area or group
  * that is not visible to them is reported exactly like a missing one). A link that is not being changed
  * is not re-checked, so an editor can still save a document whose linked project was later hidden.
+ *
+ * `db` must be the transaction client when this runs inside `prisma.$transaction`: a query on the shared client from inside an
+ * interactive transaction waits for the connection (and, with the libsql adapter, the mutex) that the transaction holds.
  */
-async function assertLinks(actor: Viewer, links: Links, current: Current | null) {
+async function assertLinks(db: Db, actor: Viewer, links: Links, current: Current | null) {
   const changed = <K extends keyof Current>(key: K) => links[key] !== undefined && links[key] !== (current?.[key] ?? null) && links[key] !== null;
   if (changed("projectId")) {
-    const p = await prisma.researchProject.findUnique({ where: { id: links.projectId! }, select: { visibility: true } });
+    const p = await db.researchProject.findUnique({ where: { id: links.projectId! }, select: { visibility: true } });
     if (!p || !canView(actor, p.visibility)) throw new HttpError(400, "Project not found.");
   }
   if (changed("researchAreaId")) {
-    const a = await prisma.researchArea.findUnique({ where: { id: links.researchAreaId! }, select: { visibility: true } });
+    const a = await db.researchArea.findUnique({ where: { id: links.researchAreaId! }, select: { visibility: true } });
     if (!a || !canView(actor, a.visibility)) throw new HttpError(400, "Research area not found.");
   }
   if (changed("groupId")) {
-    const g = await prisma.researchGroup.findUnique({ where: { id: links.groupId! }, select: { visibility: true } });
+    const g = await db.researchGroup.findUnique({ where: { id: links.groupId! }, select: { visibility: true } });
     if (!g || !canView(actor, g.visibility)) throw new HttpError(400, "Group not found.");
   }
   if (changed("teamMemberId")) {
-    const t = await prisma.teamMember.findUnique({ where: { id: links.teamMemberId! }, select: { id: true } });
+    const t = await db.teamMember.findFirst({ where: { id: links.teamMemberId!, ...publishedMemberWhere(actor) }, select: { id: true } });
     if (!t) throw new HttpError(400, "Researcher not found.");
   }
 }
@@ -104,7 +112,7 @@ router.post(
     const { translations, visibility, category, ...rest } = parseOrThrow(createKnowledgeSchema, req.body);
     const { title, body, ...links } = rest;
     assertMayChangeVisibility(req.user!, visibility);
-    await assertLinks(req.user!, links, null);
+    await assertLinks(prisma, req.user!, links, null);
 
     const created = await prisma.$transaction(async (tx) => {
       const row = await tx.knowledgeDoc.create({
@@ -158,7 +166,7 @@ router.put(
         throw new HttpError(403, "Forbidden");
       }
       assertMayChangeVisibility(req.user!, visibility);
-      await assertLinks(req.user!, links, existing);
+      await assertLinks(tx, req.user!, links, existing);
 
       const data = {
         ...fields,

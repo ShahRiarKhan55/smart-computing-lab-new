@@ -215,7 +215,14 @@ async function main() {
   check("title 200 ok / 201 rejected", (await bad({ title: `${M} ${"Z".repeat(200)}`.slice(0, 200), body: "b" })) === 201 && (await bad({ title: "Z".repeat(201), body: "b" })) === 400);
   check("body 20000 ok / 20001 rejected", (await bad({ title: `${M} big`, body: "b".repeat(20000) })) === 201 && (await bad({ title: `${M} big2`, body: "b".repeat(20001) })) === 400);
   check("non-string title/body rejected, not coerced", (await bad({ title: 5, body: "b" })) === 400 && (await bad({ title: "t", body: { a: 1 } })) === 400 && (await bad({ title: ["t"], body: "b" })) === 400);
-  check("every category is accepted", (await Promise.all(["PROJECT_DOCUMENTATION", "RESEARCH_NOTE", "METHODOLOGY", "EXPERIMENT", "HARDWARE", "SOFTWARE", "DATASET", "REPRODUCIBILITY", "LAB_PROCEDURE", "RESOURCE"].map((c) => bad({ title: `${M} cat ${c}`, body: "b", category: c })))).every((s) => s === 201));
+  // Sequential on purpose: this checks that each category is ACCEPTED, not concurrency. Ten simultaneous interactive write transactions
+  // overload a default-pool embedded SQLite file (P1008/P2028 -> 500) for ANY route (docs/architecture/phase3-release-runbook.md, section 6).
+  check("every category is accepted", await (async () => {
+    for (const c of ["PROJECT_DOCUMENTATION", "RESEARCH_NOTE", "METHODOLOGY", "EXPERIMENT", "HARDWARE", "SOFTWARE", "DATASET", "REPRODUCIBILITY", "LAB_PROCEDURE", "RESOURCE"]) {
+      if ((await bad({ title: `${M} cat ${c}`, body: "b", category: c })) !== 201) return false;
+    }
+    return true;
+  })());
   const hostileCats = ["method", "methodology", "Methodology", "'; DROP TABLE KnowledgeDoc; --", "<script>alert(1)</script>", "", "OTHER", "__proto__", "RESOURCE ", 1, null, ["RESOURCE"]];
   check("hostile / unknown categories are 400", (await Promise.all(hostileCats.map((c) => bad({ title: "t", body: "b", category: c })))).every((s) => s === 400));
   check("table survived the injection attempt", (await prisma.knowledgeDoc.count()) > 0);
@@ -400,7 +407,10 @@ async function main() {
     ["member admin content", (l) => memA.client.get("/admin/content?type=knowledge", l)],
   ];
   for (const [label, fn] of probes) {
-    const statuses = await Promise.all(["en", "ja", "xx", undefined, "JA"].map(async (l) => (await fn(l)).status));
+    // One locale after another: the invariant is "the outcome does not depend on the locale", not "five simultaneous requests are safe"
+    // (five simultaneous interactive transactions overload a default-pool embedded SQLite file regardless of the route).
+    const statuses = [];
+    for (const l of ["en", "ja", "xx", undefined, "JA"]) statuses.push((await fn(l)).status);
     check(`${label}: same status for every locale (${statuses[0]})`, statuses.every((s) => s === statuses[0]) && statuses[0] >= 400);
   }
 

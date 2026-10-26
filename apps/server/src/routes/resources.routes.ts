@@ -1,3 +1,4 @@
+import { publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
 import {
   asResourceType,
@@ -83,7 +84,7 @@ async function assertLinks(actor: Viewer, links: SingleLinks, current: CurrentLi
     if (!e || !canView(actor, e.visibility)) throw new HttpError(400, "Event not found.");
   }
   if (changed("teamMemberId")) {
-    const t = await prisma.teamMember.findUnique({ where: { id: links.teamMemberId! }, select: { id: true } });
+    const t = await prisma.teamMember.findFirst({ where: { id: links.teamMemberId!, ...publishedMemberWhere(actor) }, select: { id: true } });
     if (!t) throw new HttpError(400, "Researcher not found.");
   }
   if (addedProjectIds.length > 0) {

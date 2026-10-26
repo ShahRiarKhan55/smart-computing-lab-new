@@ -4,8 +4,8 @@ import path from "node:path";
 import { createClient, type Client, type Transaction } from "@libsql/client";
 
 /**
- * Executor for the REVIEWED additive migrations (the two gallery multi-image migrations and the Phase 2.2 OAuth
- * identity migration) against a libSQL/Turso database.
+ * Executor for the REVIEWED additive migrations (the two gallery multi-image migrations, the Phase 2.2 OAuth identity
+ * migration and the Phase 3B `TeamMember.isPublished` column) against a libSQL/Turso database.
  *
  * `prisma migrate deploy` cannot talk to Turso (docs/user-guide/en/site-maintainer-guide.md), so these
  * ADDITIVE migrations need a deliberate, repeatable way in. This module is the importable core (no side
@@ -14,7 +14,11 @@ import { createClient, type Client, type Transaction } from "@libsql/client";
  * Safety properties (each is exercised by scripts/unit-turso-migrate.test.ts on disposable LOCAL SQLite files):
  *  - ONLY migrations whose normalised SHA-256 is pinned in REVIEWED_MIGRATIONS are applied. Editing a
  *    migration file therefore requires editing (and reviewing) this list.
- *  - ONLY `CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements are accepted. Anything else is refused.
+ *  - ONLY `CREATE TABLE` / `CREATE [UNIQUE] INDEX` statements are accepted, plus ONE exact form of `ALTER TABLE`:
+ *    `ALTER TABLE "T" ADD COLUMN "c" BOOLEAN|INTEGER NOT NULL DEFAULT true|false|<integer>` (a metadata-only change in SQLite:
+ *    constant default, no table copy, no references, no constraints). Every other ALTER (RENAME, DROP COLUMN, ADD COLUMN with a
+ *    nullable/non-constant/quoted default, REFERENCES, UNIQUE, PRIMARY KEY, CHECK, several clauses) is refused, as is anything else.
+ *    A migration that adds columns may contain nothing but such statements.
  *  - The target must be selected explicitly and its identity confirmed by the caller (`parseTarget`).
  *  - The current state of each migration is classified before anything is written; a partially applied or
  *    divergent migration, or an unexpected object, FAILS CLOSED (nothing is written).
@@ -42,6 +46,9 @@ export const REVIEWED_MIGRATIONS: readonly ReviewedMigration[] = [
   // Phase 2.2: additive OAuthIdentity table (1 table + 2 unique indexes, FK to User ON DELETE CASCADE). Reviewed hash of the
   // exact file; any edit to it is refused until this entry is re-reviewed. Chronological order matters (applied in order).
   { name: "20261012100000_oauth_identity", sha256: "7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e" },
+  // Phase 3B: ONE `ALTER TABLE "TeamMember" ADD COLUMN "isPublished" BOOLEAN NOT NULL DEFAULT true` (metadata-only; existing rows read back
+  // as published). Pin computed with the same `sha256` above over the LF-normalised file; see docs/architecture/turso-migration-executor.md.
+  { name: "20261020120000_team_member_is_published", sha256: "502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b" },
 ];
 
 /** Tables that must already exist in the target for it to be this application's database. */
@@ -70,13 +77,15 @@ export interface MigrationSpec {
 
 export interface ParsedStatement {
   sql: string;
-  kind: "table" | "index";
-  /** Name of the created table or index. */
+  kind: "table" | "index" | "column";
+  /** Name of the created table or index; for a column, `Table.column`. */
   name: string;
-  /** The table the statement creates or indexes. */
+  /** The table the statement creates, indexes or adds a column to. */
   table: string;
   /** Tables named in REFERENCES clauses. */
   references: string[];
+  /** Columns only. */
+  column?: { name: string; type: "BOOLEAN" | "INTEGER"; defaultValue: string };
 }
 
 const normaliseEol = (s: string) => s.replace(/\r\n/g, "\n");
@@ -98,13 +107,26 @@ export function splitStatements(sql: string): string[] {
 }
 
 const CREATE_TABLE = /^CREATE TABLE "([A-Za-z0-9_]+)" \(/;
+/** The one accepted ALTER form (see the header). The default is a bare constant: true, false or an integer. */
+const ADD_COLUMN = /^ALTER TABLE "([A-Za-z0-9_]+)" ADD COLUMN "([A-Za-z0-9_]+)" (BOOLEAN|INTEGER) NOT NULL DEFAULT (true|false|-?[0-9]{1,9})$/;
 const CREATE_INDEX = /^CREATE (?:UNIQUE )?INDEX "([A-Za-z0-9_]+)" ON "([A-Za-z0-9_]+)"\(/;
 
 /** Refuses anything that is not a plain additive CREATE TABLE / CREATE INDEX. */
 export function parseAdditive(sql: string): ParsedStatement[] {
   const statements = splitStatements(sql);
   if (statements.length === 0) throw new MigrationRefusal("Migration contains no statements.", "NOT_ADDITIVE");
-  return statements.map((stmt) => {
+  const parsed = statements.map((stmt) => {
+    const col = ADD_COLUMN.exec(stmt);
+    if (col) {
+      return {
+        sql: stmt,
+        kind: "column" as const,
+        name: `${col[1]}.${col[2]}`,
+        table: col[1],
+        references: [] as string[],
+        column: { name: col[2], type: col[3] as "BOOLEAN" | "INTEGER", defaultValue: col[4] },
+      };
+    }
     const table = CREATE_TABLE.exec(stmt);
     const index = CREATE_INDEX.exec(stmt);
     if (!table && !index) {
@@ -115,6 +137,13 @@ export function parseAdditive(sql: string): ParsedStatement[] {
       ? { sql: stmt, kind: "table" as const, name: table[1], table: table[1], references }
       : { sql: stmt, kind: "index" as const, name: index![1], table: index![2], references };
   });
+  // Keep the model simple: a migration either only adds columns or only creates tables/indexes, and never adds the same column twice.
+  const hasColumn = parsed.some((p) => p.kind === "column");
+  if (hasColumn && parsed.some((p) => p.kind !== "column")) {
+    throw new MigrationRefusal("A migration that adds columns may not also create tables or indexes.", "NOT_ADDITIVE");
+  }
+  if (new Set(parsed.map((p) => p.name)).size !== parsed.length) throw new MigrationRefusal("The same object is created or altered twice.", "NOT_ADDITIVE");
+  return parsed;
 }
 
 /** Reads the pinned migrations from `migrationsDir`; any hash mismatch refuses the whole run. */
@@ -236,6 +265,20 @@ export async function describeObject(db: Db, name: string): Promise<ObjectDef | 
   return def;
 }
 
+const columnDef = (table: string, name: string, type: string, notnull: unknown, dflt: unknown): ObjectDef => ({
+  type: "column",
+  name: `${table}.${name}`,
+  table,
+  sql: "",
+  structure: JSON.stringify({ type: String(type).toUpperCase(), notnull: Number(notnull), dflt: dflt === null || dflt === undefined ? null : String(dflt) }),
+});
+
+/** A column as the target reports it (PRAGMA table_info), or undefined when the table or the column is absent. */
+export async function describeColumn(db: Db, table: string, column: string): Promise<ObjectDef | undefined> {
+  const c = (await rows(db, `PRAGMA table_info(${q(table)})`)).find((r) => String(r.name) === column);
+  return c ? columnDef(table, column, String(c.type), c.notnull, c.dflt_value) : undefined;
+}
+
 /** Objects in the target whose name starts with `prefix`, other than the expected ones (and SQLite's own autoindexes). */
 async function unexpectedObjects(db: Db, tables: string[], expected: Set<string>): Promise<string[]> {
   const found: string[] = [];
@@ -250,9 +293,11 @@ async function unexpectedObjects(db: Db, tables: string[], expected: Set<string>
 export async function expectedSchema(migration: MigrationSpec): Promise<Map<string, ObjectDef>> {
   const sandbox = createClient({ url: ":memory:" });
   try {
-    for (const s of migration.statements) await sandbox.execute(s.sql);
     const out = new Map<string, ObjectDef>();
-    for (const s of migration.statements) {
+    // A column's expected shape is exactly what the (strictly parsed) statement says; SQLite stores the default text as written.
+    for (const s of migration.statements) if (s.kind === "column") out.set(s.name, columnDef(s.table, s.column!.name, s.column!.type, 1, s.column!.defaultValue));
+    for (const s of migration.statements.filter((x) => x.kind !== "column")) await sandbox.execute(s.sql);
+    for (const s of migration.statements.filter((x) => x.kind !== "column")) {
       const def = await describeObject(sandbox, s.name);
       if (!def) throw new MigrationRefusal(`Sandbox did not create ${s.name}.`, "NOT_ADDITIVE");
       out.set(s.name, def);
@@ -279,7 +324,8 @@ export async function classify(db: Db, migration: MigrationSpec, expected: Map<s
   const missing: string[] = [];
   const differing: string[] = [];
   for (const [name, want] of expected) {
-    const have = await describeObject(db, name);
+    const col = migration.statements.find((s) => s.name === name && s.kind === "column");
+    const have = col ? await describeColumn(db, col.table, col.column!.name) : await describeObject(db, name);
     if (!have) missing.push(name);
     else if (have.type !== want.type || have.table !== want.table || have.sql !== want.sql || have.structure !== want.structure) differing.push(name);
     else present.push(name);
@@ -301,10 +347,19 @@ export async function countTables(db: Db): Promise<Record<string, number>> {
   return out;
 }
 
+/** Row counts of the tables that receive an added column (so the check works for any such table, not a fixed list). */
+async function countRowsOf(db: Db, columnStatements: ParsedStatement[]): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const t of new Set(columnStatements.map((s) => s.table))) out[t] = Number((await rows(db, `SELECT COUNT(*) AS n FROM ${q(t)}`))[0].n);
+  return out;
+}
+
 async function assertPrerequisites(db: Db, migrations: MigrationSpec[]) {
   const needed = new Set<string>(REQUIRED_EXISTING_TABLES);
   const created = new Set(migrations.flatMap((m) => m.statements.filter((s) => s.kind === "table").map((s) => s.name)));
   for (const m of migrations) for (const s of m.statements) for (const r of s.references) if (!created.has(r)) needed.add(r);
+  // A column is added to a table that must already exist.
+  for (const m of migrations) for (const s of m.statements) if (s.kind === "column") needed.add(s.table);
   const missing: string[] = [];
   for (const t of needed) {
     const d = await describeObject(db, t);
@@ -391,6 +446,8 @@ export async function execute(client: Client, migrations: MigrationSpec[], optio
       throw new MigrationRefusal("The database changed between inspection and the write transaction; nothing was written. Re-run.", "STATE");
     }
     const txBefore = await countTables(tx);
+    const columnStatements = pending.flatMap((m) => m.statements.filter((s) => s.kind === "column"));
+    const columnRowsBefore = await countRowsOf(tx, columnStatements);
     for (const m of pending) for (const s of m.statements) await tx.execute(s.sql);
     const verified = await inspect(tx, migrations, expected);
     const notApplied = verified.filter((s) => s.status !== "applied");
@@ -398,6 +455,15 @@ export async function execute(client: Client, migrations: MigrationSpec[], optio
       throw new MigrationRefusal(`Verification inside the transaction failed; rolling back. ${notApplied.map(describeState).join(" | ")}`, "VERIFY");
     }
     const txAfter = await countTables(tx);
+    // Added columns: no row appeared or vanished, and every EXISTING row received the default (nothing is NULL or different).
+    if (JSON.stringify(columnRowsBefore) !== JSON.stringify(await countRowsOf(tx, columnStatements))) {
+      throw new MigrationRefusal("Row counts changed inside the transaction for a table that received a column; rolling back.", "VERIFY");
+    }
+    for (const s of columnStatements) {
+      const literal = s.column!.defaultValue === "true" ? "1" : s.column!.defaultValue === "false" ? "0" : s.column!.defaultValue;
+      const off = Number((await rows(tx, `SELECT COUNT(*) AS n FROM ${q(s.table)} WHERE ${q(s.column!.name)} IS NOT ${literal}`))[0].n);
+      if (off !== 0) throw new MigrationRefusal(`${off} existing row(s) of ${s.table} did not receive the default for ${s.column!.name}; rolling back.`, "VERIFY");
+    }
     if (JSON.stringify(txBefore) !== JSON.stringify(txAfter)) {
       throw new MigrationRefusal(`Row counts changed inside the transaction (${JSON.stringify(txBefore)} -> ${JSON.stringify(txAfter)}); rolling back.`, "VERIFY");
     }

@@ -101,7 +101,7 @@ export function ProjectDetailPage() {
   async function open(next: Exclude<Panel, null>) {
     setActionError(null);
     try {
-      if (next === "members" && !team) setTeam(await apiFetch<TeamMember[]>("/team"));
+      if (next === "members" && !team) setTeam(await apiFetch<TeamMember[]>("/team?includeAlumni=1"));
       if (next === "areas" && !areas) setAreas(await apiFetch<ResearchArea[]>("/research"));
       if (next === "publications" && !pubs) setPubs(await apiFetch<Publication[]>("/publications"));
       if (next === "news" && !news) setNews(await apiFetch<NewsItem[]>("/news"));

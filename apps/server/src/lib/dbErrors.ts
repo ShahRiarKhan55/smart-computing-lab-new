@@ -1,3 +1,5 @@
+import type { ErrorRequestHandler } from "express";
+import { LibsqlError } from "@libsql/client";
 import { Prisma } from "@prisma/client";
 
 /**
@@ -52,6 +54,41 @@ export function constraintKind(err: unknown): ConstraintKind | null {
   if (/\bFOREIGN KEY constraint failed\b/i.test(driverText)) return "foreign_key";
   return "constraint";
 }
+
+/**
+ * Transient lock contention: the database reported SQLITE_BUSY ("database is locked"): a write or commit could not get its lock. For
+ * the embedded database that is definitive (a BUSY statement applied nothing, and a BUSY commit is rolled back by lib/libsqlGuard.ts).
+ * The server does NOT retry it for the caller; it answers 503 with `Retry-After` so the client can decide.
+ *
+ * Deliberately NOT included: Prisma's generic timeout class (`P1008`, "Timed out during query execution", "Operations timed out").
+ * Against a remote database a timed-out COMMIT can have been applied, so those stay a generic 500 until remote behaviour is verified.
+ * Recognised by the driver's `SQLITE_BUSY` code or the driver's own final message line (never the code frame above it).
+ */
+export const SERVICE_BUSY_MESSAGE = "The service is busy. Please try again in a moment.";
+const BUSY_DRIVER_TEXT = /database is locked|SQLITE_BUSY/i;
+export function isTransientDatabaseContention(err: unknown): boolean {
+  // The embedded libSQL client's own error (e.g. a COMMIT that stayed BUSY after lib/libsqlGuard.ts rolled the transaction back).
+  if (err instanceof LibsqlError) return String(err.code).startsWith("SQLITE_BUSY");
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    const code = String(err.code);
+    if (code.startsWith("SQLITE_BUSY")) return true;
+    return BUSY_DRIVER_TEXT.test(driverMessageLine(err));
+  }
+  if (err instanceof Prisma.PrismaClientUnknownRequestError) return BUSY_DRIVER_TEXT.test(driverMessageLine(err));
+  return false;
+}
+
+/**
+ * Router-level error handler for the profile-photo routes (profile, team, files): contention answers 503 + `Retry-After`; every other
+ * error continues to the application's error handler unchanged. It is deliberately NOT global: existing tests and clients of the
+ * forum, messages and gallery routes rely on the long-standing 500 for a database error that is not a recognised constraint failure.
+ */
+export const transientContentionAs503: ErrorRequestHandler = (err, _req, res, next) => {
+  if (res.headersSent || !isTransientDatabaseContention(err)) return next(err);
+  // One short line: the error text can carry a code frame and is not needed for a condition that is expected under load.
+  console.error("[db] transient lock contention; answering 503");
+  res.set("Retry-After", "1").status(503).json({ error: SERVICE_BUSY_MESSAGE });
+};
 
 export interface MappedDatabaseError {
   status: number;

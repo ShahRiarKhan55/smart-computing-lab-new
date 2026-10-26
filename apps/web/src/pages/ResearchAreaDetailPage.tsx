@@ -71,7 +71,7 @@ export function ResearchAreaDetailPage() {
   async function openResearchers() {
     setActionError(null);
     try {
-      if (!team) setTeam(await apiFetch<TeamMember[]>("/team"));
+      if (!team) setTeam(await apiFetch<TeamMember[]>("/team?includeAlumni=1"));
       setPanel("researchers");
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : t("groups.couldNotLoadTeam"));

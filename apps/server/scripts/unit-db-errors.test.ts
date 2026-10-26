@@ -10,7 +10,8 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
-import { constraintKind, mapKnownDatabaseError } from "../src/lib/dbErrors.ts";
+import { LibsqlError } from "@libsql/client";
+import { SERVICE_BUSY_MESSAGE, constraintKind, isTransientDatabaseContention, mapKnownDatabaseError, transientContentionAs503 } from "../src/lib/dbErrors.ts";
 
 let ok = 0;
 const failures: string[] = [];
@@ -18,6 +19,22 @@ const t = (name: string, cond: boolean) => (cond ? ok++ : failures.push(name));
 
 const known = (code: string, message = "boom", meta?: Record<string, unknown>) => new Prisma.PrismaClientKnownRequestError(message, { code, clientVersion: "5.22.0", meta });
 const frame = (driverText: string) => `\nInvalid \`prisma.x.create()\` invocation in /app/src/y.ts:12:3\n\n  11 // a comment mentioning UNIQUE constraint failed and FOREIGN KEY constraint failed\n→ 12 await prisma.x.create(\n${driverText}`;
+
+// ---- transient lock contention (503, never retried by the server) -------------------------------------------------------------
+const unknownReq = (message: string) => new Prisma.PrismaClientUnknownRequestError(message, { clientVersion: "5.22.0" });
+t("contention: Prisma timeout P1008 is NOT classified (a remote timed-out commit may have been applied)", !isTransientDatabaseContention(known("P1008", frame("Operations timed out after `N/A`. Context: The database failed to respond"))));
+t("contention: driver code SQLITE_BUSY", isTransientDatabaseContention(known("SQLITE_BUSY", frame("SQLITE_BUSY: database is locked"))));
+t("contention: extended SQLITE_BUSY_SNAPSHOT", isTransientDatabaseContention(known("SQLITE_BUSY_SNAPSHOT")));
+t("contention: unknown-request error whose final line is the driver's BUSY text", isTransientDatabaseContention(unknownReq(frame("SQLITE_BUSY: database is locked"))));
+t("contention: a generic query timeout is NOT classified", !isTransientDatabaseContention(unknownReq(frame("ConnectorError { kind: ConnectionError(Timed out during query execution.) }"))));
+t("contention: 'database is locked' as the last driver line of a known error", isTransientDatabaseContention(known("P2010", frame("database is locked"))));
+t("contention: NOT detected from the code frame (a comment mentioning 'database is locked' above an unrelated error)", !isTransientDatabaseContention(known("P2002", `\n  11 // database is locked\n→ 12 await prisma.x.create(\nUNIQUE constraint failed: X.y`)));
+t("contention: the embedded libSQL client's own SQLITE_BUSY error (a commit that stayed BUSY after the guard's rollback)", isTransientDatabaseContention(new LibsqlError("SQLITE_BUSY: database is locked", "SQLITE_BUSY", 5)));
+t("contention: other libSQL client errors are not contention", !isTransientDatabaseContention(new LibsqlError("constraint", "SQLITE_CONSTRAINT")) && !isTransientDatabaseContention(new LibsqlError("closed", "TRANSACTION_CLOSED")) && !isTransientDatabaseContention(new LibsqlError("x", "SQLITE_LOCKED")));
+t("contention: NOT detected from the code frame of an UNKNOWN-request error either", !isTransientDatabaseContention(unknownReq(`\n  11 // SQLITE_BUSY database is locked\n→ 12 await prisma.x.create(\nsome other failure`)));
+t("contention: constraint failures, not-found and plain errors are not contention", !isTransientDatabaseContention(known("P2002")) && !isTransientDatabaseContention(known("P2025")) && !isTransientDatabaseContention(known("SQLITE_CONSTRAINT", frame("UNIQUE constraint failed: A.b"))) && !isTransientDatabaseContention(new Error("database is locked")) && !isTransientDatabaseContention(null));
+t("contention is NOT part of the 4xx mapping (it never changes the existing contract)", mapKnownDatabaseError(known("P1008")) === null && mapKnownDatabaseError(known("SQLITE_BUSY")) === null);
+t("the busy message is the fixed, client-safe sentence", SERVICE_BUSY_MESSAGE === "The service is busy. Please try again in a moment.");
 
 // ---- classification ----------------------------------------------------------------------------------------------------
 t("P2002 -> unique", constraintKind(known("P2002")) === "unique");
@@ -116,6 +133,27 @@ for (const strip of [false, true]) {
     t("engine local-shaped: typed P2002 / P2003 are preserved", (uniqueEmail as Prisma.PrismaClientKnownRequestError).code === "P2002" && (fk as Prisma.PrismaClientKnownRequestError).code === "P2003");
   }
   await p.$disconnect();
+}
+
+// ---- the router-level 503 handler and the classes it must NOT take -------------------------------------------------------------
+t("contention: P2028 (transaction expired, outcome uncertain) is NOT classified", !isTransientDatabaseContention(known("P2028", "Transaction API error: Transaction already closed: expired")));
+t("contention: SQLITE_LOCKED and SQLITE_CONSTRAINT are NOT classified", !isTransientDatabaseContention(new LibsqlError("locked", "SQLITE_LOCKED")) && !isTransientDatabaseContention(new LibsqlError("c", "SQLITE_CONSTRAINT")) && !isTransientDatabaseContention(known("P2002")));
+t("contention: an unrelated error object and non-errors are NOT classified", !isTransientDatabaseContention(new Error("SQLITE_BUSY: database is locked")) && !isTransientDatabaseContention(null) && !isTransientDatabaseContention("SQLITE_BUSY"));
+{
+  const run = (err: unknown, headersSent = false) => {
+    const out: { status?: number; headers: Record<string, string>; body?: unknown; next?: unknown } = { headers: {} };
+    const res: any = { headersSent, set: (k: string, v: string) => ((out.headers[k] = v), res), status: (c: number) => ((out.status = c), res), json: (b: unknown) => ((out.body = b), res) };
+    const origError = console.error; console.error = () => {};
+    try { transientContentionAs503(err, {} as any, res, (e?: unknown) => { out.next = e ?? "called"; }); } finally { console.error = origError; }
+    return out;
+  };
+  const busy = new LibsqlError("SQLITE_BUSY: database is locked", "SQLITE_BUSY");
+  const r1 = run(busy);
+  t("503 handler: BUSY answers 503 with Retry-After: 1 and the fixed message, without calling next", r1.status === 503 && r1.headers["Retry-After"] === "1" && JSON.stringify(r1.body) === JSON.stringify({ error: SERVICE_BUSY_MESSAGE }) && r1.next === undefined);
+  const r2 = run(busy, true);
+  t("503 handler: headers already sent -> next(err), nothing written", r2.next === busy && r2.status === undefined);
+  const p2028 = known("P2028", "expired"); const r3 = run(p2028);
+  t("503 handler: P2028 / P1008 / constraint errors pass to next unchanged (no 503, no Retry-After)", r3.next === p2028 && r3.status === undefined && run(known("P1008")).status === undefined && run(known("P2002")).status === undefined && Object.keys(r3.headers).length === 0);
 }
 
 console.log(`${ok} db-error unit checks passed, ${failures.length} failed.`);

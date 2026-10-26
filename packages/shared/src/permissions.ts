@@ -79,6 +79,14 @@ export const canCreateTeamMember = isManager;
 export const canDeleteTeamMember = isAdmin;
 /** Category and sort order on a team profile. */
 export const canManageTeamPlacement = isManager;
+/**
+ * Alumni profiles (Phase 3B) are a public directory built from people who may not have agreed to appear on it, so everything
+ * about them is ADMIN only: creating one, moving a profile into or out of ALUMNI, editing one, and seeing one that is not
+ * published. A lab manager keeps every existing team permission for every other category.
+ */
+export const canManageAlumni = isAdmin;
+/** Publishing or unpublishing a profile's public display. Admin only, and always an explicit action. */
+export const canPublishMember = isAdmin;
 
 // ---- research projects & groups --------------------------------------------
 export const canCreateProject = isManager;

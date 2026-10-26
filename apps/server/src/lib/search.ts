@@ -1,3 +1,4 @@
+import { publishedMemberWhere } from "./memberVisibility.js";
 import type { Prisma } from "@prisma/client";
 import {
   DEFAULT_LOCALE,
@@ -274,7 +275,8 @@ const sources = [
     }),
   }),
 
-  // TeamMember has no `visibility` column: every profile is already public in /api/team.
+  // TeamMember has no `visibility` column; Phase 3B adds `isPublished`, applied here through `base` so an unpublished profile
+  // (alumni who have not been published) is neither returned nor counted for anyone but an administrator, in every locale.
   // Never selected or searched: userId, the linked account, its email.
   defineSource<Prisma.TeamMemberWhereInput, { id: string; name: string; role: string; department: string; bio: string }>({
     type: "researcher",
@@ -282,7 +284,7 @@ const sources = [
     fields: ["role", "department", "bio"],
     extra: (term) => [{ historyEntries: { some: { OR: [{ title: { contains: term } }, { description: { contains: term } }] } } }],
     translatable: "TEAM_MEMBER",
-    base: () => ({}),
+    base: publishedMemberWhere,
     count: (where) => prisma.teamMember.count({ where }),
     find: (where, skip, take) =>
       prisma.teamMember.findMany({
@@ -309,7 +311,8 @@ const sources = [
     translatable: "PUBLICATION",
     // A researcher's name finds their linked publications; a 4-digit word also matches the year.
     extra: (term) => [
-      { authorLinks: { some: { teamMember: { name: { contains: term } } } } },
+      // Only PUBLISHED authors can be found by name (the condition may not depend on the viewer: see `extra` above).
+      { authorLinks: { some: { teamMember: { isPublished: true, name: { contains: term } } } } },
       ...(/^\d{4}$/.test(term) ? [{ year: Number(term) }] : []),
     ],
     base: visibleTo,

@@ -1,6 +1,9 @@
+import { isAlumniCategory } from "../lib/alumni.js";
+import { isMemberVisible, mayManageAlumni } from "../lib/memberVisibility.js";
+import { transientContentionAs503 } from "../lib/dbErrors.js";
 import { Router } from "express";
-import { canUploadFile, createGalleryItemFieldsSchema, isManager } from "@scl/shared";
-import { prisma } from "../lib/prisma.js";
+import { ALUMNI_MESSAGES, canUploadFile, createGalleryItemFieldsSchema, isManager } from "@scl/shared";
+import { interactiveTransactionOptions, prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { HttpError } from "../lib/validate.js";
 import { optionalAuth, requireAuth, requireCan } from "../middleware/auth.js";
@@ -10,6 +13,7 @@ import { canAccessFile, toStoredFileRef } from "../lib/fileSerializers.js";
 import { uploadSingleFile, validateUpload } from "../lib/fileService.js";
 import { openReadStream, removeFile, saveFile } from "../lib/storage.js";
 import { recordAudit } from "../lib/audit.js";
+import { PROFILE_PHOTO_ENTITY_TYPE } from "../lib/profilePhoto.js";
 
 const router = Router();
 
@@ -96,7 +100,9 @@ router.get(
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Length", String(file.sizeBytes));
     res.setHeader("Content-Disposition", `${isImage ? "inline" : "attachment"}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(file.originalName)}`);
-    res.setHeader("Cache-Control", file.visibility === "PUBLIC" ? "public, max-age=3600" : "private, no-store");
+    // A profile photo depends on the profile's publication state and is authorised on every request, so no cache may keep it
+    // (copies already fetched elsewhere cannot be recalled; this only stops new ones from being kept).
+    res.setHeader("Cache-Control", file.visibility === "PUBLIC" && file.entityType !== PROFILE_PHOTO_ENTITY_TYPE ? "public, max-age=3600" : "private, no-store");
 
     const stream = await openReadStream(file.storageKey);
     stream.on("error", () => {
@@ -118,6 +124,13 @@ router.delete(
     if (!file || file.deletedAt) throw new HttpError(404, "Not found");
     if (!(isManager(req.user!) || file.ownerId === req.user!.id)) throw new HttpError(403, "Forbidden");
     if (file.galleryItem || file.galleryImage) throw new HttpError(409, "This file is part of a gallery item; delete the gallery item instead.");
+    // A profile photo is part of its profile: deleting it edits the profile (photoUrl is cleared below), so it follows the profile's rules.
+    // A profile hidden from the requester answers like a missing file; an alumni profile may be changed by an administrator only.
+    if (file.entityType === PROFILE_PHOTO_ENTITY_TYPE && file.entityId) {
+      const owner = await prisma.teamMember.findUnique({ where: { id: file.entityId }, select: { category: true, isPublished: true } });
+      if (owner && !isMemberVisible(req.user!, owner)) throw new HttpError(404, "Not found");
+      if (owner && isAlumniCategory(owner.category) && !mayManageAlumni(req.user!)) throw new HttpError(403, ALUMNI_MESSAGES.adminOnly);
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.storedFile.update({ where: { id: file.id }, data: { deletedAt: new Date() } });
@@ -128,10 +141,28 @@ router.delete(
         entityId: file.id,
         details: { mimeType: file.mimeType, sizeBytes: file.sizeBytes },
       });
-    });
+      // A profile photo must not leave a live photoUrl pointing at a deleted file: clear it, in the same transaction, but only
+      // on the member this file belongs to and only if that member still points at exactly this file.
+      if (file.entityType === PROFILE_PHOTO_ENTITY_TYPE && file.entityId) {
+        const member = await tx.teamMember.findFirst({ where: { id: file.entityId, photoUrl: `/api/files/${file.id}` } });
+        if (member) {
+          await tx.teamMember.update({ where: { id: member.id }, data: { photoUrl: "" } });
+          await recordAudit(tx, {
+            actor: req.user!,
+            action: "TEAM_MEMBER_UPDATED",
+            entityType: "TEAM_MEMBER",
+            entityId: member.id,
+            details: { name: member.name, changed: "photoUrl", reason: "photo-file-deleted" },
+          });
+        }
+      }
+    }, interactiveTransactionOptions);
     await removeFile(file.storageKey).catch((err) => console.error(`[files] failed to remove blob for deleted file ${file.id}:`, err));
     res.json({ success: true });
   }),
 );
+
+// Lock contention answers 503 + Retry-After (lib/dbErrors.ts); other errors fall through to the application error handler.
+router.use(transientContentionAs503);
 
 export default router;
