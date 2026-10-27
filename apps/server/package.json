@@ -30,6 +30,7 @@
     "test:publication-race": "tsx scripts/publication-race-regression.ts",
     "test:alumni": "node scripts/alumni-regression.mjs",
     "test:alumni-ui": "node --import tsx scripts/alumni-ui.mjs",
+    "test:ui-a11y": "node --import tsx scripts/ui-a11y-regression.mjs",
     "test:google-auth": "tsx scripts/google-auth-regression.ts",
     "test:turso-shape": "tsx scripts/turso-shape-regression.ts",
     "test:phase26-hostile": "node scripts/phase26-hostile-input-regression.mjs",
