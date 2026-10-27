@@ -1,0 +1,88 @@
+# Quality gate: build, lint, unit tests and the fast database suites on every pull request and on pushes to master.
+#
+# Scope (Stage 4, workstream 1). Everything here runs against a throwaway SQLite file created inside the runner
+# workspace. No Turso/Vercel/Blob credential, no repository secret and no network service is used or needed, and
+# none must ever be added to this job. It deploys nothing and never touches Production.
+#
+# Deliberately NOT included (see docs/architecture/ci-quality-gate.md): the browser sweep (needs a browser and runs for
+# a long time), `test:gallery` (documented intermittent commit-time timeout, 2 of 22 runs), the HTTP regression suites
+# that have not been timed for CI, and anything that needs a remote database.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Least privilege: the job only reads the repository.
+permissions:
+  contents: read
+
+# A newer run for the same ref supersedes an older one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build, lint and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      # Isolated database for the migration, the seed and the tests. Relative to apps/server/prisma, so the file is
+      # apps/server/prisma/dev.db (gitignored) inside this runner's workspace.
+      DATABASE_URL: "file:./dev.db"
+      # A fixed, public test value so the suites do not fall back to the insecure development default (and its warning).
+      # Not a secret; it only signs sessions of the throwaway test servers.
+      SESSION_SECRET: "ci-only-not-a-secret-0123456789abcdef"
+    steps:
+      - name: Check out the repository
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        # actions/setup-node v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          # The repository pins no Node version. Vite 8 and oxlint require ^20.19.0 || >=22.12.0 and the server's
+          # @types/node targets 22; everything was validated on 22.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+        timeout-minutes: 5
+
+      - name: Build (shared, server, web)
+        run: npm run build
+        timeout-minutes: 5
+
+      - name: Lint (web)
+        # oxlint fails only on errors. Baseline when this gate was added: 15 warnings, 0 errors (React Compiler hints).
+        run: npm run lint -w apps/web
+        timeout-minutes: 3
+
+      - name: Create the isolated test database
+        run: |
+          npm run migrate:deploy -w apps/server
+          # The seed prints a demo account's fixture password; keep it out of the log.
+          npm run seed -w apps/server > /dev/null
+        timeout-minutes: 3
+
+      - name: Server unit tests
+        run: npm run test:unit -w apps/server
+        timeout-minutes: 5
+
+      - name: Fast database suites
+        run: |
+          npm run test:alumni -w apps/server
+          npm run test:publication-race -w apps/server
+          npm run test:transaction-client -w apps/server
+          npm run test:turso-shape -w apps/server
+          npm run test:integration-photos-alumni -w apps/server
+          npm run test:profile-photo -w apps/server
+        timeout-minutes: 5
