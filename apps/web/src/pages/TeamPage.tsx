@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { CATEGORY_ORDER, type TeamMember } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
@@ -53,6 +54,10 @@ export function TeamPage() {
           />
         )}
 
+        <p className="team-alumni-link">
+          <Link to="/alumni">{t("alumni.viewAlumni")} →</Link>
+        </p>
+
         {actionError && <ErrorState message={actionError} />}
         {loading && !members && <LoadingState label={t("team.loading")} />}
         {error && <ErrorState message={error} onRetry={reload} />}
@@ -86,6 +91,7 @@ export function TeamPage() {
         title={editing.member ? t("team.editTitleFor", { name: editing.member.name }) : t("team.newTitle")}
         initial={editing.member}
         showAdminFields={policy.canManageTeamPlacement}
+        allowAlumni={policy.canManageAlumni}
         onClose={() => setEditing({ open: false, member: null })}
         onSubmit={async (values) => {
           if (editing.member) {

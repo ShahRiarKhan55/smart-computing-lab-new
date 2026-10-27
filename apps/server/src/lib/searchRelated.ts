@@ -1,3 +1,4 @@
+import { publishedMemberWhere } from "./memberVisibility.js";
 import { SEARCH_RELATED_MAX, type Locale, type SearchRelated, type SearchResult, type SearchType } from "@scl/shared";
 import { prisma } from "./prisma.js";
 import { canView, visibleTo, type Viewer } from "./visibility.js";
@@ -66,7 +67,7 @@ async function loadRefs(type: SearchType, ids: string[], viewer: Viewer): Promis
       break;
     }
     case "researcher": {
-      const rows = await prisma.teamMember.findMany({ where: { id: { in: ids } }, select: { id: true, areaLinks: { where: { researchArea: visible }, select: { researchArea: area } } } });
+      const rows = await prisma.teamMember.findMany({ where: { id: { in: ids }, ...publishedMemberWhere(viewer) }, select: { id: true, areaLinks: { where: { researchArea: visible }, select: { researchArea: area } } } });
       for (const r of rows) out.set(r.id, r.areaLinks.map((l) => asArea(l.researchArea)));
       break;
     }

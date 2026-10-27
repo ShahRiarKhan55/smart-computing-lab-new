@@ -1,3 +1,4 @@
+import { isMemberVisible } from "./memberVisibility.js";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { canDeleteGalleryItem, canEditGalleryItem, isAdmin, isImageMime, type GalleryItem, type StoredFileRef } from "@scl/shared";
 import { asProjectStatus } from "./serializers.js";
@@ -92,6 +93,13 @@ async function canViewParent(db: FileDb, viewer: Viewer, entityType: string, ent
       });
       return Boolean(row && row.status !== "DELETED" && row.post.status !== "DELETED" && canView(viewer, row.post.category.visibility));
     }
+    case "TEAM_MEMBER": {
+      // An uploaded profile photo is exactly as visible as the profile it belongs to: the parent must exist AND be visible to this viewer
+      // (lib/memberVisibility.ts: an unpublished profile is visible to administrators only). Checked on EVERY request. The file itself is
+      // always created PUBLIC by the profile-photo endpoint; its visibility alone never decides.
+      const row = await db.teamMember.findUnique({ where: { id: entityId }, select: { id: true, isPublished: true } });
+      return Boolean(row) && isMemberVisible(viewer, row!);
+    }
     default:
       // MESSAGE and any unrecognised value: no generic rule can safely resolve this — fail closed.
       return false;
@@ -113,5 +121,8 @@ export async function canAccessFile(
   if (!canView(viewer, file.visibility)) return false;
   if (!file.entityType || !file.entityId) return true;
   if (await canViewParent(db, viewer, file.entityType, file.entityId)) return true;
+  // A profile photo has no owner exception: the uploading account is not entitled to a photo of a profile that is hidden from it (for
+  // example a former member whose profile became an unpublished alumni entry). Only administrators may still reach it.
+  if (file.entityType === "TEAM_MEMBER") return isAdmin(viewer);
   return Boolean(viewer && (viewer.id === file.ownerId || isAdmin(viewer)));
 }

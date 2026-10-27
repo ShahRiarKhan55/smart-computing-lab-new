@@ -1,3 +1,4 @@
+import { countVisibleMembers } from "./memberVisibility.js";
 import type { Prisma } from "@prisma/client";
 import { ID_PATTERN, isManager, type Actor } from "@scl/shared";
 import { HttpError } from "./validate.js";
@@ -37,9 +38,10 @@ export async function assertMayChangeLinks(
 }
 
 /** Throws 400 unless every id is an existing team member. */
-export async function assertTeamMembersExist(tx: Prisma.TransactionClient, ids: string[]): Promise<void> {
+export async function assertTeamMembersExist(tx: Prisma.TransactionClient, ids: string[], actor: LinkActor): Promise<void> {
   if (ids.length === 0) return;
-  const found = await tx.teamMember.count({ where: { id: { in: ids } } });
+  // An unpublished profile the actor may not see counts as missing, so ids cannot be probed through this check.
+  const found = await countVisibleMembers(tx, actor, ids);
   if (found !== ids.length) throw new HttpError(400, "One or more team members do not exist.");
 }
 

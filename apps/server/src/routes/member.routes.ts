@@ -1,17 +1,21 @@
 import { Router } from "express";
 import type { Prisma } from "@prisma/client";
 import {
+  ALUMNI_MESSAGES,
   createHistoryEntrySchema,
   updateHistoryEntrySchema,
   setPublicationLinksSchema,
   setNewsLinksSchema,
   setMemberAreasSchema,
+  type Actor,
   type HistoryEntry,
   type MemberProfile,
 } from "@scl/shared";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
+import { isAlumniCategory } from "../lib/alumni.js";
+import { isMemberVisible, mayManageAlumni } from "../lib/memberVisibility.js";
 import { optionalAuth, requireOwnerOrManager } from "../middleware/auth.js";
 import { assertValidId, diffLinks } from "../lib/authorLinks.js";
 import { visibleTo } from "../lib/visibility.js";
@@ -23,9 +27,14 @@ import { resolveLocale } from "../lib/translations.js";
 
 const router = Router();
 
-async function loadMemberOr404(id: string) {
+/**
+ * For the WRITE routes below: a profile the actor may not see answers like a missing one, and an alumni profile may only be
+ * changed by an administrator (lab managers keep every permission they have for every other category).
+ */
+async function loadMemberOr404(id: string, actor: Actor) {
   const member = await prisma.teamMember.findUnique({ where: { id } });
-  if (!member) throw new HttpError(404, "Team member not found");
+  if (!member || !isMemberVisible(actor, member)) throw new HttpError(404, "Team member not found");
+  if (isAlumniCategory(member.category) && !mayManageAlumni(actor)) throw new HttpError(403, ALUMNI_MESSAGES.adminOnly);
   return member;
 }
 
@@ -85,7 +94,8 @@ router.get(
       },
     });
 
-    if (!member) throw new HttpError(404, "Team member not found");
+    // An unpublished profile answers exactly like a missing one (lib/memberVisibility.ts).
+    if (!member || !isMemberVisible(viewer, member)) throw new HttpError(404, "Team member not found");
 
     // Events this researcher organised (the creator's public profile is the organizer) plus events of the
     // projects they belong to. Event visibility is applied to every row, and a project only counts when
@@ -164,7 +174,7 @@ router.post(
   "/:id/history",
   requireOwnerOrManager("id"),
   asyncHandler(async (req, res) => {
-    await loadMemberOr404(req.params.id);
+    await loadMemberOr404(req.params.id, req.user!);
     const body = parseOrThrow(createHistoryEntrySchema, req.body);
 
     const entry = await prisma.historyEntry.create({
@@ -186,6 +196,7 @@ router.put(
   requireOwnerOrManager("id"),
   asyncHandler(async (req, res) => {
     assertValidId(req.params.entryId);
+    await loadMemberOr404(req.params.id, req.user!);
     const existing = await prisma.historyEntry.findFirst({
       where: { id: req.params.entryId, teamMemberId: req.params.id },
     });
@@ -211,6 +222,7 @@ router.delete(
   requireOwnerOrManager("id"),
   asyncHandler(async (req, res) => {
     assertValidId(req.params.entryId);
+    await loadMemberOr404(req.params.id, req.user!);
     const existing = await prisma.historyEntry.findFirst({
       where: { id: req.params.entryId, teamMemberId: req.params.id },
     });
@@ -270,7 +282,7 @@ router.put(
   "/:id/publications",
   requireOwnerOrManager("id"),
   asyncHandler(async (req, res) => {
-    await loadMemberOr404(req.params.id);
+    await loadMemberOr404(req.params.id, req.user!);
     const { publicationIds } = parseOrThrow(setPublicationLinksSchema, req.body);
     const uniqueIds = [...new Set(publicationIds)];
 
@@ -290,7 +302,7 @@ router.put(
   "/:id/news",
   requireOwnerOrManager("id"),
   asyncHandler(async (req, res) => {
-    await loadMemberOr404(req.params.id);
+    await loadMemberOr404(req.params.id, req.user!);
     const { newsIds } = parseOrThrow(setNewsLinksSchema, req.body);
     const uniqueIds = [...new Set(newsIds)];
 
@@ -313,7 +325,7 @@ router.put(
   "/:id/areas",
   requireOwnerOrManager("id"),
   asyncHandler(async (req, res) => {
-    await loadMemberOr404(req.params.id);
+    await loadMemberOr404(req.params.id, req.user!);
     const { areaIds } = parseOrThrow(setMemberAreasSchema, req.body);
 
     await prisma.$transaction(async (tx) => {

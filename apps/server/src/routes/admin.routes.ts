@@ -1,3 +1,4 @@
+import { auditHiddenFromManagers, publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
 import type { Prisma } from "@prisma/client";
 import {
@@ -41,6 +42,7 @@ import { eventScopeWhere } from "../lib/eventSerializers.js";
 import {
   ENTITY_TO_CONTENT_TYPE,
   VISIBILITY_TARGETS,
+  adminMemberScope,
   contentDef,
   getAdminContentDetail,
   listAdminContent,
@@ -92,7 +94,7 @@ router.get(
       // A gallery item has no visibility of its own: its file's is the single source of truth.
       group(prisma.storedFile, { deletedAt: null, galleryItem: { isNot: null } }),
       prisma.forumPost.count({ where: { status: { not: "DELETED" } } }),
-      prisma.teamMember.count(),
+      prisma.teamMember.count({ where: publishedMemberWhere(viewer) }),
       prisma.translation.count({ where: { locale: "ja" } }),
     ]);
 
@@ -247,6 +249,7 @@ router.get(
       const ids = rows.map((r) => r.entityId);
       and.push({ id: state === "overridden" ? { in: ids } : { notIn: ids } });
     }
+    and.push(adminMemberScope(ENTITY_TO_CONTENT_TYPE[entityType], req.user!));
     const where = and.length > 0 ? { AND: and } : {};
     const [total, raws] = await Promise.all([def.count(where), def.find(where, [{ [def.titleField]: "asc" }, { id: "asc" }], (page - 1) * limit, limit)]);
     const body: AdminTranslationsResponse = { type: entityType, entries: await toTranslationEntries(entityType, raws), pagination: paginate(page, limit, total) };
@@ -270,7 +273,7 @@ router.put(
 
     const def = contentDef(ENTITY_TO_CONTENT_TYPE[entityType]);
     await prisma.$transaction(async (tx) => {
-      const exists = await def.find({ id: entityId }, [{ id: "asc" }], 0, 1);
+      const exists = await def.find({ id: entityId, ...adminMemberScope(ENTITY_TO_CONTENT_TYPE[entityType], req.user!) }, [{ id: "asc" }], 0, 1, tx);
       if (exists.length === 0) throw new HttpError(404, "Not found");
       const before = await getEntityTranslations(tx, entityType, entityId);
       await applyTranslationOverrides(tx, entityType, entityId, { [field]: value });
@@ -287,7 +290,7 @@ router.put(
       }
     });
 
-    const [row] = await def.find({ id: entityId }, [{ id: "asc" }], 0, 1);
+    const [row] = await def.find({ id: entityId, ...adminMemberScope(ENTITY_TO_CONTENT_TYPE[entityType], req.user!) }, [{ id: "asc" }], 0, 1);
     const [entry] = await toTranslationEntries(entityType, [row]);
     res.json(entry);
   }),
@@ -325,6 +328,10 @@ router.get(
 
     const and: Prisma.AuditLogWhereInput[] = [];
     if (!admin) and.push({ entityType: { not: "USER" } });
+    // Alumni profiles are administered by admins alone and an unpublished one must not be named to anyone else: a manager's view of the
+    // audit log leaves out events about them (lib/memberVisibility.ts `auditHiddenFromManagers`).
+    const hiddenFromManagers = admin ? null : await auditHiddenFromManagers();
+    if (hiddenFromManagers) and.push(hiddenFromManagers);
     if (query.action) and.push({ action: query.action });
     if (query.entityType) and.push({ entityType: query.entityType });
     if (query.actor) and.push({ actorEmail: { contains: query.actor } });
@@ -332,7 +339,7 @@ router.get(
       and.push({ createdAt: { ...(query.from ? { gte: query.from } : {}), ...(query.to ? { lt: new Date(query.to.getTime() + 86_400_000) } : {}) } });
     }
     const where: Prisma.AuditLogWhereInput = and.length > 0 ? { AND: and } : {};
-    const visibleOnly: Prisma.AuditLogWhereInput = admin ? {} : { entityType: { not: "USER" } };
+    const visibleOnly: Prisma.AuditLogWhereInput = admin ? {} : { AND: [{ entityType: { not: "USER" } }, ...(hiddenFromManagers ? [hiddenFromManagers] : [])] };
 
     const [total, rows, actions, entityTypes] = await Promise.all([
       prisma.auditLog.count({ where }),

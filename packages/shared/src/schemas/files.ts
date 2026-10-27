@@ -53,8 +53,11 @@ export const CAPTION_MAX = 300;
  *  fileSerializers.ts `canAccessFile`): message attachments need participant-level privacy that
  *  a simple visibility lookup cannot express, so that integration must fail closed until a
  *  future phase implements it properly — never silently "work" via the generic path.
+ *  `TEAM_MEMBER` is a member's uploaded profile photo (`entityId` = the TeamMember id), created only by
+ *  POST /api/profile/photo and retired by the profile/team edit routes (lib/profilePhoto.ts); the generic upload
+ *  route never accepts it from a client.
  */
-export const FILE_ENTITY_TYPES = ["PUBLICATION", "RESEARCH_PROJECT", "EVENT", "FORUM_POST", "FORUM_COMMENT", "MESSAGE"] as const;
+export const FILE_ENTITY_TYPES = ["PUBLICATION", "RESEARCH_PROJECT", "EVENT", "FORUM_POST", "FORUM_COMMENT", "MESSAGE", "TEAM_MEMBER"] as const;
 export type FileEntityType = (typeof FILE_ENTITY_TYPES)[number];
 
 export const GALLERY_CATEGORIES = ["LAB_LIFE", "EVENT", "RESEARCH", "OTHER"] as const;

@@ -22,6 +22,7 @@ export const CATEGORY_LABEL_KEY: Record<Category, TranslationKey> = {
   MSC: "team.category.MSC",
   BSC: "team.category.BSC",
   RESEARCH: "team.category.RESEARCH",
+  ALUMNI: "team.category.ALUMNI",
 };
 
 /** Localized label for a gallery item's category. */

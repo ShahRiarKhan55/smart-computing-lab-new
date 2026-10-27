@@ -18,8 +18,9 @@ import { STATIC_PUBLIC_PATHS, escapeXml, normalizeBaseUrl } from "../lib/sitemap
  * NEVER includes a PUBLIC/LAB_ONLY item's presence at all when it is LAB_ONLY. This intentionally
  * reuses the exact same `visibility: "PUBLIC"` filter every other guest-facing route uses (see
  * lib/visibility.ts `visibleTo`), rather than a second, parallel notion of "public" that could
- * drift from it. `TeamMember` has no visibility field at all (the team roster is unconditionally
- * public, same as `GET /api/team` — see routes/team.routes.ts), so every row is included.
+ * drift from it. `TeamMember` has no `visibility` column but has a publication flag (`isPublished`,
+ * Phase 3B; lib/memberVisibility.ts): only PUBLISHED profiles are listed, the same rule `GET /api/team`
+ * and the profile pages apply, so an unpublished alumni profile is never in the sitemap.
  *
  * BASE URL: sitemap entries must be absolute URLs per the sitemap protocol. This app has no
  * hardcoded production domain anywhere (Phase 24 deliberately deferred this — see
@@ -46,7 +47,8 @@ async function collectPublicEntries(): Promise<SitemapEntry[]> {
     prisma.researchArea.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.researchProject.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.researchGroup.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
-    prisma.teamMember.findMany({ select: { id: true, updatedAt: true } }),
+    // Only PUBLISHED profiles (lib/memberVisibility.ts): an unpublished alumni profile is never listed.
+    prisma.teamMember.findMany({ where: { isPublished: true }, select: { id: true, updatedAt: true } }),
     prisma.publication.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.event.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
     prisma.knowledgeDoc.findMany({ where: { visibility: "PUBLIC" }, select: { id: true, updatedAt: true } }),
@@ -102,7 +104,9 @@ router.get("/sitemap.xml", async (_req, res) => {
     .join("\n");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=3600");
+  // Lists profile URLs that depend on publication consent (an unpublished alumni profile is removed from it): caches must revalidate
+  // every time (the response carries an ETag) instead of serving a copy that still names a profile that was unpublished.
+  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
   res.send(xml);
 });
 

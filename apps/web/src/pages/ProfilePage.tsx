@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { updateOwnProfileSchema, changePasswordSchema, type TeamMember } from "@scl/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useApiResource } from "../hooks/useApiResource";
-import { apiFetch, ApiError } from "../lib/api";
-import { apiErrorMessage } from "../i18n/errorMessages";
+import { apiFetch, apiUpload, ApiError } from "../lib/api";
+import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { PageHeader } from "../components/PageHeader";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
@@ -26,6 +26,9 @@ interface ProfileValues {
 
 type FieldErrors = Partial<Record<keyof ProfileValues, string>>;
 
+/** An uploaded photo is a same-site storage path. It is never shown to the user as if it were a photo URL. */
+const isUploadedPhoto = (photoUrl: string) => photoUrl.startsWith("/api/files/");
+
 function toValues(member: TeamMember): ProfileValues {
   return {
     name: member.name,
@@ -33,7 +36,8 @@ function toValues(member: TeamMember): ProfileValues {
     role: member.role,
     department: member.department,
     bio: member.bio,
-    photoUrl: member.photoUrl,
+    // The field is the EXTERNAL photo URL: empty while an uploaded photo is in use.
+    photoUrl: isUploadedPhoto(member.photoUrl) ? "" : member.photoUrl,
   };
 }
 
@@ -229,6 +233,208 @@ function PasswordChangeSection() {
   );
 }
 
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+/** Mirrors the server's image cap for a fast, friendly check; the server remains the authority. */
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Own-profile photo upload. A separate form from the text profile (so the two never share a submit). The preview is a data: URL
+ * (the CSP allows `data:` images but not `blob:`). The server removes known metadata containers (see the sanitizer limits in the architecture doc) and assigns
+ * owner/visibility; the browser sends only the file.
+ */
+function PhotoUploader({
+  initials,
+  photoUrl,
+  blockedReason,
+  resetSignal,
+  onBusyChange,
+  onChanged,
+}: {
+  initials: string;
+  photoUrl: string;
+  /** Non-null while a conflicting unsaved edit makes uploading or removing unsafe (shown to the user, linked to the controls). */
+  blockedReason: string | null;
+  /** Changes whenever the surrounding form starts a new action (save, reset, URL edit): stale success messages are then cleared. */
+  resetSignal: number;
+  /** True while an upload or removal is in flight; the form disables the external-URL field meanwhile so a typed URL cannot be lost or race it. */
+  onBusyChange: (busy: boolean) => void;
+  onChanged: (photoUrl: string) => void;
+}) {
+  const t = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const busyRef = useRef(false);
+  const readToken = useRef(0);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const blocked = blockedReason !== null;
+  const [seenSignal, setSeenSignal] = useState(resetSignal);
+  if (seenSignal !== resetSignal) {
+    // Derived-state reset during render (not an effect): a success/removal notice describes the previous state of the form.
+    setSeenSignal(resetSignal);
+    setSuccess(false);
+    setRemoved(false);
+  }
+
+  function failure(err: unknown, imageRejection = false): string {
+    if (err instanceof ApiError) {
+      if (err.status === 401) return t("profile.sessionExpired");
+      const known = knownMessage(err.message, t);
+      if (known !== err.message) return known;
+      // an unlisted sanitizer detail on an UPLOAD: one localized, actionable message (not for a removal request)
+      if (imageRejection && err.status === 400) return t("profile.photo.err.invalid");
+    }
+    return apiErrorMessage(err, t);
+  }
+  const setBusyAll = (value: boolean) => {
+    setBusy(value);
+    onBusyChange(value);
+  };
+
+  async function remove() {
+    if (busyRef.current || blocked) return;
+    busyRef.current = true;
+    setBusyAll(true);
+    setError(null);
+    setSuccess(false);
+    setRemoved(false);
+    try {
+      const updated = await apiFetch<TeamMember>("/profile", { method: "PUT", body: JSON.stringify({ photoUrl: "" }) });
+      onChanged(updated.photoUrl);
+      clearSelection();
+      setRemoved(true);
+    } catch (err) {
+      setError(failure(err));
+    } finally {
+      busyRef.current = false;
+      setBusyAll(false);
+    }
+  }
+
+  function clearSelection() {
+    readToken.current += 1;
+    setFile(null);
+    setPreview(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function choose(picked: File | undefined) {
+    setSuccess(false);
+    setRemoved(false);
+    setError(null);
+    clearSelection();
+    if (!picked) return;
+    if (!PHOTO_TYPES.includes(picked.type)) return setError(t("profile.photo.err.type"));
+    if (picked.size > PHOTO_MAX_BYTES) return setError(t("profile.photo.err.size"));
+    setFile(picked);
+    const token = readToken.current;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (token === readToken.current && typeof reader.result === "string") setPreview(reader.result);
+    };
+    reader.readAsDataURL(picked);
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!file || busyRef.current || blocked) return;
+    busyRef.current = true;
+    setBusyAll(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const updated = await apiUpload<TeamMember>("/profile/photo", body);
+      onChanged(updated.photoUrl);
+      clearSelection();
+      setSuccess(true);
+    } catch (err) {
+      setError(failure(err, true)); // the previous photo, the selected file and the profile form's unsaved values are all left as they were
+    } finally {
+      busyRef.current = false;
+      setBusyAll(false);
+    }
+  }
+
+  return (
+    <form className="photo-upload" onSubmit={submit} aria-labelledby="photo_heading" noValidate>
+      <h2 className="photo-upload__heading" id="photo_heading">
+        {t("profile.photo.heading")}
+      </h2>
+      <Avatar size="xl" initials={initials} photoUrl={preview ?? photoUrl} />
+      {preview && <span className="sr-only">{t("profile.photo.previewAlt")}</span>}
+      {/* The native file input is only a proxy: the visible, focusable control is the button below. A button with aria-disabled stays
+          focusable, so the explanation it is described by (when blocked) is announced instead of the control silently vanishing. */}
+      <input
+        ref={inputRef}
+        id="f_photoFile"
+        className="sr-only"
+        type="file"
+        accept={PHOTO_TYPES.join(",")}
+        onChange={(e) => choose(e.target.files?.[0])}
+        disabled={busy || blocked}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        id="photo_choose"
+        className={`btn btn--secondary btn--sm photo-upload__choose${busy || blocked ? " photo-upload__choose--disabled" : ""}`}
+        aria-disabled={busy || blocked}
+        aria-describedby={blocked ? "photo_help photo_blocked" : "photo_help"}
+        onClick={() => {
+          if (!busy && !blocked) inputRef.current?.click();
+        }}
+      >
+        {t("profile.photo.choose")}
+      </button>
+      <p className="card-note" id="photo_help">
+        {t("profile.photo.help")}
+      </p>
+      {blocked && (
+        <p className="card-note photo-upload__blocked" id="photo_blocked">
+          {blockedReason}
+        </p>
+      )}
+      {file && <p className="card-note">{t("profile.photo.selected", { name: file.name })}</p>}
+      {file && (
+        <div className="form-actions">
+          <button className="btn btn--primary btn--sm" type="submit" disabled={busy || blocked} aria-busy={busy} aria-describedby={blocked ? "photo_blocked" : undefined}>
+            {busy ? t("profile.photo.uploading") : t("profile.photo.upload")}
+          </button>
+          <button className="btn btn--secondary btn--sm" type="button" onClick={clearSelection} disabled={busy}>
+            {t("profile.photo.cancel")}
+          </button>
+        </div>
+      )}
+      {photoUrl && !file && (
+        <button className="btn btn--secondary btn--sm" type="button" onClick={remove} disabled={busy || blocked} aria-busy={busy} aria-describedby={blocked ? "photo_blocked" : undefined}>
+          {busy ? t("profile.photo.removing") : t("profile.photo.remove")}
+        </button>
+      )}
+      {error && (
+        <p className="form-field-error" role="alert">
+          {error}
+        </p>
+      )}
+      {removed && !blocked && (
+        <p className="form-success" role="status">
+          <Icon name="check" size={16} /> {t("profile.photo.removed")}
+        </p>
+      )}
+      {success && !blocked && (
+        <p className="form-success" role="status">
+          <Icon name="check" size={16} /> {t("profile.photo.success")}
+        </p>
+      )}
+    </form>
+  );
+}
+
 function ProfileForm({ initial }: { initial: TeamMember }) {
   const t = useT();
   const [saved, setSaved] = useState(initial);
@@ -237,17 +443,26 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The photo can change while a text save is in flight (an upload or removal finishes first). A save response is a snapshot
+  // from BEFORE that change, so it must not put the older photo URL back: photoVersion counts photo changes made here, and
+  // latestPhoto is the newest URL they produced.
+  const photoVersion = useRef(0);
+  const latestPhoto = useRef(initial.photoUrl);
+  const [photoSignal, setPhotoSignal] = useState(0);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const savedValues = toValues(saved);
   const dirty = (Object.keys(values) as (keyof ProfileValues)[]).some((k) => values[k] !== savedValues[k]);
 
   function change(key: keyof ProfileValues, value: string) {
+    if (key === "photoUrl") setPhotoSignal((n) => n + 1);
     setValues((v) => ({ ...v, [key]: value }));
     setFieldErrors((e) => ({ ...e, [key]: undefined }));
     setSuccess(false);
   }
 
   function reset() {
+    setPhotoSignal((n) => n + 1);
     setValues(savedValues);
     setFieldErrors({});
     setFormError(null);
@@ -258,8 +473,12 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
     e.preventDefault();
     setFormError(null);
     setSuccess(false);
+    setPhotoSignal((n) => n + 1);
 
-    const parsed = updateOwnProfileSchema.safeParse(values);
+    // photoUrl is validated and sent only if this form changed it: an uploaded photo is a same-site /api/files/ path, which the
+    // external-URL rule rightly rejects, and an unchanged value must never be written back over a newer upload.
+    const photoChanged = values.photoUrl !== savedValues.photoUrl;
+    const parsed = updateOwnProfileSchema.safeParse({ ...values, photoUrl: photoChanged ? values.photoUrl : undefined });
     if (!parsed.success) {
       const errors: FieldErrors = {};
       for (const issue of parsed.error.issues) {
@@ -273,9 +492,12 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
     setFieldErrors({});
 
     setSaving(true);
+    const versionAtStart = photoVersion.current;
     try {
-      const updated = await apiFetch<TeamMember>("/profile", { method: "PUT", body: JSON.stringify(parsed.data) });
-      // Show exactly what the server stored (it trims), without a second fetch.
+      const response = await apiFetch<TeamMember>("/profile", { method: "PUT", body: JSON.stringify(parsed.data) });
+      // Show exactly what the server stored (it trims), without a second fetch, except that a photo change made while this
+      // request was in flight wins over the older photo URL in the response.
+      const updated = photoVersion.current === versionAtStart ? response : { ...response, photoUrl: latestPhoto.current };
       setSaved(updated);
       setValues(toValues(updated));
       setSuccess(true);
@@ -352,7 +574,18 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
           </div>
           <div className="form-group">
             <label htmlFor="f_photoUrl">{t("profile.photoUrl")}</label>
-            <input {...field("photoUrl")} placeholder="https://..." inputMode="url" />
+            <input
+              {...field("photoUrl")}
+              disabled={photoBusy}
+              placeholder="https://..."
+              inputMode="url"
+              aria-describedby={[fieldErrors.photoUrl ? "f_photoUrl_error" : null, isUploadedPhoto(saved.photoUrl) ? "f_photoUrl_hint" : null].filter(Boolean).join(" ") || undefined}
+            />
+            {isUploadedPhoto(saved.photoUrl) && (
+              <p className="card-note" id="f_photoUrl_hint">
+                {t("profile.photo.uploadedInUse")}
+              </p>
+            )}
             {fieldError("photoUrl")}
           </div>
 
@@ -369,7 +602,21 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
 
       <aside className="detail-layout__aside" aria-label={t("member.researcherSummaryAria")}>
         <section className="panel profile-summary">
-          <Avatar size="xl" initials={values.initials || saved.initials} photoUrl={saved.photoUrl} />
+          <PhotoUploader
+            initials={values.initials || saved.initials}
+            photoUrl={saved.photoUrl}
+            blockedReason={values.photoUrl !== savedValues.photoUrl ? t("profile.photo.blockedByUrl") : null}
+            resetSignal={photoSignal}
+            onBusyChange={setPhotoBusy}
+            onChanged={(photoUrl) => {
+              photoVersion.current += 1;
+              latestPhoto.current = photoUrl;
+              // The uploader is blocked while a URL edit is pending and the URL field is disabled while an upload/removal runs,
+              // so no draft can exist here and nothing the user typed is lost.
+              setSaved((s) => ({ ...s, photoUrl }));
+              setValues((v) => ({ ...v, photoUrl: isUploadedPhoto(photoUrl) ? "" : photoUrl }));
+            }}
+          />
           <div>
             <p className="profile-summary__role">{values.name || saved.name}</p>
             <p className="profile-summary__dept">{values.role}</p>

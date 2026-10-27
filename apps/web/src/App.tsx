@@ -77,6 +77,7 @@ const PublicationDetailPage = lazy(() => import("./pages/PublicationDetailPage")
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then((m) => ({ default: m.WorkspacePage })));
 const KnowledgeDetailPage = lazy(() => import("./pages/KnowledgeDetailPage").then((m) => ({ default: m.KnowledgeDetailPage })));
 const ResourceDetailPage = lazy(() => import("./pages/ResourceDetailPage").then((m) => ({ default: m.ResourceDetailPage })));
+const AlumniPage = lazy(() => import("./pages/AlumniPage").then((m) => ({ default: m.AlumniPage })));
 const GalleryPage = lazy(() => import("./pages/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const ForumIndexPage = lazy(() => import("./pages/community/ForumIndexPage").then((m) => ({ default: m.ForumIndexPage })));
 const ForumCategoryPage = lazy(() => import("./pages/community/ForumCategoryPage").then((m) => ({ default: m.ForumCategoryPage })));
@@ -135,6 +136,7 @@ export default function App() {
         <Route path="/resources/:id" element={<ResourceDetailPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/team/:id" element={<MemberPage />} />
+        <Route path="/alumni" element={<AlumniPage />} />
         <Route path="/publications" element={<PublicationsPage />} />
         <Route path="/publications/:id" element={<PublicationDetailPage />} />
         <Route path="/news" element={<NewsPage />} />

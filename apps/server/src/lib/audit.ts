@@ -42,6 +42,8 @@ export type AuditAction =
   // people
   | "TEAM_MEMBER_CREATED"
   | "TEAM_MEMBER_UPDATED"
+  | "TEAM_MEMBER_PUBLISHED"
+  | "TEAM_MEMBER_UNPUBLISHED"
   | "TEAM_MEMBER_DELETED"
   | "MEMBER_LINKS_CHANGED"
   // research projects

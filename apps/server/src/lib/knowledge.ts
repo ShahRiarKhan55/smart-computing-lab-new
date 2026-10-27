@@ -1,3 +1,4 @@
+import { isMemberVisible, publishedMemberWhere } from "./memberVisibility.js";
 import type { Prisma } from "@prisma/client";
 import {
   canDeleteKnowledge,
@@ -35,7 +36,8 @@ export const knowledgeInclude = {
   project: { select: { id: true, title: true, visibility: true } },
   researchArea: { select: { id: true, title: true, visibility: true } },
   group: { select: { id: true, name: true, visibility: true } },
-  teamMember: { select: { id: true, name: true } },
+  // `isPublished` is selected only to decide visibility (the serializer drops an unpublished researcher; it is never returned).
+  teamMember: { select: { id: true, name: true, isPublished: true } },
 } satisfies Prisma.KnowledgeDocInclude;
 
 export type KnowledgeRow = Prisma.KnowledgeDocGetPayload<{ include: typeof knowledgeInclude }>;
@@ -74,7 +76,7 @@ export async function serializeKnowledge(rows: KnowledgeRow[], viewer: Viewer, l
       researchArea:
         row.researchArea && canView(viewer, row.researchArea.visibility) ? { id: row.researchArea.id, title: pick(refTr.area, row.researchArea.id, "title", row.researchArea.title) } : null,
       group: row.group && canView(viewer, row.group.visibility) ? { id: row.group.id, title: pick(refTr.group, row.group.id, "name", row.group.name) } : null,
-      researcher: row.teamMember ? { id: row.teamMember.id, name: row.teamMember.name } : null,
+      researcher: row.teamMember && isMemberVisible(viewer, row.teamMember) ? { id: row.teamMember.id, name: row.teamMember.name } : null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       canEdit: canEditKnowledge(viewer, isOwner),
@@ -129,7 +131,7 @@ export async function knowledgeWhere(query: KnowledgeListQuery, viewer: Viewer):
   if (query.project) and.push({ projectId: query.project, project: visible });
   if (query.area) and.push({ researchAreaId: query.area, researchArea: visible });
   if (query.group) and.push({ groupId: query.group, group: visible });
-  if (query.researcher) and.push({ teamMemberId: query.researcher });
+  if (query.researcher) and.push({ teamMemberId: query.researcher, teamMember: publishedMemberWhere(viewer) });
   if (query.q.terms.length > 0) {
     const english: Prisma.KnowledgeDocWhereInput = {
       AND: query.q.terms.map((term) => ({ OR: [{ title: { contains: term } }, { body: { contains: term } }] })),

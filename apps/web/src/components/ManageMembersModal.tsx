@@ -79,7 +79,7 @@ export function ManageMembersModal({ open, kind, id, name, onClose, onChanged }:
     setConfirmId(null);
     setPick("");
     setPickRole("MEMBER");
-    Promise.all([loadMembers(), apiFetch<TeamMember[]>("/team").then((list) => !cancelled && setTeam(list))]).catch((err) => {
+    Promise.all([loadMembers(), apiFetch<TeamMember[]>("/team?includeAlumni=1").then((list) => !cancelled && setTeam(list))]).catch((err) => {
       if (!cancelled) setLoadError(apiErrorMessage(err, t));
     });
     return () => {

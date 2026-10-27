@@ -1,3 +1,4 @@
+import { isMemberVisible, publishedMemberWhere } from "./memberVisibility.js";
 import type { Prisma } from "@prisma/client";
 import {
   RESOURCE_CARD_PROJECTS,
@@ -45,7 +46,7 @@ export const resourceInclude = (viewer: Viewer, projectTake: number) => {
   const visible = visibleTo(viewer);
   return {
     owner: { select: { teamMember: { select: { id: true, name: true } } } },
-    teamMember: { select: { id: true, name: true } },
+    teamMember: { select: { id: true, name: true, isPublished: true } }, // isPublished: visibility decision only, never returned
     researchArea: { select: { id: true, title: true, visibility: true } },
     group: { select: { id: true, name: true, visibility: true } },
     knowledgeDoc: { select: { id: true, title: true, visibility: true } },
@@ -111,7 +112,7 @@ export async function serializeResources(rows: ResourceRow[], viewer: Viewer, lo
       url: safeResourceUrl(row.url),
       excerpt: resourceExcerpt(row.description),
       owner: row.owner?.teamMember ? { id: row.owner.teamMember.id, name: row.owner.teamMember.name } : null,
-      researcher: row.teamMember ? { id: row.teamMember.id, name: row.teamMember.name } : null,
+      researcher: row.teamMember && isMemberVisible(viewer, row.teamMember) ? { id: row.teamMember.id, name: row.teamMember.name } : null,
       projects: detail ? projects : projects.slice(0, RESOURCE_CARD_PROJECTS),
       projectCount: row._count.projectLinks,
       researchArea:
@@ -159,7 +160,7 @@ export async function resourceWhere(query: ResourceListQuery, viewer: Viewer): P
   if (query.project) and.push({ projectLinks: { some: { projectId: query.project, project: visible } } });
   if (query.area) and.push({ researchAreaId: query.area, researchArea: visible });
   if (query.group) and.push({ groupId: query.group, group: visible });
-  if (query.researcher) and.push({ teamMemberId: query.researcher });
+  if (query.researcher) and.push({ teamMemberId: query.researcher, teamMember: publishedMemberWhere(viewer) });
   if (query.knowledge) and.push({ knowledgeDocId: query.knowledge, knowledgeDoc: visible });
   if (query.publication) and.push({ publicationId: query.publication, publication: visible });
   if (query.q.terms.length > 0) {

@@ -180,7 +180,7 @@ async function main() {
       createdAt: new Date("2030-01-01T00:00:00Z"),
       updatedAt: new Date("2030-01-02T00:00:00Z"),
       owner: { teamMember: { id: "tm-owner", name: "Ola Owner" } },
-      teamMember: { id: "t1", name: "Rita Researcher" },
+      teamMember: { id: "t1", name: "Rita Researcher", isPublished: true },
       researchArea: { id: "a1", title: "Area", visibility: "LAB_ONLY" },
       group: { id: "g1", name: "Group", visibility: "LAB_ONLY" },
       knowledgeDoc: { id: "d1", title: "Doc", visibility: "LAB_ONLY" },
@@ -243,7 +243,9 @@ async function main() {
   const vw = JSON.stringify(await resourceWhere(parse({ visibility: "LAB_ONLY" }), manager));
   t("where: the manager visibility filter is ANDed after, never instead of, the viewer's own clause", vw === '{"AND":[{"visibility":{"in":["PUBLIC","LAB_ONLY"]}},{"visibility":"LAB_ONLY"}]}');
   const inc = resourceInclude(null, 3);
-  t("include: only the public team profile of the owner is selected (no email, no user id)", JSON.stringify(inc.owner) === '{"select":{"teamMember":{"select":{"id":true,"name":true}}}}' && JSON.stringify(inc.teamMember) === '{"select":{"id":true,"name":true}}');
+  t("include: only the public team profile of the owner is selected (no email, no user id)", JSON.stringify(inc.owner) === '{"select":{"teamMember":{"select":{"id":true,"name":true}}}}' && JSON.stringify(inc.teamMember) === '{"select":{"id":true,"name":true,"isPublished":true}}');
+  const [hiddenResearcher] = await serializeResources([row({ teamMember: { id: "t2", name: "Unpublished Person", isPublished: false } })], null, "en");
+  t("serialize: an UNPUBLISHED researcher is never named to a guest", hiddenResearcher.researcher === null && !JSON.stringify(hiddenResearcher).includes("Unpublished"));
   t("include: the project links and the project count are filtered by the viewer's visibility and bounded", JSON.stringify(inc.projectLinks.where) === '{"project":{"visibility":{"in":["PUBLIC"]}}}' && inc.projectLinks.take === 3 && JSON.stringify(inc._count) === '{"select":{"projectLinks":{"where":{"project":{"visibility":{"in":["PUBLIC"]}}}}}}' && JSON.stringify(resourceInclude(member, 3).projectLinks.where) === '{"project":{"visibility":{"in":["PUBLIC","LAB_ONLY"]}}}');
   t("include: linked area/group/document/publication/event are selected with their visibility (checked per viewer), never their bodies", ["researchArea", "group", "knowledgeDoc", "publication", "event"].every((k) => (inc as Record<string, { select: Record<string, boolean> }>)[k].select.visibility === true) && !JSON.stringify(inc).includes('"body"') && !JSON.stringify(inc).includes('"email"') && !JSON.stringify(inc).includes('"passwordHash"'));
   t("order: most recently updated first, id breaks ties", JSON.stringify(resourceOrderBy) === '[{"updatedAt":"desc"},{"id":"asc"}]');

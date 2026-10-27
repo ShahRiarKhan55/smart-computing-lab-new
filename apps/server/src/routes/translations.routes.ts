@@ -1,3 +1,4 @@
+import { isMemberVisible } from "../lib/memberVisibility.js";
 import { Router } from "express";
 import { ID_PATTERN, isTranslatableEntityType } from "@scl/shared";
 import { prisma } from "../lib/prisma.js";
@@ -27,6 +28,11 @@ router.get(
     const { entityType, entityId } = req.params;
     if (!isTranslatableEntityType(entityType)) throw new HttpError(404, "Not found");
     if (!ID_PATTERN.test(entityId)) throw new HttpError(400, "Invalid id.");
+    // A team profile the viewer may not see answers like a missing one (its base text would otherwise be readable by any account).
+    if (entityType === "TEAM_MEMBER") {
+      const member = await prisma.teamMember.findUnique({ where: { id: entityId }, select: { isPublished: true } });
+      if (!member || !isMemberVisible(req.user ?? null, member)) throw new HttpError(404, "Not found");
+    }
     res.json({ ja: await getEntityTranslations(prisma, entityType, entityId), base: await getEntityBase(prisma, entityType, entityId) });
   }),
 );

@@ -104,6 +104,10 @@ model TeamMember {
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  // Phase 3B: public-display consent. Every existing row is published (default true), so nothing
+  // changes for current members; an ALUMNI profile is created UNPUBLISHED and an admin publishes it
+  // explicitly (lib/memberVisibility.ts). Only `true` is public: see publishedMemberWhere().
+  isPublished Boolean  @default(true)
 
   user             User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   historyEntries   HistoryEntry[]
@@ -542,7 +546,7 @@ model StoredFile {
   visibility   String    @default("LAB_ONLY") // PUBLIC | LAB_ONLY
   ownerId      String?
   // What the file is attached to. NULL = standalone (gallery items and library files).
-  // entityType: PUBLICATION | RESEARCH_PROJECT | EVENT | FORUM_POST | FORUM_COMMENT | MESSAGE
+  // entityType: PUBLICATION | RESEARCH_PROJECT | EVENT | FORUM_POST | FORUM_COMMENT | MESSAGE | TEAM_MEMBER (a member's uploaded profile photo; entityId = TeamMember id)
   entityType   String?
   entityId     String?
   deletedAt    DateTime? // soft delete; the blob is purged by a cleanup job

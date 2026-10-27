@@ -5,12 +5,14 @@
  * errors have their numeric `rawCode` stripped (what a remote driver error looks like). No file, no network, no hosted
  * database.   npm run test:unit -w apps/server
  */
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
-import { constraintKind, mapKnownDatabaseError } from "../src/lib/dbErrors.ts";
+import { LibsqlError } from "@libsql/client";
+import { SERVICE_BUSY_MESSAGE, constraintKind, LockWaitTimeoutError, asLockWait, isTransientDatabaseContention, mapKnownDatabaseError, transientContentionAs503 } from "../src/lib/dbErrors.ts";
 
 let ok = 0;
 const failures: string[] = [];
@@ -18,6 +20,22 @@ const t = (name: string, cond: boolean) => (cond ? ok++ : failures.push(name));
 
 const known = (code: string, message = "boom", meta?: Record<string, unknown>) => new Prisma.PrismaClientKnownRequestError(message, { code, clientVersion: "5.22.0", meta });
 const frame = (driverText: string) => `\nInvalid \`prisma.x.create()\` invocation in /app/src/y.ts:12:3\n\n  11 // a comment mentioning UNIQUE constraint failed and FOREIGN KEY constraint failed\n→ 12 await prisma.x.create(\n${driverText}`;
+
+// ---- transient lock contention (503, never retried by the server) -------------------------------------------------------------
+const unknownReq = (message: string) => new Prisma.PrismaClientUnknownRequestError(message, { clientVersion: "5.22.0" });
+t("contention: Prisma timeout P1008 is NOT classified (a remote timed-out commit may have been applied)", !isTransientDatabaseContention(known("P1008", frame("Operations timed out after `N/A`. Context: The database failed to respond"))));
+t("contention: driver code SQLITE_BUSY", isTransientDatabaseContention(known("SQLITE_BUSY", frame("SQLITE_BUSY: database is locked"))));
+t("contention: extended SQLITE_BUSY_SNAPSHOT", isTransientDatabaseContention(known("SQLITE_BUSY_SNAPSHOT")));
+t("contention: unknown-request error whose final line is the driver's BUSY text", isTransientDatabaseContention(unknownReq(frame("SQLITE_BUSY: database is locked"))));
+t("contention: a generic query timeout is NOT classified", !isTransientDatabaseContention(unknownReq(frame("ConnectorError { kind: ConnectionError(Timed out during query execution.) }"))));
+t("contention: 'database is locked' as the last driver line of a known error", isTransientDatabaseContention(known("P2010", frame("database is locked"))));
+t("contention: NOT detected from the code frame (a comment mentioning 'database is locked' above an unrelated error)", !isTransientDatabaseContention(known("P2002", `\n  11 // database is locked\n→ 12 await prisma.x.create(\nUNIQUE constraint failed: X.y`)));
+t("contention: the embedded libSQL client's own SQLITE_BUSY error (a commit that stayed BUSY after the guard's rollback)", isTransientDatabaseContention(new LibsqlError("SQLITE_BUSY: database is locked", "SQLITE_BUSY", 5)));
+t("contention: other libSQL client errors are not contention", !isTransientDatabaseContention(new LibsqlError("constraint", "SQLITE_CONSTRAINT")) && !isTransientDatabaseContention(new LibsqlError("closed", "TRANSACTION_CLOSED")) && !isTransientDatabaseContention(new LibsqlError("x", "SQLITE_LOCKED")));
+t("contention: NOT detected from the code frame of an UNKNOWN-request error either", !isTransientDatabaseContention(unknownReq(`\n  11 // SQLITE_BUSY database is locked\n→ 12 await prisma.x.create(\nsome other failure`)));
+t("contention: constraint failures, not-found and plain errors are not contention", !isTransientDatabaseContention(known("P2002")) && !isTransientDatabaseContention(known("P2025")) && !isTransientDatabaseContention(known("SQLITE_CONSTRAINT", frame("UNIQUE constraint failed: A.b"))) && !isTransientDatabaseContention(new Error("database is locked")) && !isTransientDatabaseContention(null));
+t("contention is NOT part of the 4xx mapping (it never changes the existing contract)", mapKnownDatabaseError(known("P1008")) === null && mapKnownDatabaseError(known("SQLITE_BUSY")) === null);
+t("the busy message is the fixed, client-safe sentence", SERVICE_BUSY_MESSAGE === "The service is busy. Please try again in a moment.");
 
 // ---- classification ----------------------------------------------------------------------------------------------------
 t("P2002 -> unique", constraintKind(known("P2002")) === "unique");
@@ -67,8 +85,8 @@ const migDir = path.resolve(import.meta.dirname, "..", "prisma", "migrations");
 const initSql = readFileSync(path.join(migDir, "20260918122941_init", "migration.sql"), "utf8");
 const userDdl = [/CREATE TABLE "User" \([\s\S]*?\n\);/, /CREATE UNIQUE INDEX "User_email_key"[^\n]*;/].map((re) => initSql.match(re)![0].replace(/;$/, ""));
 const oauthDdl = readFileSync(path.join(migDir, "20261012100000_oauth_identity", "migration.sql"), "utf8").split("\n").filter((l) => !/^\s*--/.test(l)).join("\n").split(";").map((x) => x.trim()).filter(Boolean);
-async function engine(strip: boolean) {
-  const real = createClient({ url: ":memory:" });
+async function engine(strip: boolean, url = ":memory:") {
+  const real = createClient({ url });
   for (const ddl of [...userDdl, ...oauthDdl]) await real.execute(ddl);
   const client = new Proxy(real, {
     get(target, prop) {
@@ -116,6 +134,64 @@ for (const strip of [false, true]) {
     t("engine local-shaped: typed P2002 / P2003 are preserved", (uniqueEmail as Prisma.PrismaClientKnownRequestError).code === "P2002" && (fk as Prisma.PrismaClientKnownRequestError).code === "P2003");
   }
   await p.$disconnect();
+}
+
+// ---- the router-level 503 handler and the classes it must NOT take -------------------------------------------------------------
+t("contention: P2028 (transaction expired, outcome uncertain) is NOT classified", !isTransientDatabaseContention(known("P2028", "Transaction API error: Transaction already closed: expired")));
+t("contention: SQLITE_LOCKED and SQLITE_CONSTRAINT are NOT classified", !isTransientDatabaseContention(new LibsqlError("locked", "SQLITE_LOCKED")) && !isTransientDatabaseContention(new LibsqlError("c", "SQLITE_CONSTRAINT")) && !isTransientDatabaseContention(known("P2002")));
+t("contention: an unrelated error object and non-errors are NOT classified", !isTransientDatabaseContention(new Error("SQLITE_BUSY: database is locked")) && !isTransientDatabaseContention(null) && !isTransientDatabaseContention("SQLITE_BUSY"));
+{
+  const run = (err: unknown, headersSent = false) => {
+    const out: { status?: number; headers: Record<string, string>; body?: unknown; next?: unknown } = { headers: {} };
+    const res: any = { headersSent, set: (k: string, v: string) => ((out.headers[k] = v), res), status: (c: number) => ((out.status = c), res), json: (b: unknown) => ((out.body = b), res) };
+    const origError = console.error; console.error = () => {};
+    try { transientContentionAs503(err, {} as any, res, (e?: unknown) => { out.next = e ?? "called"; }); } finally { console.error = origError; }
+    return out;
+  };
+  const busy = new LibsqlError("SQLITE_BUSY: database is locked", "SQLITE_BUSY");
+  const r1 = run(busy);
+  t("503 handler: BUSY answers 503 with Retry-After: 1 and the fixed message, without calling next", r1.status === 503 && r1.headers["Retry-After"] === "1" && JSON.stringify(r1.body) === JSON.stringify({ error: SERVICE_BUSY_MESSAGE }) && r1.next === undefined);
+  const r2 = run(busy, true);
+  t("503 handler: headers already sent -> next(err), nothing written", r2.next === busy && r2.status === undefined);
+  const p2028 = known("P2028", "expired"); const r3 = run(p2028);
+  t("503 handler: P2028 / P1008 / constraint errors pass to next unchanged (no 503, no Retry-After)", r3.next === p2028 && r3.status === undefined && run(known("P1008")).status === undefined && run(known("P2002")).status === undefined && Object.keys(r3.headers).length === 0);
+}
+
+// ---- lock wait on a remote database (runbook scenario 11): P2028 on the FIRST statement of a lock-first transaction ----------
+// Observed against a real Turso database: while another connection held the write lock, the first statement waited, Prisma expired the
+// transaction at its 5 s limit and rejected with P2028 (no lock-specific text); the request then answered a generic 500 instead of 503.
+{
+  const remoteMsg = "Invalid `tx.teamMember.updateMany()` invocation in /app/src/routes/team.routes.ts:122:42\n\n→ 122 const locked = await tx.teamMember.updateMany(\nTransaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 6843 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.";
+  const real = known("P2028", remoteMsg, { modelName: "TeamMember", error: "Transaction already closed" });
+  const converted = await errOf(() => asLockWait(Promise.reject(real)));
+  t("lock wait: the observed remote P2028 on the first statement becomes LockWaitTimeoutError", converted instanceof LockWaitTimeoutError);
+  t("lock wait: ...and that is classified as transient contention", isTransientDatabaseContention(converted));
+  t("lock wait: the raw P2028 itself is still NOT contention (it is only converted at the first statement)", !isTransientDatabaseContention(real));
+  const passThrough = [known("P2002"), known("P1008", "timed out"), known("SQLITE_BUSY"), new Error("x"), Object.assign(new Error("not found"), { name: "HttpError", status: 404 })];
+  for (const e of passThrough) t(`lock wait: a first-statement error that is not P2028 passes through unchanged (${(e as any).code ?? (e as Error).name})`, (await errOf(() => asLockWait(Promise.reject(e)))) === e);
+  t("lock wait: a successful first statement returns its value untouched", (await asLockWait(Promise.resolve(7))) === 7);
+  const r = (() => { const out: { status?: number; headers: Record<string, string> } = { headers: {} }; const res: any = { headersSent: false, set: (k: string, v: string) => ((out.headers[k] = v), res), status: (c: number) => ((out.status = c), res), json: () => res }; const oe = console.error; console.error = () => {}; try { transientContentionAs503(converted, {} as any, res, () => {}); } finally { console.error = oe; } return out; })();
+  t("lock wait: the router handler answers 503 + Retry-After for it", r.status === 503 && r.headers["Retry-After"] === "1");
+
+  // Real Prisma engine, real expiry (in-memory libsql): the interactive transaction is allowed 300 ms.
+  // A temporary FILE database: an interactive transaction on an in-memory libsql client would get its own empty database.
+  const tmpDir = mkdtempSync(path.join(tmpdir(), "scl-lockwait-"));
+  const p = await engine(false, `file:${path.join(tmpDir, "t.db")}`);
+  const OPT = { timeout: 300, maxWait: 2000 };
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  const firstLate = await errOf(() => p.$transaction(async (tx) => { await sleep(700); await asLockWait(tx.user.updateMany({ where: { id: "none" }, data: { updatedAt: new Date() } })); }, OPT));
+  t("engine: a first statement that arrives after the transaction expired -> LockWaitTimeoutError", firstLate instanceof LockWaitTimeoutError && isTransientDatabaseContention(firstLate));
+  const laterStatement = await errOf(() => p.$transaction(async (tx) => {
+    await asLockWait(tx.user.updateMany({ where: { id: "none" }, data: { updatedAt: new Date() } }));
+    await sleep(700);
+    await tx.user.updateMany({ where: { id: "none" }, data: { updatedAt: new Date() } });
+  }, OPT));
+  t("engine: a P2028 from a LATER statement of the same transaction stays a raw P2028 (not contention, so a generic 500)", laterStatement instanceof Prisma.PrismaClientKnownRequestError && laterStatement.code === "P2028" && !isTransientDatabaseContention(laterStatement));
+  const slowCallback = await errOf(() => p.$transaction(async (tx) => { await asLockWait(tx.user.updateMany({ where: { id: "none" }, data: { updatedAt: new Date() } })); await sleep(700); }, OPT));
+  t("engine: a transaction that expires after its first statement (commit-time expiry) is NOT contention", slowCallback !== null && !isTransientDatabaseContention(slowCallback) && !(slowCallback instanceof LockWaitTimeoutError));
+  t("engine: an ordinary fast lock statement runs and commits", (await errOf(() => p.$transaction(async (tx) => { await asLockWait(tx.user.updateMany({ where: { id: "none" }, data: { updatedAt: new Date() } })); }, OPT))) === null);
+  await p.$disconnect();
+  rmSync(tmpDir, { recursive: true, force: true });
 }
 
 console.log(`${ok} db-error unit checks passed, ${failures.length} failed.`);

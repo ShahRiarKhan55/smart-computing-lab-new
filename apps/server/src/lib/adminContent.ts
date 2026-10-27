@@ -35,13 +35,17 @@ import { knowledgeInclude } from "./knowledge.js";
 type Where = Record<string, unknown>;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+type Db = typeof prisma | Prisma.TransactionClient;
+
 interface Def {
   /** Set when the type has Japanese overrides. */
   entity?: TranslatableEntityType;
   titleField: string;
   textFields: string[];
   count: (where: Where) => Promise<number>;
-  find: (where: Where, orderBy: Where[], skip: number, take: number) => Promise<Record<string, unknown>[]>;
+  /** `db` defaults to the shared client; pass the transaction client when called inside `prisma.$transaction` (a query on the shared
+   *  client from inside an interactive transaction waits for the connection/lock the transaction holds). */
+  find: (where: Where, orderBy: Where[], skip: number, take: number, db?: Db) => Promise<Record<string, unknown>[]>;
   base: (row: any) => Pick<AdminContentRow, "title" | "subtitle" | "visibility" | "status" | "date" | "owner" | "href">;
   relations: (id: string) => Promise<{ key: string; count: number }[]>;
 }
@@ -55,7 +59,7 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "title",
     textFields: ["title", "description", "tag"],
     count: (where) => prisma.researchArea.count({ where }),
-    find: (where, orderBy, skip, take) => prisma.researchArea.findMany({ where, orderBy: orderBy as Prisma.ResearchAreaOrderByWithRelationInput[], skip, take }),
+    find: (where, orderBy, skip, take, db = prisma) => db.researchArea.findMany({ where, orderBy: orderBy as Prisma.ResearchAreaOrderByWithRelationInput[], skip, take }),
     base: (r) => ({ title: r.title, subtitle: r.tag, visibility: vis(r), status: null, date: null, owner: null, href: `/research/${r.id}` }),
     relations: (id) =>
       rel([
@@ -68,7 +72,7 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "title",
     textFields: ["title", "summary", "description", "slug"],
     count: (where) => prisma.researchProject.count({ where }),
-    find: (where, orderBy, skip, take) => prisma.researchProject.findMany({ where, orderBy: orderBy as Prisma.ResearchProjectOrderByWithRelationInput[], skip, take }),
+    find: (where, orderBy, skip, take, db = prisma) => db.researchProject.findMany({ where, orderBy: orderBy as Prisma.ResearchProjectOrderByWithRelationInput[], skip, take }),
     base: (r) => ({ title: r.title, subtitle: r.slug, visibility: vis(r), status: r.status, date: null, owner: null, href: `/projects/${r.id}` }),
     relations: (id) =>
       rel([
@@ -87,7 +91,7 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "name",
     textFields: ["name", "description", "slug"],
     count: (where) => prisma.researchGroup.count({ where }),
-    find: (where, orderBy, skip, take) => prisma.researchGroup.findMany({ where, orderBy: orderBy as Prisma.ResearchGroupOrderByWithRelationInput[], skip, take }),
+    find: (where, orderBy, skip, take, db = prisma) => db.researchGroup.findMany({ where, orderBy: orderBy as Prisma.ResearchGroupOrderByWithRelationInput[], skip, take }),
     base: (r) => ({ title: r.name, subtitle: r.slug, visibility: vis(r), status: null, date: null, owner: null, href: `/groups/${r.id}` }),
     relations: (id) =>
       rel([
@@ -100,7 +104,7 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "title",
     textFields: ["title", "authors", "venue"],
     count: (where) => prisma.publication.count({ where }),
-    find: (where, orderBy, skip, take) => prisma.publication.findMany({ where, orderBy: orderBy as Prisma.PublicationOrderByWithRelationInput[], skip, take }),
+    find: (where, orderBy, skip, take, db = prisma) => db.publication.findMany({ where, orderBy: orderBy as Prisma.PublicationOrderByWithRelationInput[], skip, take }),
     base: (r) => ({ title: r.title, subtitle: `${r.year} · ${r.venue}`, visibility: vis(r), status: null, date: null, owner: null, href: `/publications/${r.id}` }),
     relations: (id) =>
       rel([
@@ -113,7 +117,7 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "title",
     textFields: ["title", "description", "type"],
     count: (where) => prisma.newsItem.count({ where }),
-    find: (where, orderBy, skip, take) => prisma.newsItem.findMany({ where, orderBy: orderBy as Prisma.NewsItemOrderByWithRelationInput[], skip, take }),
+    find: (where, orderBy, skip, take, db = prisma) => db.newsItem.findMany({ where, orderBy: orderBy as Prisma.NewsItemOrderByWithRelationInput[], skip, take }),
     base: (r) => ({ title: r.title, subtitle: r.dateLabel, visibility: vis(r), status: r.type, date: null, owner: null, href: "/news" }),
     relations: (id) =>
       rel([
@@ -126,8 +130,8 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "title",
     textFields: ["title", "description", "location"],
     count: (where) => prisma.event.count({ where }),
-    find: (where, orderBy, skip, take) =>
-      prisma.event.findMany({ where, orderBy: orderBy as Prisma.EventOrderByWithRelationInput[], skip, take, include: eventInclude }),
+    find: (where, orderBy, skip, take, db = prisma) =>
+      db.event.findMany({ where, orderBy: orderBy as Prisma.EventOrderByWithRelationInput[], skip, take, include: eventInclude }),
     base: (r) => {
       const profile = r.createdBy?.teamMember ?? null;
       return {
@@ -151,8 +155,8 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "title",
     textFields: ["title", "body"],
     count: (where) => prisma.knowledgeDoc.count({ where }),
-    find: (where, orderBy, skip, take) =>
-      prisma.knowledgeDoc.findMany({ where, orderBy: orderBy as Prisma.KnowledgeDocOrderByWithRelationInput[], skip, take, include: knowledgeInclude }),
+    find: (where, orderBy, skip, take, db = prisma) =>
+      db.knowledgeDoc.findMany({ where, orderBy: orderBy as Prisma.KnowledgeDocOrderByWithRelationInput[], skip, take, include: knowledgeInclude }),
     base: (r) => {
       const profile = r.author?.teamMember ?? null;
       return {
@@ -179,8 +183,8 @@ const DEFS: Record<AdminContentType, Def> = {
     textFields: ["name", "description", "resourceType", "vendor", "identifier", "version", "environment"],
     count: (where) => prisma.labResource.count({ where }),
     // Managers see every project link (no `visibleTo`): the admin list is a manager view, and only counts are shown.
-    find: (where, orderBy, skip, take) =>
-      prisma.labResource.findMany({ where, orderBy: orderBy as Prisma.LabResourceOrderByWithRelationInput[], skip, take, include: { owner: { select: { teamMember: { select: { id: true, name: true } } } } } }),
+    find: (where, orderBy, skip, take, db = prisma) =>
+      db.labResource.findMany({ where, orderBy: orderBy as Prisma.LabResourceOrderByWithRelationInput[], skip, take, include: { owner: { select: { teamMember: { select: { id: true, name: true } } } } } }),
     base: (r) => {
       const profile = r.owner?.teamMember ?? null;
       return {
@@ -209,7 +213,7 @@ const DEFS: Record<AdminContentType, Def> = {
     titleField: "name",
     textFields: ["name", "role", "department", "bio"],
     count: (where) => prisma.teamMember.count({ where }),
-    find: (where, orderBy, skip, take) => prisma.teamMember.findMany({ where, orderBy: orderBy as Prisma.TeamMemberOrderByWithRelationInput[], skip, take }),
+    find: (where, orderBy, skip, take, db = prisma) => db.teamMember.findMany({ where, orderBy: orderBy as Prisma.TeamMemberOrderByWithRelationInput[], skip, take }),
     base: (r) => ({ title: r.name, subtitle: r.role, visibility: null, status: r.category, date: null, owner: null, href: `/team/${r.id}` }),
     relations: (id) =>
       rel([
@@ -335,9 +339,16 @@ function toRow(type: AdminContentType, def: Def, raw: Record<string, unknown>, j
 const pickTranslated = (entity: TranslatableEntityType, overrides: Record<string, string>) =>
   Object.fromEntries((TRANSLATABLE_FIELDS[entity] as readonly string[]).filter((f) => overrides[f]).map((f) => [f, overrides[f]]));
 
+/**
+ * Management surfaces for team profiles (content browser, translation editor): an administrator sees every profile; anyone else
+ * sees only PUBLISHED, NON-ALUMNI ones. Alumni are administered by admins alone (canManageAlumni), and an unpublished profile must
+ * not be listed, counted or opened by a lab manager. Other content types are unaffected.
+ */
+export const adminMemberScope = (type: AdminContentType, actor: Actor): Where => (type === "team-member" && !isAdmin(actor) ? { isPublished: true, NOT: { category: "ALUMNI" } } : {});
+
 export async function listAdminContent(query: AdminContentQuery, actor: Actor, locale: Locale) {
   const def = DEFS[query.type];
-  const where = await buildWhere(query, def, new Date());
+  const where = { AND: [await buildWhere(query, def, new Date()), adminMemberScope(query.type, actor)] };
   const [total, raws] = await Promise.all([def.count(where), def.find(where, orderFor(query, def), (query.page - 1) * query.limit, query.limit)]);
   const ja = def.entity ? await jaFor(def.entity, raws.map((r) => r.id as string)) : new Map<string, Record<string, string>>();
   return {
@@ -349,7 +360,7 @@ export async function listAdminContent(query: AdminContentQuery, actor: Actor, l
 
 export async function getAdminContentDetail(type: AdminContentType, id: string, actor: Actor, locale: Locale) {
   const def = DEFS[type];
-  const [raw] = await def.find({ id }, [{ id: "asc" }], 0, 1);
+  const [raw] = await def.find({ id, ...adminMemberScope(type, actor) }, [{ id: "asc" }], 0, 1);
   if (!raw) return null;
   const ja = def.entity ? await jaFor(def.entity, [id]) : new Map<string, Record<string, string>>();
   const overrides = ja.get(id) ?? {};

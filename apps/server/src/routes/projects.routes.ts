@@ -1,3 +1,4 @@
+import { countVisibleMembers, publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
 import type { Prisma } from "@prisma/client";
 import {
@@ -57,7 +58,7 @@ function summaryInclude(viewer: Viewer) {
       where: { researchArea: visibleTo(viewer) },
       include: { researchArea: { select: { id: true, icon: true, title: true, tag: true, sortOrder: true } } },
     },
-    members: { include: { teamMember: { select: { id: true, name: true, initials: true, userId: true } } } },
+    members: { where: { teamMember: publishedMemberWhere(viewer) }, include: { teamMember: { select: { id: true, name: true, initials: true, userId: true } } } },
   } satisfies Prisma.ResearchProjectInclude;
 }
 
@@ -332,11 +333,12 @@ router.put(
     await prisma.$transaction(async (tx) => {
       const project = await loadProjectOr404(tx, req.params.id);
       const ids = members.map((m) => m.teamMemberId);
-      if (ids.length > 0 && (await tx.teamMember.count({ where: { id: { in: ids } } })) !== ids.length) {
+      if (ids.length > 0 && (await countVisibleMembers(tx, req.user, ids)) !== ids.length) {
         throw new HttpError(400, "One or more team members do not exist.");
       }
 
-      const current = await tx.projectMember.findMany({ where: { projectId: project.id }, select: { teamMemberId: true, role: true } });
+      // Only the links the actor can see take part in the replacement: a hidden (unpublished) member is neither listed nor removed.
+      const current = await tx.projectMember.findMany({ where: { projectId: project.id, teamMember: publishedMemberWhere(req.user) }, select: { teamMemberId: true, role: true } });
       const currentRole = new Map(current.map((c) => [c.teamMemberId, c.role]));
       const { toAdd, toRemove } = diffLinks([...currentRole.keys()], ids);
       const roleChanged = members.filter((m) => currentRole.has(m.teamMemberId) && currentRole.get(m.teamMemberId) !== m.role);

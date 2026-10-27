@@ -1,3 +1,4 @@
+import { countVisibleMembers, publishedMemberWhere } from "./memberVisibility.js";
 import type { Router, RequestHandler } from "express";
 import type { Prisma } from "@prisma/client";
 import type { ZodType, ZodTypeDef } from "zod";
@@ -77,7 +78,7 @@ export function mountMemberRoutes(router: Router, cfg: Cfg): void {
     asyncHandler(async (req, res) => {
       const { teamMemberId, role } = parseOrThrow(cfg.addSchema, req.body);
       await run(req, req.params.id, teamMemberId, async (tx) => {
-        if (!(await tx.teamMember.findUnique({ where: { id: teamMemberId }, select: { id: true } }))) {
+        if (!(await tx.teamMember.findFirst({ where: { id: teamMemberId, ...publishedMemberWhere(req.user) }, select: { id: true } }))) {
           throw new HttpError(400, "One or more team members do not exist.");
         }
         if (await parent.find(tx, req.params.id, teamMemberId)) throw new HttpError(409, "That researcher is already a member.");
@@ -96,7 +97,7 @@ export function mountMemberRoutes(router: Router, cfg: Cfg): void {
       assertValidId(req.params.teamMemberId);
       const { role } = parseOrThrow(cfg.roleSchema, req.body);
       await run(req, req.params.id, req.params.teamMemberId, async (tx) => {
-        const current = await parent.find(tx, req.params.id, req.params.teamMemberId);
+        const current = (await countVisibleMembers(tx, req.user, [req.params.teamMemberId])) === 1 ? await parent.find(tx, req.params.id, req.params.teamMemberId) : null;
         if (!current) throw new HttpError(404, "That researcher is not a member.");
         if (current.role === role) throw new HttpError(409, "That researcher already has this role.");
         await parent.update(tx, req.params.id, req.params.teamMemberId, role);
@@ -113,7 +114,7 @@ export function mountMemberRoutes(router: Router, cfg: Cfg): void {
     asyncHandler(async (req, res) => {
       assertValidId(req.params.teamMemberId);
       await run(req, req.params.id, req.params.teamMemberId, async (tx) => {
-        if (!(await parent.find(tx, req.params.id, req.params.teamMemberId))) throw new HttpError(404, "That researcher is not a member.");
+        if ((await countVisibleMembers(tx, req.user, [req.params.teamMemberId])) !== 1 || !(await parent.find(tx, req.params.id, req.params.teamMemberId))) throw new HttpError(404, "That researcher is not a member.");
         await parent.remove(tx, req.params.id, req.params.teamMemberId);
         return { removed: req.params.teamMemberId };
       });

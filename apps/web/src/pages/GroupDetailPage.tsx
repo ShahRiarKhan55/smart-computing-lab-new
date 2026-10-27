@@ -69,7 +69,7 @@ export function GroupDetailPage() {
   async function openMembers() {
     setActionError(null);
     try {
-      if (!team) setTeam(await apiFetch<TeamMember[]>("/team"));
+      if (!team) setTeam(await apiFetch<TeamMember[]>("/team?includeAlumni=1"));
       setPanel("members");
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : t("groups.couldNotLoadTeam"));
