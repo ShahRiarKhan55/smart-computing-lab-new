@@ -12,7 +12,7 @@ import {
   updateTeamMemberSchema,
 } from "@scl/shared";
 import { interactiveTransactionOptions, prisma } from "../lib/prisma.js";
-import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { asLockWait, transientContentionAs503 } from "../lib/dbErrors.js";
 import { removeRetiredBlob, retireReplacedPhoto } from "../lib/profilePhoto.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
@@ -119,10 +119,12 @@ router.put(
       // but it only ever touches a profile this requester may see AND may manage: a hidden profile, or an alumni profile for a non-admin,
       // matches nothing, so its `updatedAt` is never written on their behalf. Whatever the outcome, a refused request throws inside this
       // transaction, which rolls the lock write back as well.
-      const locked = await tx.teamMember.updateMany({
-        where: { id: req.params.id, ...publishedMemberWhere(req.user), ...(mayManageAlumni(req.user) ? {} : { NOT: { category: ALUMNI_CATEGORY } }) },
-        data: { updatedAt: new Date() },
-      });
+      const locked = await asLockWait(
+        tx.teamMember.updateMany({
+          where: { id: req.params.id, ...publishedMemberWhere(req.user), ...(mayManageAlumni(req.user) ? {} : { NOT: { category: ALUMNI_CATEGORY } }) },
+          data: { updatedAt: new Date() },
+        }),
+      );
       if (locked.count === 0) {
         // Nothing was written. Decide the answer: an alumni profile the viewer can see but may not manage is 403 (as before); anything
         // else (missing, or hidden from this viewer) is an indistinguishable 404.
@@ -239,7 +241,7 @@ router.delete(
     assertValidId(req.params.id);
     const retiredKey = await prisma.$transaction(async (tx) => {
       // Write first, then read (see PUT /api/profile): no read-lock-then-upgrade. Admin only, so every profile is visible to the actor.
-      const locked = await tx.teamMember.updateMany({ where: { id: req.params.id }, data: { updatedAt: new Date() } });
+      const locked = await asLockWait(tx.teamMember.updateMany({ where: { id: req.params.id }, data: { updatedAt: new Date() } }));
       const existing = locked.count === 0 ? null : await tx.teamMember.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new HttpError(404, "Not found");
       // The member's uploaded profile photo must not outlive the profile (it would stay a live, never-cleaned file).

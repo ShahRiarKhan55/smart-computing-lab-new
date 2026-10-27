@@ -5,9 +5,10 @@ schema change is the additive migration `20261020120000_team_member_is_published
 procedure for it. Companion documents: `turso-migration-executor.md` (what the executor guarantees),
 `phase3b-alumni-directory.md`, `phase13-files-and-gallery.md`, `phase26-deployment-readiness-infrastructure-hardening.md`.
 
-**Status of this document: preparation only.** Nothing in it has been executed against any remote database. Every step
-that connects to, creates, migrates or deletes a remote database is marked `NOT EXECUTED — REQUIRES EXPLICIT AUTHORIZATION`
-and must not be run until a named, disposable target has been authorized in writing.
+**Status of this document (2026-10-27):** section 3 has been executed once against a disposable Turso database; the results,
+the documented deviations and the open items are in **section 10**. Nothing in this document has been executed against the Production
+database except one read-only executor inspection (section 10.5). Every step that connects to, creates, migrates or deletes a remote database
+is still `REQUIRES EXPLICIT AUTHORIZATION` and must not be run on Production until the release gates in section 10.7 are recorded as passed.
 
 ### Local evidence versus unverified remote behaviour (summary)
 | Question | Local evidence (disposable SQLite files, this repository) | Still unverified (needs the disposable remote target) |
@@ -75,6 +76,10 @@ What is **not** established:
   **Caution if it is adopted:** `prisma migrate deploy` applies all nine migrations, which already includes `isPublished`. A pre-migration seed (needed to test the
   migration) must be built from the five base files only (or, if the full nine are used, only post-migration scenarios can be run).
 * Whether Production's real base schema is identical to the five migration files is unverified (the executor checks only that three tables exist and the managed objects).
+
+**Update 2026-10-27:** the operator accepted this method **for the one disposable test database only**: the five base migration SQL files, executed in name order
+(SHA-256 values in section 10.1). This settles nothing for Production: the Production schema is not provisioned this way, and any separate Production provisioning
+or recovery requirement stays as stated in section 4. The text below is the original blocker statement.
 
 **Operator decision / approved artifact required before the remote seed can be created** (this is the blocker):
 (1) the exact method to create the disposable database with the five-migration base schema, named in the authorization, and
@@ -216,6 +221,7 @@ See section 5: application rollback does not reverse the migration, and it re-ex
 * `PUT /api/knowledge/:id` (`assertLinks`) and `PUT /api/admin/translations/:entityType/:entityId` (`def.find`) now query through the transaction client (`tx`) instead of the shared client; `contentDef(...).find` takes an optional client. Regression: `npm run test:transaction-client -w apps/server` (fails 12 checks on the old code with 500 after ≈5 s, passes 23/23 with `connection_limit=1`).
 * `PUT /api/team/:id/publication` writes with a compare-and-swap (`updateMany` where `id`, `category = ALUMNI` and the `isPublished` value it read); on mismatch it answers `409` (new message `publicationConflict`, English and Japanese) and writes nothing. Regression: `npm run test:publication-race -w apps/server` (fails 7 checks on the old code: a category change between read and write left the profile hidden and audited as unpublished; a reset consent state was overwritten with "published").
 * `test:gallery-ambiguous` gained the second ambiguous shape (callback completes, transaction never commits, reported as an expired transaction): blob kept, nothing committed, retry creates normally. It fails (2 checks) if cleanup is changed to delete when no row references the blob. `releaseUploadedBlob` itself is unchanged.
+* `PUT /api/team/:id`, `DELETE /api/team/:id` and `PUT /api/profile`: the first statement of their lock-first transaction is wrapped in `asLockWait` (`lib/dbErrors.ts`). A Prisma `P2028` raised by that statement (and only that one) becomes a `LockWaitTimeoutError`, which the existing router handler answers as `503` + `Retry-After: 1`. Reason and evidence: section 10.3 (scenario 11). Regression: `npm run test:unit -w apps/server` (`unit-db-errors.test.ts`, 77 checks; fails 4 with the wrapper made a pass-through).
 * `knowledge-regression.mjs`: the "every category is accepted" check and the five-locale authorization probes now issue their requests one after another (assertions unchanged). Reason below.
 
 ### Known behaviour that is NOT fixed
@@ -224,3 +230,61 @@ See section 5: application rollback does not reverse the migration, and it re-ex
 * Read-first paths remain: the publication endpoint (now compare-and-swap), user linking and invitation accept (conditional writes: `userId: null`, `NOT ALUMNI`). Their concurrent behaviour on Turso is unproven.
 * The per-view cost of the `private, no-store` photo policy on Turso is unmeasured; a production-safe measurement is the Turso dashboard's rows-read counters before/after the release plus request counts for the photo route from platform logs (no per-user data).
 * Remote Turso behaviour is **unverified** until section 3 is run with evidence.
+
+## 10. Remote verification results (disposable Turso target) and release decision
+
+Target: database `scl-disposable-3ab-20261027`, id `01a17b03-8801-75e0-aace-17688b8b3db2`, organization `smart-computing-lab`, group `default`, region `aws-ap-northeast-1`,
+created 2026-10-27 for this verification only. Code under test: `ba57347198f5610d2fa22c97f73eb0237532bdc2` plus the scenario-11 change of section 10.3. Evidence (token-scanned, kept outside the repository):
+one archive of the run's logs and scripts; per-scenario file names are given below.
+
+### 10.1 Provisioning (documented deviation, accepted for the disposable target only)
+The empty database was loaded by executing the five base migration files in name order. SHA-256: `init` `8bcd469d9dbe8d238968f602bb059185b8049fdea8a6c51d2bde1d0cc31a16e7`;
+`phase8_foundation` `b77846acbf2b0d48e2797a07b7df8db2b47bcfceda3f9bf77445b71bceb19b8d`; `phase22_knowledge_base` `d84cb9a76405155c327ac25ab757d94e9bcff60fdd9d89e62a85ba0c862020bd`;
+`phase23_lab_resources` `0ddbfa5767c0c317ab2a27fd1326266328ac6c8d6f81295afaf904cd82defb3d`; `add_account_invitation` `a3c897de94c6b8babe148ca9f43ecb842f7d599bc3ace4cf7c5b52a56687a594`.
+Synthetic seed: 2 users, 3 `TeamMember` rows (all names `ZZ Verify ...`, emails `*@example.test`). The migration hash `502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b` was re-verified from the release commit.
+All commands ran with a scrubbed environment (only the disposable host and a token scoped to that database); the host differs from the Production host and every other database host.
+
+### 10.2 Results
+| # | Result | Notes |
+|---|---|---|
+| 1 | Pass | exit 0, new migration `absent`, nothing written (`01-inspect-pre`) |
+| 2 | Pass | exit 2 `TARGET` (`02-wrong-target`) |
+| 3 | Pass, **deviation** | the base-only database had all four managed migrations absent, so all four were applied in one run, not only this one; row counts equal (`03-apply`) |
+| 4 | Pass | `Nothing to do` (`04-rerun`) |
+| 5 | Pass | `isPublished`, type `BOOLEAN`, notnull 1, `dflt_value` `true` (a remote Turso prints the same as local SQLite) (`05-06-readback`) |
+| 6 | Pass | 3 of 3 rows `isPublished = 1` |
+| 7 | Pass | public team/alumni/search/sitemap, admin publish/unpublish, non-admin 403, photo `Cache-Control: private, no-store` (`07b-12b-app`). First attempt had a wrong test premise (a row seeded before the migration is published by design) and was redone with an alumni profile created through the API |
+| 8 | Pass | exit 2 `MIGRATION_FILE`, nothing written (`08-tamper`) |
+| 9 | Pass, **deviation** | no second database was authorized: the column was dropped and re-added as `INTEGER` on the same disposable database; `divergent`, inspect and apply both refused with nothing written; restored through the executor (`09-*`) |
+| 10 | Pass for the simulated cases; real-kill timing **not** proven | see 10.4 |
+| 11 | **Finding, fixed** | section 10.3 |
+| 12 | Conflict protection verified; the 409 branch is **not reachable** on this remote | section 10.4 |
+| 13 | Pass | `PUT /api/knowledge/:id` 200 in 1.7 s, `PUT /api/admin/translations/...` 200 in 2.6 s, no `P2028` (`07-11-12-13-app`) |
+
+### 10.3 Scenario 11: lock contention on a remote database
+Observed: while another connection holds the write lock, a remote Turso database does **not** answer `SQLITE_BUSY`. The application's first (lock) statement waits; Prisma expires the transaction at 5 s and rejects
+with `P2028`, which has no lock-specific text and also describes unrelated expiries. The request answered a generic `500` after 7-10 s (before the change). Nothing was written.
+Why `P2028` alone is not classified: a `P2028` from a later statement or from the COMMIT can follow an applied commit on a remote database. Why the first statement can be: the callback throws before any other statement, so no COMMIT is sent
+and nothing of that request persists. Hence `asLockWait` wraps only the first statement of `PUT /api/team/:id`, `DELETE /api/team/:id` and `PUT /api/profile`.
+Re-run on the remote with the change (`15-...`, `17-...`): each of those three answers `503` + `Retry-After: 1` with nothing written and succeeds on retry; the publication route (first statement is a read) stays a plain `500` under a 9 s write-lock hold, as designed.
+Known limits: the `503` arrives only when the lock is released (9.3 s for an 8 s hold), because the blocked statement does not return earlier; routes whose first statement is not a plain lock write (`POST /api/profile/photo`, file delete, publication, team create) are unchanged and still answer `500` in this situation.
+Several requests on one server instance queue behind the adapter's connection mutex, so they do not all meet the database lock at once (an early probe was confounded by this).
+Tests: `unit-db-errors.test.ts` covers the observed remote `P2028` text, a real Prisma expiry on the first statement (converted), a later-statement expiry and a commit-time expiry (not converted), `P1008`, constraint errors and `SQLITE_BUSY` (unchanged), and the 503 handler.
+
+### 10.4 Scenarios 10 and 12 in detail
+**10.** Five real `kill -9` attempts (2-12 s into `--apply`) always left the migration `absent`, never `partial`; they were not shown to land inside the transaction. Deterministic, test-only harness (outside the repository, using the executor's existing `wrapTransaction` seam, no production hook) against the real remote:
+(a) COMMIT applied but reply lost: `applied-after-commit-error`, column present, 6 of 6 rows published; (b) COMMIT never sent: `REFUSED [COMMIT]` "NOT applied", state `absent`; (c) connection abandoned mid-transaction with no rollback: same refusal, state `absent`, no lingering lock. A real network-level lost reply was not produced; (a) is a simulation.
+**12.** 30 simultaneous publication/category-change rounds: no non-ALUMNI row ended unpublished, but the publication request answered 200 every time and the 409 branch was never reached. A deterministic interleaving (second connection holds the write lock, the request reads, a competing commit lands, the lock is released) returned **503**, not 409, in 4 of 4 rounds:
+the remote rejects a transaction that read and then writes after a competing commit with `SQLITE_BUSY` ("database is locked"), which the existing handler maps to `503` + `Retry-After`. In every round the competing state was preserved and no audit row was written. The compare-and-swap `409 publicationConflict` therefore remains verified only by `test:publication-race` and is **not** a remote-verified response.
+
+### 10.5 Production (read-only only)
+Executor inspect-only with the read-only credential (no `--apply`, exit 0): the three earlier migrations `applied`, `20261020120000_team_member_is_published` `absent`; rows `{"User":4,"StoredFile":4,"GalleryItem":1,"StoredFile(live)":2}`. The live site is on the previous code (`/api/health` 200, `/api/team` 200, `/api/alumni` 404). The Production database, the Preview database and the five other pre-existing databases were not modified.
+
+### 10.6 Rollback risk (unchanged, verified against the code)
+Application rollback does not reverse the migration, and old code ignores `isPublished`, so unpublished alumni become public on a rolled-back application (section 5). If any alumni profile has been unpublished, take it down or restore first.
+Point-in-time recovery for the Production database was **not** verified in this session (it needs the Turso dashboard for the plan); the recorded `--recovery-point` and the PITR window must be confirmed by the database owner immediately before the migration.
+
+### 10.7 Release gates still required before any Production operation
+1. Operator confirms PITR availability and records the recovery point (section 4.1.3), and the approvals of 4.1.4.
+2. Explicit approval to apply the migration to Production, then to merge PR #16 (which deploys), in that order (section 4.2).
+3. Re-run the executor inspection on Production immediately before applying (state must still be: this migration `absent`, earlier ones `applied`).

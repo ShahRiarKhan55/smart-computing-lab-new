@@ -67,6 +67,7 @@ export function constraintKind(err: unknown): ConstraintKind | null {
 export const SERVICE_BUSY_MESSAGE = "The service is busy. Please try again in a moment.";
 const BUSY_DRIVER_TEXT = /database is locked|SQLITE_BUSY/i;
 export function isTransientDatabaseContention(err: unknown): boolean {
+  if (err instanceof LockWaitTimeoutError) return true;
   // The embedded libSQL client's own error (e.g. a COMMIT that stayed BUSY after lib/libsqlGuard.ts rolled the transaction back).
   if (err instanceof LibsqlError) return String(err.code).startsWith("SQLITE_BUSY");
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -76,6 +77,32 @@ export function isTransientDatabaseContention(err: unknown): boolean {
   }
   if (err instanceof Prisma.PrismaClientUnknownRequestError) return BUSY_DRIVER_TEXT.test(driverMessageLine(err));
   return false;
+}
+
+/**
+ * The FIRST statement of a lock-first transaction (a write that takes the write lock before anything else is read or written) did not run
+ * before Prisma's interactive-transaction timeout. Measured against a remote Turso database (runbook scenario 11): while another connection
+ * holds the write lock, the statement waits instead of failing with SQLITE_BUSY; Prisma then expires the transaction and rejects it with
+ * `P2028` ("A query cannot be executed on an expired transaction"), which has no lock-specific text and also describes unrelated expiries.
+ * Position is what makes it safe to classify: because this was the transaction's first statement, the callback threw before issuing any
+ * other statement, so no COMMIT is ever sent and nothing of this request can have been persisted; retrying is safe. A `P2028` from any
+ * LATER statement or from the COMMIT is never converted (a remote COMMIT that timed out may have been applied) and stays a generic 500.
+ */
+export class LockWaitTimeoutError extends Error {
+  constructor() {
+    super("The first statement of the transaction could not run before the transaction timeout (write lock not acquired).");
+    this.name = "LockWaitTimeoutError";
+  }
+}
+
+/** Wrap ONLY the first statement of a lock-first transaction: a `P2028` from it becomes {@link LockWaitTimeoutError}; anything else passes through. */
+export async function asLockWait<T>(firstStatement: PromiseLike<T>): Promise<T> {
+  try {
+    return await firstStatement;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2028") throw new LockWaitTimeoutError();
+    throw err;
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { rejectPublicationField } from "../lib/memberVisibility.js";
-import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { asLockWait, transientContentionAs503 } from "../lib/dbErrors.js";
 import { Router } from "express";
 import { updateOwnProfileSchema } from "@scl/shared";
 import { interactiveTransactionOptions, prisma } from "../lib/prisma.js";
@@ -46,7 +46,7 @@ router.put(
       // The FIRST statement is a write (as in POST /photo and the gallery routes): the transaction takes the write lock before it
       // reads, instead of reading first and then trying to upgrade. Two overlapping read-then-write transactions can each hold a
       // read lock and block the other's commit; see docs/architecture/phase13-files-and-gallery.md ("Profile photos").
-      const locked = await tx.teamMember.updateMany({ where: { userId: req.user!.id }, data: { updatedAt: new Date() } });
+      const locked = await asLockWait(tx.teamMember.updateMany({ where: { userId: req.user!.id }, data: { updatedAt: new Date() } }));
       const member = locked.count === 0 ? null : await tx.teamMember.findUnique({ where: { userId: req.user!.id } });
       if (!member) {
         throw new HttpError(404, "No team profile is linked to your account yet. Ask the admin to link one.");
