@@ -7,6 +7,7 @@ import { apiFetch } from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { AdminBar } from "../components/AdminBar";
 import { Avatar } from "../components/Avatar";
+import { ResearchLinks } from "../components/ResearchLinks";
 import { CardEditControls } from "../components/CardEditControls";
 import { LoadingState } from "../components/LoadingState";
 import { ErrorState } from "../components/ErrorState";
@@ -95,6 +96,7 @@ export function AlumniPage() {
                 </h3>
                 <div className="team-card__role">{member.role}</div>
                 {member.department && <div className="team-card__dept">{member.department}</div>}
+                <ResearchLinks member={member} />
                 {policy.canPublishMember && (
                   <div className="alumni-publication">
                     <span className={member.isPublished ? "badge badge--info" : "badge badge--warn"}>

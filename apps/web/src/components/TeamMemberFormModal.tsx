@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { createTeamMemberSchema, type Category, type TeamMember } from "@scl/shared";
 import { Modal } from "./Modal";
 import { useT } from "../i18n/LocaleContext";
-import { apiErrorMessage } from "../i18n/errorMessages";
+import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
@@ -15,6 +15,10 @@ export interface TeamMemberFormValues {
   bio: string;
   /** Omitted when unchanged on an edit (see handleSubmit). */
   photoUrl?: string;
+  /** Phase 3C research links; like photoUrl they are omitted on an edit when unchanged. "" clears a link. */
+  googleScholarUrl?: string;
+  researchGateUrl?: string;
+  orcidUrl?: string;
   category: Category;
   sortOrder: number;
   translations?: { ja: Record<string, string> };
@@ -32,13 +36,20 @@ interface TeamMemberFormModalProps {
   onSubmit: (values: TeamMemberFormValues) => Promise<void>;
 }
 
+const LINK_KEYS = ["googleScholarUrl", "researchGateUrl", "orcidUrl"] as const;
+
 const CATEGORY_ORDER: Category[] = ["FACULTY", "PHD", "MSC", "BSC", "RESEARCH"];
 const CATEGORY_ORDER_WITH_ALUMNI: Category[] = [...CATEGORY_ORDER, "ALUMNI"];
 
 /** An uploaded photo is a same-site storage path; it is never shown in the URL field as if it were a photo URL. */
 const isUploadedPhoto = (photoUrl: string | undefined) => (photoUrl ?? "").startsWith("/api/files/");
 
-function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberFormValues, "translations" | "photoUrl"> & { photoUrl: string } {
+function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberFormValues, "translations" | "photoUrl" | "googleScholarUrl" | "researchGateUrl" | "orcidUrl"> & {
+  photoUrl: string;
+  googleScholarUrl: string;
+  researchGateUrl: string;
+  orcidUrl: string;
+} {
   return {
     name: initial?.name ?? "",
     initials: initial?.initials ?? "",
@@ -46,6 +57,9 @@ function toFormValues(initial?: Partial<TeamMember> | null): Omit<TeamMemberForm
     department: initial?.department ?? "",
     bio: initial?.bio ?? "",
     photoUrl: isUploadedPhoto(initial?.photoUrl) ? "" : initial?.photoUrl ?? "",
+    googleScholarUrl: initial?.googleScholarUrl ?? "",
+    researchGateUrl: initial?.researchGateUrl ?? "",
+    orcidUrl: initial?.orcidUrl ?? "",
     category: initial?.category ?? "BSC",
     sortOrder: initial?.sortOrder ?? 0,
   };
@@ -95,10 +109,15 @@ export function TeamMemberFormModal({
     // value is validated and sent only if this form changed it, so it is never written back over a newer upload.
     const photoChanged = !initial?.id || values.photoUrl !== toFormValues(initial).photoUrl;
     const { photoUrl: _photo, ...rest } = values;
-    const payload = removePhoto ? { ...rest, photoUrl: "" } : photoChanged ? values : rest;
+    // The research links follow the same rule: on an edit each is sent only if this form changed it.
+    const original = toFormValues(initial);
+    const sentLinks = (v: typeof rest) =>
+      Object.fromEntries(LINK_KEYS.filter((k) => !initial?.id || v[k] !== original[k]).map((k) => [k, v[k]]));
+    const { googleScholarUrl: _gs, researchGateUrl: _rg, orcidUrl: _oc, ...restNoLinks } = rest;
+    const payload = { ...restNoLinks, ...sentLinks(rest), ...(removePhoto ? { photoUrl: "" } : photoChanged ? { photoUrl: values.photoUrl } : {}) };
     const validation = createTeamMemberSchema.safeParse(payload);
     if (!validation.success) {
-      setError(validation.error.issues[0]?.message ?? t("common.checkForm"));
+      setError(knownMessage(validation.error.issues[0]?.message ?? "", t) || t("common.checkForm"));
       return;
     }
 
@@ -196,6 +215,25 @@ export function TeamMemberFormModal({
             </button>
           )}
         </div>
+
+        <fieldset className="form-fieldset">
+          <legend>{t("research.linksLegend")}</legend>
+          <div className="form-group">
+            <label htmlFor="tm_googleScholarUrl">{t("research.googleScholar")}</label>
+            <input id="tm_googleScholarUrl" value={values.googleScholarUrl} onChange={(e) => set("googleScholarUrl", e.target.value)} placeholder="https://scholar.google.com/citations?user=…" inputMode="url" maxLength={300} aria-describedby="tm_googleScholarUrl_hint" />
+            <p className="form-hint" id="tm_googleScholarUrl_hint">{t("research.googleScholarHint")}</p>
+          </div>
+          <div className="form-group">
+            <label htmlFor="tm_researchGateUrl">{t("research.researchGate")}</label>
+            <input id="tm_researchGateUrl" value={values.researchGateUrl} onChange={(e) => set("researchGateUrl", e.target.value)} placeholder="https://www.researchgate.net/profile/…" inputMode="url" maxLength={300} aria-describedby="tm_researchGateUrl_hint" />
+            <p className="form-hint" id="tm_researchGateUrl_hint">{t("research.researchGateHint")}</p>
+          </div>
+          <div className="form-group">
+            <label htmlFor="tm_orcidUrl">{t("research.orcid")}</label>
+            <input id="tm_orcidUrl" value={values.orcidUrl} onChange={(e) => set("orcidUrl", e.target.value)} placeholder="0000-0000-0000-0000" maxLength={300} aria-describedby="tm_orcidUrl_hint" />
+            <p className="form-hint" id="tm_orcidUrl_hint">{t("research.orcidHint")}</p>
+          </div>
+        </fieldset>
 
         {showAdminFields && (
           <div className="form-group">

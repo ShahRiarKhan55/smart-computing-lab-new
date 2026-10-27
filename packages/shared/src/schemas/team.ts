@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categorySchema } from "./enums.js";
 import { optionalHttpUrl, optionalText, requiredText, sortOrderField } from "./common.js";
 import { translationsField } from "./translations.js";
+import { researchLinkFields } from "./researchLinks.js";
 
 /** Mirrors the English field length below — see i18n/translatableFields.ts (TEAM_MEMBER). */
 export const TEAM_MEMBER_TRANSLATION_MAX = { bio: 2000 };
@@ -21,6 +22,10 @@ export const teamMemberSchema = z.object({
   department: z.string(),
   bio: z.string(),
   photoUrl: z.string(),
+  /** Phase 3C optional research links: canonical URL or "" (none). Only ever sent for a publicly visible profile. */
+  googleScholarUrl: z.string(),
+  researchGateUrl: z.string(),
+  orcidUrl: z.string(),
   sortOrder: z.number(),
   /**
    * Public-display consent (Phase 3B). Present ONLY for an administrator (the one viewer who can see unpublished profiles and
@@ -38,6 +43,7 @@ export const teamMemberFields = {
   department: optionalText("Department", 200),
   bio: optionalText("Bio", 2000),
   photoUrl: optionalHttpUrl("Photo URL"),
+  ...researchLinkFields,
 };
 
 export const createTeamMemberSchema = z.object({
@@ -48,6 +54,9 @@ export const createTeamMemberSchema = z.object({
   department: teamMemberFields.department.optional().default(""),
   bio: teamMemberFields.bio.optional().default(""),
   photoUrl: teamMemberFields.photoUrl.optional().default(""),
+  googleScholarUrl: teamMemberFields.googleScholarUrl.optional().default(""),
+  researchGateUrl: teamMemberFields.researchGateUrl.optional().default(""),
+  orcidUrl: teamMemberFields.orcidUrl.optional().default(""),
   sortOrder: sortOrderField.optional().default(0),
   /** Japanese bio override (Phase 14); see translations.ts. */
   translations: translationsField(TEAM_MEMBER_TRANSLATION_MAX),
@@ -63,6 +72,9 @@ export const updateTeamMemberSchema = z
     department: teamMemberFields.department.optional(),
     bio: teamMemberFields.bio.optional(),
     photoUrl: teamMemberFields.photoUrl.optional(),
+    googleScholarUrl: teamMemberFields.googleScholarUrl.optional(),
+    researchGateUrl: teamMemberFields.researchGateUrl.optional(),
+    orcidUrl: teamMemberFields.orcidUrl.optional(),
     sortOrder: sortOrderField.optional(),
     translations: translationsField(TEAM_MEMBER_TRANSLATION_MAX),
   })

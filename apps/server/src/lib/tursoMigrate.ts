@@ -49,6 +49,9 @@ export const REVIEWED_MIGRATIONS: readonly ReviewedMigration[] = [
   // Phase 3B: ONE `ALTER TABLE "TeamMember" ADD COLUMN "isPublished" BOOLEAN NOT NULL DEFAULT true` (metadata-only; existing rows read back
   // as published). Pin computed with the same `sha256` above over the LF-normalised file; see docs/architecture/turso-migration-executor.md.
   { name: "20261020120000_team_member_is_published", sha256: "502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b" },
+  // Phase 3C: THREE `ALTER TABLE "TeamMember" ADD COLUMN "<x>Url" TEXT NOT NULL DEFAULT ''` (googleScholarUrl, researchGateUrl, orcidUrl; metadata-only; existing
+  // rows read back as ''). Local rehearsal only so far; NOT applied to any remote database. See docs/architecture/phase3c-research-links.md.
+  { name: "20261027120000_team_member_research_links", sha256: "61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44" },
 ];
 
 /** Tables that must already exist in the target for it to be this application's database. */
@@ -85,7 +88,7 @@ export interface ParsedStatement {
   /** Tables named in REFERENCES clauses. */
   references: string[];
   /** Columns only. */
-  column?: { name: string; type: "BOOLEAN" | "INTEGER"; defaultValue: string };
+  column?: { name: string; type: "BOOLEAN" | "INTEGER" | "TEXT"; defaultValue: string };
 }
 
 const normaliseEol = (s: string) => s.replace(/\r\n/g, "\n");
@@ -97,7 +100,11 @@ export function splitStatements(sql: string): string[] {
     .split("\n")
     .filter((line) => !/^\s*--/.test(line))
     .join("\n");
-  if (/['`]|\/\*|\*\//.test(withoutComments)) {
+  // The ONLY quoted token accepted is the empty-string default of an added text column, and only as a whole statement of exactly that shape
+  // (anchored to the line start and followed by the `;`). It contains no `;` and cannot hide one. `DEFAULT ''` inside a CREATE TABLE, any
+  // non-empty literal, backticks and block comments are all still refused.
+  const scrubbed = withoutComments.replace(/^ALTER TABLE "[A-Za-z0-9_]+" ADD COLUMN "[A-Za-z0-9_]+" TEXT NOT NULL DEFAULT ''(?=[ \t]*;)/gm, "ALTER TABLE X");
+  if (/['`]|\/\*|\*\//.test(scrubbed)) {
     throw new MigrationRefusal("Migration contains a quote or block comment; this executor only accepts plain DDL.", "NOT_ADDITIVE");
   }
   return withoutComments
@@ -109,6 +116,9 @@ export function splitStatements(sql: string): string[] {
 const CREATE_TABLE = /^CREATE TABLE "([A-Za-z0-9_]+)" \(/;
 /** The one accepted ALTER form (see the header). The default is a bare constant: true, false or an integer. */
 const ADD_COLUMN = /^ALTER TABLE "([A-Za-z0-9_]+)" ADD COLUMN "([A-Za-z0-9_]+)" (BOOLEAN|INTEGER) NOT NULL DEFAULT (true|false|-?[0-9]{1,9})$/;
+// The ONE additional column form (Phase 3C research links): text that defaults to the empty string. Deliberately not "any TEXT default": a
+// non-empty or expression default, a nullable column or any other type is still refused, so the executor's permissions are not broadened.
+const ADD_TEXT_COLUMN = /^ALTER TABLE "([A-Za-z0-9_]+)" ADD COLUMN "([A-Za-z0-9_]+)" (TEXT) NOT NULL DEFAULT ('')$/;
 const CREATE_INDEX = /^CREATE (?:UNIQUE )?INDEX "([A-Za-z0-9_]+)" ON "([A-Za-z0-9_]+)"\(/;
 
 /** Refuses anything that is not a plain additive CREATE TABLE / CREATE INDEX. */
@@ -116,7 +126,7 @@ export function parseAdditive(sql: string): ParsedStatement[] {
   const statements = splitStatements(sql);
   if (statements.length === 0) throw new MigrationRefusal("Migration contains no statements.", "NOT_ADDITIVE");
   const parsed = statements.map((stmt) => {
-    const col = ADD_COLUMN.exec(stmt);
+    const col = ADD_COLUMN.exec(stmt) ?? ADD_TEXT_COLUMN.exec(stmt);
     if (col) {
       return {
         sql: stmt,
@@ -124,7 +134,7 @@ export function parseAdditive(sql: string): ParsedStatement[] {
         name: `${col[1]}.${col[2]}`,
         table: col[1],
         references: [] as string[],
-        column: { name: col[2], type: col[3] as "BOOLEAN" | "INTEGER", defaultValue: col[4] },
+        column: { name: col[2], type: col[3] as "BOOLEAN" | "INTEGER" | "TEXT", defaultValue: col[4] },
       };
     }
     const table = CREATE_TABLE.exec(stmt);

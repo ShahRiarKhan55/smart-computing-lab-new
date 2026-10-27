@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { TeamMember } from "@scl/shared";
 import { Avatar } from "./Avatar";
 import { CardEditControls } from "./CardEditControls";
+import { ResearchLinks } from "./ResearchLinks";
 
 interface TeamCardProps {
   member: TeamMember;
@@ -21,6 +22,7 @@ export function TeamCard({ member, canEdit, canDelete, onEdit, onDelete }: TeamC
       </h3>
       <div className="team-card__role">{member.role}</div>
       {member.department && <div className="team-card__dept">{member.department}</div>}
+      <ResearchLinks member={member} />
     </article>
   );
 }

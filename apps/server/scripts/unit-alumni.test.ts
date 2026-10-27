@@ -55,7 +55,8 @@ for (const f of ["src/routes/googleAuth.routes.ts", "src/lib/googleIdentity.ts",
 const migDir = path.join(SERVER, "prisma", "migrations");
 const names = readdirSync(migDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 const MIG = "20261020120000_team_member_is_published";
-t("the migration directory exists and is the last one", names[names.length - 1] === MIG);
+// Phase 3C added one later, separately reviewed migration; the state "before this migration" is every migration that sorts earlier.
+t("the migration directory exists and only the Phase 3C research-links migration follows it", names.includes(MIG) && names.slice(names.indexOf(MIG) + 1).join(",") === "20261027120000_team_member_research_links");
 const migSql = readFileSync(path.join(migDir, MIG, "migration.sql"), "utf8");
 const statements = migSql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").split(";").map((s) => s.trim()).filter(Boolean);
 t("the migration is ONE plain ALTER TABLE ADD COLUMN (no DROP, no table copy, no data rewrite)", statements.length === 1 && /^ALTER TABLE "TeamMember" ADD COLUMN "isPublished" BOOLEAN NOT NULL DEFAULT true$/.test(statements[0]) && !/\b(DROP|INSERT|UPDATE|DELETE|CREATE|PRAGMA)\b/i.test(statements[0]));
@@ -63,7 +64,7 @@ t("the migration is ONE plain ALTER TABLE ADD COLUMN (no DROP, no table copy, no
 const dir = mkdtempSync(path.join(tmpdir(), "scl-alumni-migration-"));
 const db = createClient({ url: `file:${path.join(dir, "m.db")}` });
 try {
-  for (const n of names.filter((x) => x !== MIG)) await db.executeMultiple(readFileSync(path.join(migDir, n, "migration.sql"), "utf8"));
+  for (const n of names.filter((x) => x < MIG)) await db.executeMultiple(readFileSync(path.join(migDir, n, "migration.sql"), "utf8"));
   const colsBefore = (await db.execute(`PRAGMA table_info("TeamMember")`)).rows.map((r) => String(r.name));
   t("before: TeamMember has no isPublished", !colsBefore.includes("isPublished"));
   const now = new Date().toISOString();

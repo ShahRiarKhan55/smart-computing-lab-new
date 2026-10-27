@@ -19,6 +19,7 @@ import { PublicationItem } from "../components/PublicationItem";
 import { NewsCard } from "../components/NewsCard";
 import { EventCard } from "../components/EventCard";
 import { TeamMemberFormModal } from "../components/TeamMemberFormModal";
+import { ResearchLinks } from "../components/ResearchLinks";
 import { HistoryFormModal } from "../components/HistoryFormModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
@@ -291,6 +292,7 @@ export function MemberPage() {
                 <p className="profile-summary__role">{profile.role}</p>
                 {profile.department && <p className="profile-summary__dept">{profile.department}</p>}
               </div>
+              <ResearchLinks member={profile} />
               {profile.canMessage && (
                 <button type="button" className="btn btn--secondary btn--sm profile-summary__message" onClick={startConversation} disabled={messaging}>
                   <Icon name="message" size={14} /> {messaging ? t("member.opening") : t("member.message")}

@@ -1,7 +1,7 @@
 # Applying the reviewed migrations to Turso (`migrate:turso`)
 
 `prisma migrate deploy` cannot talk to Turso (see the site maintainer guide, "Deployment"). The additive migrations
-that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these four,
+that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these five,
 in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 
 | Migration | Creates | Reviewed SHA-256 (CRLF normalised to LF) |
@@ -10,6 +10,7 @@ in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 | `20261011140000_gallery_upload_attempts` | `GalleryUploadAttempt` | `20d099cc1dd7f7c30deaabf92a10ed12355b982e627435142efb17c585228e81` |
 | `20261012100000_oauth_identity` (Phase 2.2) | `OAuthIdentity` (FK to `User` ON DELETE CASCADE; unique `(provider, subject)` and `(userId, provider)`) | `7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e` |
 | `20261020120000_team_member_is_published` (Phase 3B) | one column: `TeamMember.isPublished BOOLEAN NOT NULL DEFAULT true` (see "Column additions" below) | `502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b` |
+| `20261027120000_team_member_research_links` (Phase 3C) | three columns: `TeamMember.googleScholarUrl`, `researchGateUrl`, `orcidUrl`, each `TEXT NOT NULL DEFAULT ''` (see "Column additions" below and `phase3c-research-links.md`) | `61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44` |
 
 A migration directory that is not in this table is never read or run, a pinned file whose bytes differ (even by a
 trailing space) is refused, and even a file whose hash matches must still consist only of plain additive
@@ -128,10 +129,11 @@ Also NOT proven by local SQLite, and relevant to the Phase 2.2 code that this mi
 `ON DELETE CASCADE` foreign key. These need a rehearsal against a throwaway (non-Production) Turso database before
 relying on them.
 
-## Column additions (Phase 3B)
-The executor accepts exactly one `ALTER` form, matched by an anchored regular expression (`ADD_COLUMN` in `src/lib/tursoMigrate.ts`):
+## Column additions (Phase 3B, extended in Phase 3C)
+The executor accepts exactly two `ALTER` forms, each matched by an anchored regular expression (`ADD_COLUMN` and `ADD_TEXT_COLUMN` in `src/lib/tursoMigrate.ts`):
 
     ALTER TABLE "T" ADD COLUMN "c" BOOLEAN|INTEGER NOT NULL DEFAULT true|false|<integer>
+    ALTER TABLE "T" ADD COLUMN "c" TEXT NOT NULL DEFAULT ''          (Phase 3C: the empty string only)
 
 That is a metadata-only change in SQLite (constant default, no table copy, no data rewrite). Refused: a nullable column, a missing, quoted, expression
 or `CURRENT_TIMESTAMP` default, any other type, `REFERENCES`, `UNIQUE`, `PRIMARY KEY`, `CHECK`, `RENAME`, `DROP COLUMN`, several clauses in one
