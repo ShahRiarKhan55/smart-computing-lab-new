@@ -7,7 +7,7 @@ import { z } from "zod";
  * every write, so the web client is never trusted). "" always means "no link". Each validator returns the CANONICAL URL, which
  * is what gets stored: that keeps stored values uniform and strips tracking parameters/fragments the user pasted along.
  *
- * Deliberately NOT built on `new URL()`: a hand-written, anchored pattern per service rejects credentials, ports, backslashes,
+ * http:// and https:// input are both accepted and always normalised to https://. Deliberately NOT built on `new URL()`: a hand-written, anchored pattern per service rejects credentials, ports, backslashes,
  * whitespace, percent-encoded hosts, IDN/punycode look-alikes, non-https schemes and extra path segments by construction,
  * and behaves identically in the browser, on the server and in the Node unit tests.
  */
@@ -19,28 +19,21 @@ const MAX_INPUT = 300;
 const TAIL = /^(?:\?[A-Za-z0-9._~%!$&'()*+,;=:@/?-]*)?(?:#[A-Za-z0-9._~%!$&'()*+,;=:@/?-]*)?$/;
 
 /**
- * Hosts of Google Scholar. Scholar runs on Google's per-country domains (scholar.google.<tld>); only these exact hostnames are
- * accepted, never a wildcard, so look-alikes such as scholar.google.com.evil.example or scholar-google.com are refused.
- * Source: https://www.google.com/supported_domains (Google's own list of its country domains), fetched 2026-10-27; each entry
- * ".google.<tld>" became "scholar.google.<tld>". Re-generate if Google adds a domain.
+ * Hosts of Google Scholar, as an exact allow-list (never a wildcard or suffix match).
+ * Evidence: Google's list of country domains (https://www.google.com/supported_domains, fetched 2026-10-27) is only the CANDIDATE set, it
+ * does not prove Scholar is served on each. Each candidate "scholar.google.<tld>" was therefore resolved in public DNS on 2026-10-27 and
+ * kept only if it is a CNAME to Google's own Scholar service name "scholar.l.google.com" (73 of the 187 candidates); the 114 that do not
+ * resolve were excluded rather than guessed. See docs/architecture/phase3c-research-links.md ("Google Scholar hostname evidence").
  */
-const GOOGLE_TLDS: readonly string[] = [
-  "ad", "ae", "al", "am", "as", "at", "az", "ba", "be", "bf", "bg", "bi", "bj", "bs", "bt", "by", "ca", "cat",
-  "cd", "cf", "cg", "ch", "ci", "cl", "cm", "cn", "co.ao", "co.bw", "co.ck", "co.cr", "co.id", "co.il",
-  "co.in", "co.jp", "co.ke", "co.kr", "co.ls", "co.ma", "co.mz", "co.nz", "co.th", "co.tz", "co.ug", "co.uk",
-  "co.uz", "co.ve", "co.vi", "co.za", "co.zm", "co.zw", "com", "com.af", "com.ag", "com.ar", "com.au",
-  "com.bd", "com.bh", "com.bn", "com.bo", "com.br", "com.bz", "com.co", "com.cu", "com.cy", "com.do", "com.ec",
-  "com.eg", "com.et", "com.fj", "com.gh", "com.gi", "com.gt", "com.hk", "com.jm", "com.kh", "com.kw", "com.lb",
-  "com.ly", "com.mm", "com.mt", "com.mx", "com.my", "com.na", "com.ng", "com.ni", "com.np", "com.om", "com.pa",
-  "com.pe", "com.pg", "com.ph", "com.pk", "com.pr", "com.py", "com.qa", "com.sa", "com.sb", "com.sg", "com.sl",
-  "com.sv", "com.tj", "com.tr", "com.tw", "com.ua", "com.uy", "com.vc", "com.vn", "cv", "cz", "de", "dj", "dk",
-  "dm", "dz", "ee", "es", "fi", "fm", "fr", "ga", "ge", "gg", "gl", "gm", "gr", "gy", "hn", "hr", "ht", "hu",
-  "ie", "im", "iq", "is", "it", "je", "jo", "kg", "ki", "kz", "la", "li", "lk", "lt", "lu", "lv", "md", "me",
-  "mg", "mk", "ml", "mn", "mu", "mv", "mw", "ne", "nl", "no", "nr", "nu", "pl", "pn", "ps", "pt", "ro", "rs",
-  "ru", "rw", "sc", "se", "sh", "si", "sk", "sm", "sn", "so", "sr", "st", "td", "tg", "tl", "tm", "tn", "to",
-  "tt", "vu", "ws",
+const GOOGLE_SCHOLAR_TLDS: readonly string[] = [
+  "ae", "at", "be", "bg", "ca", "cat", "ch", "cl", "co.cr", "co.id", "co.il", "co.in", "co.jp", "co.kr",
+  "co.nz", "co.th", "co.uk", "co.ve", "co.za", "com", "com.ar", "com.au", "com.bo", "com.br", "com.co",
+  "com.cu", "com.do", "com.ec", "com.eg", "com.gt", "com.hk", "com.ly", "com.mx", "com.my", "com.ni", "com.pa",
+  "com.pe", "com.ph", "com.pk", "com.pr", "com.py", "com.sg", "com.sv", "com.tr", "com.tw", "com.ua", "com.uy",
+  "com.vn", "cz", "de", "dk", "es", "fi", "fr", "gr", "hn", "hr", "hu", "is", "it", "li", "lt", "lu", "lv",
+  "nl", "no", "pl", "pt", "ro", "ru", "se", "si", "sk",
 ];
-const SCHOLAR_HOSTS: ReadonlySet<string> = new Set(GOOGLE_TLDS.map((t) => `scholar.google.${t}`));
+const SCHOLAR_HOSTS: ReadonlySet<string> = new Set(GOOGLE_SCHOLAR_TLDS.map((t) => `scholar.google.${t}`));
 /** Exposed for tests only. */
 export const GOOGLE_SCHOLAR_HOSTS: readonly string[] = [...SCHOLAR_HOSTS];
 
@@ -56,9 +49,9 @@ export const RESEARCH_LINK_MESSAGES = {
   orcid: "ORCID must be a valid iD such as 0000-0002-1825-0097 or https://orcid.org/0000-0002-1825-0097.",
 } as const;
 
-/** Splits "https://host/path?query#fragment" into parts, or null for anything that is not a plain https URL with no credentials or port. */
+/** Splits "http(s)://host/path?query#fragment" into parts, or null for anything that is not a plain http(s) URL with no credentials or port (the scheme is not kept: callers always rebuild an https URL). */
 function splitHttps(v: string): { host: string; path: string; tail: string } | null {
-  const m = /^https:\/\/([A-Za-z0-9.-]+)(\/[^?#]*)?([?#].*)?$/.exec(v);
+  const m = /^https?:\/\/([A-Za-z0-9.-]+)(\/[^?#]*)?([?#].*)?$/i.exec(v);
   if (!m) return null;
   const tail = m[3] ?? "";
   if (tail !== "" && !TAIL.test(tail)) return null;

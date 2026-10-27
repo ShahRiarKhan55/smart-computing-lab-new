@@ -15,19 +15,33 @@ migration is applied would fail on the missing columns, so the order for a relea
 ## Validation (`packages/shared/src/schemas/researchLinks.ts`)
 One strict validator per service, used by the admin create/edit schemas and the own-profile schema, and re-run by the server on every write.
 Each returns the canonical URL, which is what is stored. Empty (or blank) means no link. Input is hand-parsed with anchored patterns (not
-`new URL()`): https only, no credentials, no port, no backslashes or whitespace, ASCII hostnames only, no trailing-dot host.
+`new URL()`): `http://` and `https://` are both accepted (scheme case-insensitive) and always normalised to `https://`; no other scheme, no credentials, no port, no backslashes
+or whitespace, ASCII hostnames only, no trailing-dot host. The identifier is carried over unchanged (never altered into another profile); anything unexpected is refused, not repaired.
 
 | Service | Accepted hosts (exact) | Accepted path | Canonical form |
 |---|---|---|---|
-| Google Scholar | `scholar.google.<tld>` for each of Google's published country domains (187 hostnames, `GOOGLE_SCHOLAR_HOSTS`) | `/citations` with exactly one `user=<12 chars [A-Za-z0-9_-]>`; other params limited to `hl`, `view_op`, `oi`, `sciund`, `authuser` and dropped | `https://scholar.google.<tld>/citations?user=<id>` |
+| Google Scholar | `scholar.google.<tld>` for each of Google's published country domains (73 evidence-verified hostnames, `GOOGLE_SCHOLAR_HOSTS`; see below) | `/citations` with exactly one `user=<12 chars [A-Za-z0-9_-]>`; other params limited to `hl`, `view_op`, `oi`, `sciund`, `authuser` and dropped | `https://scholar.google.<tld>/citations?user=<id>` |
 | ResearchGate | `researchgate.net`, `www.researchgate.net` | `/profile/<slug>`, slug `[A-Za-z0-9][A-Za-z0-9_.-]{1,99}`, optional trailing `/` | `https://www.researchgate.net/profile/<slug>` |
 | ORCID | `orcid.org`, `www.orcid.org`, or a bare iD | `/<iD>`; the iD is `NNNN-NNNN-NNNN-NNN[N|X]` and its ISO 7064 MOD 11-2 check character must be right | `https://orcid.org/<iD>` |
 
-The Google host list is Google's own `https://www.google.com/supported_domains` (fetched 2026-10-27), each `.google.<tld>` turned into `scholar.google.<tld>`.
-It is an exact allow-list, never a wildcard, so `scholar.google.com.evil.example`, `scholar-google.com`, subdomains, look-alike Unicode and
-`google.com/citations` are refused. Query strings and fragments are accepted on input only where harmless and are always dropped (tracking
-parameters never reach the database or a link). Refused outright: `javascript:`, `data:`, `file:`, `ftp:`, `http:`, scheme-relative URLs,
-credentials, ports, other services' URLs (each validator accepts only its own service), over-long input and non-strings.
+### Google Scholar hostname evidence
+Google's list of country domains (`https://www.google.com/supported_domains`, 187 entries, fetched 2026-10-27) names domains of Google **Search**; it does not show that Scholar
+is served on each, so it was used only as the candidate set. Verification method (run 2026-10-27, from the development environment, public DNS only, no page was fetched
+or scraped): for each candidate the name `scholar.google.<tld>` was resolved; a host is kept only if it is a CNAME to Google's own Scholar service name `scholar.l.google.com`.
+Resolution was repeated twice per name with identical results, and the same resolver returned addresses for ordinary Google hosts such as `www.google.com.bd`, so a missing
+Scholar name is a real absence and not a resolver fault.
+
+* **Kept (73):** com, ae, com.ar, at, com.au, be, bg, com.bo, com.br, ca, ch, cl, com.co, co.cr, com.cu, cz, de, dk, com.do, com.ec, com.eg, es, fi, fr, gr, com.gt, com.hk, hn, hr, hu, co.id,
+  co.il, co.in, is, it, co.jp, co.kr, li, lt, lu, lv, com.ly, com.mx, com.my, com.ni, nl, no, co.nz, com.pa, com.pe, com.ph, com.pk, pl, com.pr, pt, com.py, ro, ru, se, com.sg, si, sk, com.sv, co.th,
+  com.tr, com.tw, com.ua, co.uk, com.uy, co.ve, com.vn, co.za, cat.
+* **Excluded (114):** every other candidate (for example `scholar.google.ad`, `.com.bd`, `.al`, `.cn`); the name does not exist in DNS, so it is not accepted.
+* **Limits of the evidence:** DNS shows the name is operated by Google for Scholar; it does not show that every profile page works on that host. A genuine link on an excluded country
+  domain is refused with the usual message and can be pasted as its `scholar.google.com` form (same `user` id). If Google adds a domain, re-run the check and add it to `GOOGLE_SCHOLAR_TLDS`.
+* Matching stays exact (a `Set` of full hostnames): no wildcard, suffix or substring rule.
+
+Query strings and fragments are accepted on input only where harmless and are always dropped (tracking parameters never reach the database or a link). Refused outright:
+`javascript:`, `data:`, `file:`, `ftp:` and every other non-http(s) scheme, scheme-relative URLs, credentials, ports, look-alike or unlisted hosts, other services' URLs (each validator
+accepts only its own service), over-long input and non-strings.
 
 Messages are fixed English strings (`RESEARCH_LINK_MESSAGES`) mapped to translation keys in `apps/web/src/i18n/errorMessages.ts` (EN and JA).
 
@@ -51,11 +65,11 @@ unaltered use; nothing in them addresses an icon-only link, and for Google Schol
 component is the single place to change if permission is obtained later.
 
 ## Tests
-`unit-research-links.test.ts` (validators and schemas, 241 checks), `research-links-regression.ts` (HTTP: create/edit/self-edit, authorisation, publication,
+`unit-research-links.test.ts` (validators, http/https normalisation, host evidence and schemas, 351 checks), `research-links-regression.ts` (HTTP: create/edit/self-edit, authorisation, publication,
 corrupted-value read defence, 60 checks), `research-links-ui.mjs` (Chromium: forms, links, cards, EN/JA, keyboard, size/contrast, alumni, 37 checks), and the migration
 checks in `unit-turso-migrate.test.ts`.
 
 ## Limitations
 * Syntax and check-digit validation only: a link is not checked to exist, nor to belong to the person.
-* Google Scholar adds country domains rarely; the list must be regenerated if Google adds one.
+* The Google Scholar host list reflects DNS on 2026-10-27 and must be re-verified if Google adds a country domain.
 * A person can paste someone else's valid profile URL; the same is true of every free-text link on the site.

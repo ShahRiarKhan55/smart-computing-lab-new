@@ -15,7 +15,7 @@ const eq = (name: string, got: unknown, want: unknown) => t(name, got === want, 
 const UID = "AbCdEfGhIjKl"; // 12 chars
 const UNSAFE = [
   "javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///etc/passwd", "vbscript:x", "ftp://scholar.google.com/citations?user=" + UID,
-  "//scholar.google.com/citations?user=" + UID, "http://scholar.google.com/citations?user=" + UID,
+  "//scholar.google.com/citations?user=" + UID,
 ];
 const injected = (base: string) => [
   base.replace("https://", "https://user:pw@"), base.replace("https://", "https://user@"), base.replace(/^(https:\/\/[^/]+)/, "$1:443"), base.replace(/^(https:\/\/[^/]+)/, "$1:8080"),
@@ -35,11 +35,11 @@ const injected = (base: string) => [
   eq("GS: host case-insensitive, output lowercase", normalizeGoogleScholarUrl(`https://SCHOLAR.Google.COM/citations?user=${UID}`), base);
   eq("GS: id with _ and -", normalizeGoogleScholarUrl("https://scholar.google.com/citations?user=a_b-c_d-e_f-"), "https://scholar.google.com/citations?user=a_b-c_d-e_f-");
   // country variants: every host in the allow-list works; a spread of real ones by name
-  for (const h of ["scholar.google.co.jp", "scholar.google.co.uk", "scholar.google.com.bd", "scholar.google.de", "scholar.google.fr", "scholar.google.co.in", "scholar.google.com.au", "scholar.google.ca", "scholar.google.com.sg"]) {
+  for (const h of ["scholar.google.co.jp", "scholar.google.co.uk", "scholar.google.com.sg", "scholar.google.de", "scholar.google.fr", "scholar.google.co.in", "scholar.google.com.au", "scholar.google.ca", "scholar.google.com.sg"]) {
     t(`GS: country domain ${h} is in the allow-list`, GOOGLE_SCHOLAR_HOSTS.includes(h));
     eq(`GS: ${h} accepted`, normalizeGoogleScholarUrl(`https://${h}/citations?user=${UID}`), `https://${h}/citations?user=${UID}`);
   }
-  t("GS: allow-list is large and duplicate-free", GOOGLE_SCHOLAR_HOSTS.length > 150 && new Set(GOOGLE_SCHOLAR_HOSTS).size === GOOGLE_SCHOLAR_HOSTS.length, String(GOOGLE_SCHOLAR_HOSTS.length));
+  t("GS: allow-list is large and duplicate-free", GOOGLE_SCHOLAR_HOSTS.length === 73 && new Set(GOOGLE_SCHOLAR_HOSTS).size === GOOGLE_SCHOLAR_HOSTS.length, String(GOOGLE_SCHOLAR_HOSTS.length));
   t("GS: every allow-listed host is scholar.google.<tld>", GOOGLE_SCHOLAR_HOSTS.every((h) => /^scholar\.google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(h)));
   for (const bad of [
     "https://scholar.google.com.evil.example/citations?user=" + UID, "https://scholar.google.com.evil.com/citations?user=" + UID, "https://evilscholar.google.com/citations?user=" + UID,
@@ -109,7 +109,7 @@ const injected = (base: string) => [
   for (const bad of [
     "0000-0002-1825-0098", "0000-0002-1825-009X", "0000-0002-1694-2330", "0000-0002-1694-233x", "0000000218250097", "0000 0002 1825 0097", "0000-0002-1825-009", "0000-0002-1825-00977",
     "000-0002-1825-0097", "0000-0002-1825-X097", "X000-0002-1825-0097", "0000-0002-1825", "abcd-efgh-ijkl-mnop", "0000-0002-1825-0097-0000",
-    "https://orcid.org/0000-0002-1825-0098", "http://orcid.org/0000-0002-1825-0097", "https://orcid.org.evil.example/0000-0002-1825-0097", "https://evilorcid.org/0000-0002-1825-0097",
+    "https://orcid.org/0000-0002-1825-0098", "https://orcid.org.evil.example/0000-0002-1825-0097", "https://evilorcid.org/0000-0002-1825-0097",
     "https://orcid.org@evil.example/0000-0002-1825-0097", "https://sandbox.orcid.org/0000-0002-1825-0097", "https://pub.orcid.org/0000-0002-1825-0097", "https://orcid.org./0000-0002-1825-0097",
     "https://orcid.org/", "https://orcid.org", "https://orcid.org/my-orcid", "https://orcid.org/0000-0002-1825-0097/works", "https://orcid.org/0000-0002-1825-0097/../x", "https://orcid.org/orcid/0000-0002-1825-0097",
     "https://orcid.org/0000-0002-1825-0097%00", "https://orcid.org/%30000-0002-1825-0097", "https://orcid.org/0000-0002-1825-0097<", "orcid.org/0000-0002-1825-0097",
@@ -117,6 +117,60 @@ const injected = (base: string) => [
     ...UNSAFE, ...injected("https://orcid.org/0000-0002-1825-0097"),
   ]) t(`ORCID: refuses ${JSON.stringify(bad).slice(0, 70)}`, normalizeOrcidUrl(bad) === null);
   t("ORCID: isOrcidUrl accepts canonical only", isOrcidUrl("https://orcid.org/0000-0002-1825-0097") && !isOrcidUrl("0000-0002-1825-0097") && !isOrcidUrl("https://www.orcid.org/0000-0002-1825-0097"));
+}
+
+// ======================= http:// input is accepted and normalised to https:// ===================================================
+{
+  const gs = `https://scholar.google.com/citations?user=${UID}`, rg = "https://www.researchgate.net/profile/Jane-Doe-12", oc = "https://orcid.org/0000-0002-1825-0097";
+  eq("HTTP: Google Scholar http -> https", normalizeGoogleScholarUrl(`http://scholar.google.com/citations?user=${UID}`), gs);
+  eq("HTTP: Google Scholar http + country domain + params -> canonical https", normalizeGoogleScholarUrl(`http://scholar.google.co.jp/citations?hl=ja&user=${UID}`), `https://scholar.google.co.jp/citations?user=${UID}`);
+  eq("HTTP: scheme case-insensitive", normalizeGoogleScholarUrl(`HTTP://Scholar.Google.com/citations?user=${UID}`), gs);
+  eq("HTTP: HTTPS upper-case scheme", normalizeGoogleScholarUrl(`HTTPS://scholar.google.com/citations?user=${UID}`), gs);
+  eq("HTTP: the identifier is preserved exactly (case and punctuation)", normalizeGoogleScholarUrl("http://scholar.google.com/citations?user=aB_-cD9xY0zQ"), "https://scholar.google.com/citations?user=aB_-cD9xY0zQ");
+  eq("HTTP: ResearchGate http", normalizeResearchGateUrl("http://www.researchgate.net/profile/Jane-Doe-12"), rg);
+  eq("HTTP: ResearchGate http without www", normalizeResearchGateUrl("http://researchgate.net/profile/Jane-Doe-12/?x=1"), rg);
+  eq("HTTP: ResearchGate slug case is preserved", normalizeResearchGateUrl("http://www.researchgate.net/profile/JANE-doe-12"), "https://www.researchgate.net/profile/JANE-doe-12");
+  eq("HTTP: ORCID http", normalizeOrcidUrl("http://orcid.org/0000-0002-1825-0097"), oc);
+  eq("HTTP: ORCID http www", normalizeOrcidUrl("http://www.orcid.org/0000-0002-1694-233X"), "https://orcid.org/0000-0002-1694-233X");
+  t("HTTP: ORCID check digit still enforced over http", normalizeOrcidUrl("http://orcid.org/0000-0002-1825-0098") === null && normalizeOrcidUrl("http://orcid.org/0000-0002-1694-2330") === null);
+  eq("HTTP: https unchanged for all three", [normalizeGoogleScholarUrl(gs), normalizeResearchGateUrl(rg), normalizeOrcidUrl(oc)].join("|"), [gs, rg, oc].join("|"));
+  // http never rescues an otherwise invalid URL, and is never turned into a different profile
+  for (const bad of [
+    `http://scholar.google.com.evil.example/citations?user=${UID}`, `http://scholar.google.ad/citations?user=${UID}`, "http://scholar.google.com/citations?user=short", `http://scholar.google.com/citations?user=${UID}&user=${UID}`,
+    "http://www.researchgate.net.evil.example/profile/Jane", "http://www.researchgate.net/profile/Jane/extra", "http://evilorcid.org/0000-0002-1825-0097", "http://orcid.org/0000-0002-1825-0097/works",
+    `http://user:pw@scholar.google.com/citations?user=${UID}`, `http://scholar.google.com:80/citations?user=${UID}`, `http://scholar.google.com:8080/citations?user=${UID}`,
+    "http://www.researchgate.net:8080/profile/Jane", "http://orcid.org:443/0000-0002-1825-0097", "http://", "http:///orcid.org/0000-0002-1825-0097", "http:orcid.org/0000-0002-1825-0097",
+  ]) t(`HTTP: refuses ${bad.slice(0, 70)}`, normalizeGoogleScholarUrl(bad) === null && normalizeResearchGateUrl(bad) === null && normalizeOrcidUrl(bad) === null);
+  // other schemes are never accepted by any validator
+  for (const scheme of ["ftp", "ws", "wss", "gopher", "javascript", "data", "file", "blob", "mailto", "ssh", "https+evil", "http+evil", "htt", "httpss", "xhttp"]) {
+    const a = `${scheme}://scholar.google.com/citations?user=${UID}`, b = `${scheme}://www.researchgate.net/profile/Jane-Doe-12`, c = `${scheme}://orcid.org/0000-0002-1825-0097`;
+    t(`SCHEME: ${scheme}: refused by all three`, normalizeGoogleScholarUrl(a) === null && normalizeResearchGateUrl(b) === null && normalizeOrcidUrl(c) === null);
+  }
+  t("HTTP: stored values must be canonical https (read-time check rejects a stored http value)", !isGoogleScholarUrl(`http://scholar.google.com/citations?user=${UID}`) && !isResearchGateUrl("http://www.researchgate.net/profile/Jane") && !isOrcidUrl("http://orcid.org/0000-0002-1825-0097"));
+  const c = createTeamMemberSchema.safeParse({ name: "N", initials: "N", role: "r", category: "MSC", googleScholarUrl: `http://scholar.google.com/citations?user=${UID}`, researchGateUrl: "http://researchgate.net/profile/Jane-Doe-12", orcidUrl: "http://orcid.org/0000-0002-1825-0097" });
+  t("HTTP: the request schema stores the canonical https forms", c.success && c.data.googleScholarUrl === gs && c.data.researchGateUrl === rg && c.data.orcidUrl === oc);
+}
+
+// ======================= Google Scholar hostname evidence ======================================================================
+{
+  // Verified 2026-10-27: each host below resolved in public DNS as a CNAME to scholar.l.google.com. Candidates that did not resolve are excluded.
+  const verified = ["com", "co.uk", "co.jp", "de", "fr", "co.in", "com.au", "ca", "com.sg", "com.br", "cat", "co.za", "nl", "it", "es", "com.hk", "co.kr", "com.tw", "ru", "se"];
+  const unverified = ["ad", "com.af", "com.ag", "al", "am", "co.ao", "as", "az", "ba", "com.bd", "bf", "com.bh", "bi", "bj", "com.bn", "bs", "bt", "co.bw", "by", "com.bz", "cd", "cf", "cg", "ci", "cm", "cn"];
+  for (const tld of verified) {
+    const h = `scholar.google.${tld}`;
+    t(`HOST: verified ${h} is in the allow-list and accepted`, GOOGLE_SCHOLAR_HOSTS.includes(h) && normalizeGoogleScholarUrl(`https://${h}/citations?user=${UID}`) === `https://${h}/citations?user=${UID}`);
+  }
+  for (const tld of unverified) {
+    const h = `scholar.google.${tld}`;
+    t(`HOST: unverified ${h} is NOT in the allow-list and refused (http and https)`, !GOOGLE_SCHOLAR_HOSTS.includes(h) && normalizeGoogleScholarUrl(`https://${h}/citations?user=${UID}`) === null && normalizeGoogleScholarUrl(`http://${h}/citations?user=${UID}`) === null);
+  }
+  t("HOST: exactly 73 verified hosts, no duplicates, each scholar.google.<tld>", GOOGLE_SCHOLAR_HOSTS.length === 73 && new Set(GOOGLE_SCHOLAR_HOSTS).size === 73 && GOOGLE_SCHOLAR_HOSTS.every((h) => /^scholar\.google\.[a-z]+(\.[a-z]+)?$/.test(h)));
+  t("HOST: the plain Google Search host is not a Scholar host", !GOOGLE_SCHOLAR_HOSTS.includes("www.google.com") && !GOOGLE_SCHOLAR_HOSTS.includes("google.com"));
+  for (const bad of [
+    "scholar.google.com.evil.example", "scholar.google.com.", "scholar.google.com.com", "scholar.google.co.jp.evil.example", "xscholar.google.com", "scholar.google.com.attacker.io", "scholar.google",
+    "scholar.google.co", "scholar.google.co.jp.", "scholar.googie.com", "scholar.google.com@evil.example", "evil.example#scholar.google.com", "evil.example?x=scholar.google.com", "scholar.google.com%2eevil.example",
+    "sub.scholar.google.com", "scholar.scholar.google.com", "google.scholar.com", "scholar.google.xn--p1ai", "scholar.google.c%6fm", "scholar_google.com", "SCHOLAR.GOOGLE.COM.EVIL.EXAMPLE",
+  ]) t(`HOST: refuses misleading/lookalike host ${bad}`, normalizeGoogleScholarUrl(`https://${bad}/citations?user=${UID}`) === null && normalizeGoogleScholarUrl(`http://${bad}/citations?user=${UID}`) === null);
 }
 
 // ======================= cross-service: one service's URL is never accepted by another ========================================
