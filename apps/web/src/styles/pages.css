@@ -851,6 +851,7 @@ a.conversation-header__name:focus-visible {
 
 .account-row__actions {
   display: flex;
+  flex-wrap: wrap; /* a role select plus two buttons with longer (Japanese) labels does not fit one line on a 390px phone */
   align-items: center;
   gap: var(--space-3);
 }

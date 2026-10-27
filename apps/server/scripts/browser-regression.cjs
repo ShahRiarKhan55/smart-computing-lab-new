@@ -1022,7 +1022,7 @@ async function connect() {
   // "a MEMBER has no Admin link" therefore use D.plain, which stays a true MEMBER for the whole run.
   const TRUE_MEMBER = { email: D.plain.email, password: PW_NAV };
   const MANAGER = { email: D.mgr.email, password: PW_NAV };
-  const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/news", "/knowledge", "/resources"]; // Phase 22 added Knowledge, Phase 23 Resources as the last Research link
+  const RESEARCH_HREFS = ["/research", "/projects", "/publications", "/knowledge", "/resources"]; // Phase 22 added Knowledge, Phase 23 Resources as the last Research link; Phase 24 moved News to Community (docs/architecture/phase24-public-research-showcase.md)
   const PEOPLE_HREFS = ["/team", "/groups"];
   const phone = (w) => send("Emulation.setDeviceMetricsOverride", { width: w, height: 844, deviceScaleFactor: 2, mobile: true });
   const desktopAt = (w, h = 800) => send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
@@ -1040,7 +1040,7 @@ async function connect() {
     check("N4. each trigger controls an existing panel labelled '<group> menu'", await ev(`[...document.querySelectorAll('.nav__trigger')].every(b => { const p = document.getElementById(b.getAttribute('aria-controls')); return p && p.getAttribute('aria-label') === b.textContent.trim() + ' menu'; })`));
     await shot("nav-guest-closed");
 
-    check("N5. clicking Research opens it: expanded, visible, six links in the documented order", (await clickEl(trig("research"))) && (await expanded("research")) === "true" && (await panelHidden("research")) === false && eqJson(await panelHrefs("research"), RESEARCH_HREFS));
+    check("N5. clicking Research opens it: expanded, visible, five links in the documented order", (await clickEl(trig("research"))) && (await expanded("research")) === "true" && (await panelHidden("research")) === false && eqJson(await panelHrefs("research"), RESEARCH_HREFS));
     check("N5b. the panel sits under its trigger, inside the viewport, not clipped", await inViewport("#nav-panel-research"));
     await shot("nav-guest-research-open");
     check("N6. opening People closes Research (one dropdown at a time) and lists Team + Groups", (await clickEl(trig("people"))) && (await expanded("people")) === "true" && (await expanded("research")) === "false" && eqJson(await panelHrefs("people"), PEOPLE_HREFS));
@@ -1102,7 +1102,7 @@ async function connect() {
 
     // Tab through the whole panel and off the end: the dropdown closes itself.
     await press("down");
-    for (let i = 0; i < 6; i++) await tab(); // 5 more links to Resources, then off the group
+    for (let i = 0; i < 5; i++) await tab(); // 4 more links to Resources, then off the group
     check("K12. Tabbing out of the last link closes the dropdown and lands on the next header control", (await expanded("research")) === "false" && (await focusDesc()) === "people");
     await tab(true); // Shift+Tab from People back to the Research trigger
     await press("enter"); // Research reopened
@@ -1194,7 +1194,7 @@ async function connect() {
       // Account-menu assertions"). Updated to the already-shipped Phase 12 navigation; not a new
       // feature, and no assertion here is weakened — the exact expected set just now matches
       // what navConfig.ts (ACCOUNT_NAV) has rendered since Phase 12.
-      check(`${label}: the Account menu holds ${isAdminRole ? "My Workspace, My Profile, Messages, Notifications, Admin Dashboard, Log out" : "My Workspace, My Profile, Messages, Notifications, Log out (no Admin Dashboard)"}`, eqJson(acct, isAdminRole ? ["my workspace", "my profile", "messages", "notifications", "admin dashboard", "log out"] : ["my workspace", "my profile", "messages", "notifications", "log out"]), JSON.stringify(acct));
+      check(`${label}: the Account menu holds ${isAdminRole ? "My Workspace, My Profile, Messages, Notifications, Admin Dashboard, Help & Documentation, Log out" : "My Workspace, My Profile, Messages, Notifications, Help & Documentation, Log out (no Admin Dashboard)"}`, eqJson(acct, isAdminRole ? ["my workspace", "my profile", "messages", "notifications", "admin dashboard", "help & documentation", "log out"] : ["my workspace", "my profile", "messages", "notifications", "help & documentation", "log out"]), JSON.stringify(acct));
       check(`${label}: ${isAdminRole ? "an /admin link exists" : "no /admin link exists anywhere in the header"}`, (await hrefEverywhere("/admin")) === isAdminRole);
       check(`${label}: the Account panel opens right-aligned, fully inside the viewport`, await inViewport("#nav-panel-account"));
       await shot(`nav-${label.toLowerCase()}-account-open`);
@@ -1335,7 +1335,7 @@ async function connect() {
       await openMenu("account");
       const acct = await panelLabels("account");
       // Phase 14 test maintenance: same pre-Phase-12 staleness fix as the desktop version above.
-      check(`M390 ${label}: Account holds ${isAdminRole ? "My Workspace, My Profile, Messages, Notifications, Admin Dashboard, Log out" : "My Workspace, My Profile, Messages, Notifications, Log out"}`, eqJson(acct, isAdminRole ? ["my workspace", "my profile", "messages", "notifications", "admin dashboard", "log out"] : ["my workspace", "my profile", "messages", "notifications", "log out"]), JSON.stringify(acct));
+      check(`M390 ${label}: Account holds ${isAdminRole ? "My Workspace, My Profile, Messages, Notifications, Admin Dashboard, Help & Documentation, Log out" : "My Workspace, My Profile, Messages, Notifications, Help & Documentation, Log out"}`, eqJson(acct, isAdminRole ? ["my workspace", "my profile", "messages", "notifications", "admin dashboard", "help & documentation", "log out"] : ["my workspace", "my profile", "messages", "notifications", "help & documentation", "log out"]), JSON.stringify(acct));
       check(`M390 ${label}: menu fits the screen (scrolls inside itself if it must), page has no horizontal overflow`, (await inViewport(".nav__links")) && (await overflowPx()) <= 1 && (await ev(`(() => { const b = document.querySelector('.nav__links').getBoundingClientRect(); return b.bottom <= innerHeight + 1; })()`)));
       await shot(`nav-mobile-390-${label.toLowerCase()}`);
       check(`M390 ${label}: Schedule from the phone menu opens the calendar page`, (await clickEl('.nav__links > li > a[href="/schedule"]')) && (await waitFor(`location.pathname === '/schedule'`)) && (await waitText("Lab Schedule")));
@@ -1452,6 +1452,7 @@ async function connect() {
     await readyPage("/projects", "Research Projects");
     await ev(`document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0)`);
     await tab();
+    await sleep(600); // the skip link slides in from above the viewport; measure after the transition, not during it
     check("K. the very first Tab stop is the skip link, and it is visible when focused", await ev(`(() => { const a = document.activeElement; const r = a.getBoundingClientRect(); return a.classList.contains('skip-link') && r.top >= 0 && r.width > 40; })()`));
     await press("enter");
     check("K. Enter on it moves focus into <main id=main> (past the header)", await waitFor(`document.activeElement && document.activeElement.id === 'main'`, 2000));
@@ -1564,6 +1565,7 @@ async function connect() {
     await waitFor(`!!document.querySelector('.modal')`);
     check("D. at 390px the dialog fits the screen and never overflows sideways", await ev(`(() => { const r = document.querySelector('.modal').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && document.documentElement.scrollWidth <= innerWidth + 1; })()`));
     await shot("ui-modal-390");
+    await sleep(600); // the dialog scales in (0.988 -> 1) when it opens, so a button measures 43.5px mid-animation; measure once it has settled
     check("D. ...and its Save / Cancel buttons are at least 44px tall", await ev(`[...document.querySelectorAll('.modal__actions .btn')].every((b) => b.getBoundingClientRect().height >= 44)`));
     await press("esc");
     await desktop();
@@ -2077,7 +2079,10 @@ async function connect() {
         range.setEndAfter(ownText[ownText.length - 1]);
         const r = range.getBoundingClientRect();
         const b = el.getBoundingClientRect();
-        if (s.display !== "inline" && (r.right > b.right + 1.5 || r.left < b.left - 1.5)) resp.push("text spills out of its box: " + short(el));
+        // In a pre-wrap / pre-line box (e.g. .knowledge-body) a space at the end of a wrapped line hangs past the edge by design (about one space wide,
+        // invisible), which a text-range measurement counts as overflow. For those boxes ask whether anything is actually scrollable instead.
+        const preserved = /^(pre|break-spaces)/.test(s.whiteSpace);
+        if (preserved ? el.scrollWidth > el.clientWidth + 1 : s.display !== "inline" && (r.right > b.right + 1.5 || r.left < b.left - 1.5)) resp.push("text spills out of its box: " + short(el));
         if (!scroller(el) && (r.right > vw + 1 || r.left < -1)) resp.push("text beyond the viewport: " + short(el));
         if (s.overflowX !== "visible" && s.overflowX !== "auto" && s.overflowX !== "scroll" && el.scrollWidth > el.clientWidth + 1) resp.push("text clipped horizontally: " + short(el));
         if ((s.overflowY === "hidden" || s.overflowY === "clip") && el.scrollHeight > el.clientHeight + 1 && !(s.webkitLineClamp && s.webkitLineClamp !== "none")) resp.push("text clipped vertically: " + short(el));
@@ -2758,7 +2763,7 @@ async function connect() {
   await step("events navigation: Community menu, hamburger, keyboard, active state, Schedule", async () => {
     await desktop(); await setTz("Asia/Tokyo"); await setLocale(null);
     await evReady("/events", "ZZ B9 Event Public");
-    check("events nav: Events is in the Community menu (after Forum, before Gallery), with the right href", JSON.stringify(await panelHrefs("community")) === JSON.stringify(["/community/forum", "/events", "/gallery"]) && JSON.stringify(await panelLabels("community")) === JSON.stringify(["forum", "events", "gallery"]), JSON.stringify(await panelHrefs("community")));
+    check("events nav: Events is in the Community menu (after Forum and News, before Gallery), with the right href", JSON.stringify(await panelHrefs("community")) === JSON.stringify(["/community/forum", "/news", "/events", "/gallery"]) && JSON.stringify(await panelLabels("community")) === JSON.stringify(["forum", "news", "events", "gallery"]), JSON.stringify(await panelHrefs("community")));
     check("events nav: the current page is marked (aria-current=page) and the Community trigger looks active", await ev(`document.querySelector('#nav-panel-community a[href="/events"]').getAttribute('aria-current') === 'page'`) && (await ev(`document.querySelector('button.nav__trigger[aria-controls="nav-panel-community"]').className`)).includes("active"));
     await evReady(`/events/${D.evPub.id}`, "ZZ B9 Event Public");
     check("events nav: on an event's detail page Events is still the current section", await ev(`document.querySelector('#nav-panel-community a[href="/events"]').getAttribute('aria-current') === 'page'`));
@@ -2766,7 +2771,7 @@ async function connect() {
     check("events nav: opening Community with a REAL click lists Events and it is clickable", (await openMenu("community")) && (await clickEl('#nav-panel-community a[href="/events"]')) && (await waitFor(`location.pathname === '/events'`, 3000)));
     await go("/"); await navReady();
     await focusSel(trig("community"));
-    await press("down"); await press("down"); // ArrowDown opens the menu on Forum; the next one lands on Events
+    await press("down"); await press("down"); await press("down"); // ArrowDown opens the menu on Forum; then News (Phase 24), then Events
     check("events nav: keyboard — ArrowDown moves through the Community items to Events", (await focusDesc()) === "events", await focusDesc());
     await press("enter");
     check("events nav: Enter on Events navigates there", await waitFor(`location.pathname === '/events'`, 3000));
@@ -3367,7 +3372,8 @@ async function connect() {
     check("admin community: it says moderation happens in the forum and that words are never edited", (await text()).includes("never edit another member's words"));
     await admReady("/admin/files", "adm-evil");
     check("admin files: the gallery upload is listed with a sanitised name, category, visibility, size and uploader", (await text()).includes("adm-evil<b>.png") && (await text()).includes("Research") && /image\/png/.test(await text()));
-    const html = await ev(`document.documentElement.outerHTML`);
+    // The page BODY, not the whole document: index.html's <head> carries a developer comment (the CSP rationale, Phase 26) that names "/api/files/:id".
+    const html = await ev(`document.body.outerHTML`);
     check("admin files: no storage key, path or file URL on the page (metadata only)", !/storageKey|storage\/files|\/api\/files\/|sha256/i.test(html));
     check("admin files: hostile filename text is inert (no <b> element created)", (await ev(`document.querySelectorAll('.admin-row__title b').length`)) === 0);
     await logout();
