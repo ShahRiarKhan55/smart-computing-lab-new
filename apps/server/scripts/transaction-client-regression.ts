@@ -4,6 +4,9 @@
  * fails with 500 (P2028). Two handlers did that:
  *   - PUT /api/knowledge/:id when a link (project / area / group / researcher) is changed   (assertLinks)
  *   - PUT /api/admin/translations/:entityType/:entityId                                     (def.find existence check)
+ * and, found later by running the browser sweep under a single connection and confirmed by an AST scan of every $transaction callback:
+ *   - PUT /api/resources/:id when a link or a project is added                              (assertLinks)
+ *   - PUT /api/events/:id when the event is linked to a project                              (assertMayLinkProject)
  * They only worked when the pool happened to have a second connection. This script runs the REAL application on a brand-new SQLite file
  * built from the repository's migrations, with the database URL forced to `?connection_limit=1`, and requires every request to answer
  * correctly AND quickly (well under the 5 s timeout). Authorization and validation outcomes are asserted inside the same transactions.
@@ -152,6 +155,38 @@ t("translations PUT: a plain member is 403", r.status === 403);
 // the same handler for a second entity type exercises another def.find
 r = await tr("name", "チーム", "RESEARCH_GROUP", group.id);
 t("translations PUT: another entity type (research group) also answers promptly", r.status === 200 && r.ms < FAST_MS, `${r.status} ${r.ms}ms ${JSON.stringify(r.json)}`);
+
+// ---- PUT /api/resources/:id: assertLinks runs inside the update transaction ---------------------------------------------------
+const mkRes = await AU.req("POST", "/api/resources", { name: "Tx resource", resourceType: "TOOL" });
+t("resources: create (assertLinks outside a transaction) answers 201", mkRes.status === 201, `${mkRes.status} ${JSON.stringify(mkRes.json)}`);
+const resId: string = mkRes.json?.id;
+const putRes = (b: Browser, body: unknown) => b.req("PUT", `/api/resources/${resId}`, body);
+r = await putRes(AU, { researchAreaId: area.id, groupId: group.id });
+t("resources PUT: linking a visible area and group answers 200 promptly", r.status === 200 && r.ms < FAST_MS, `${r.status} ${r.ms}ms ${r.status === 200 ? "" : JSON.stringify(r.json)}`);
+r = await putRes(AU, { projectIds: [projPub.id] });
+t("resources PUT: adding a visible project answers 200 promptly", r.status === 200 && r.ms < FAST_MS, `${r.status} ${r.ms}ms ${r.status === 200 ? "" : JSON.stringify(r.json)}`);
+r = await putRes(AU, { projectIds: [projPub.id, projPriv.id] });
+t("resources PUT: a PRIVATE project is refused (400) inside the transaction, promptly", r.status === 400 && r.ms < FAST_MS, `${r.status} ${r.ms}ms`);
+r = await putRes(AU, { researchAreaId: "cjld2cjxh0000qzrmn831i7rn" });
+t("resources PUT: an unknown area is refused (400) inside the transaction, promptly", r.status === 400 && r.ms < FAST_MS, `${r.status} ${r.ms}ms`);
+r = await putRes(OT, { researchAreaId: area.id });
+t("resources PUT: a non-owner member is still 403, promptly", r.status === 403 && r.ms < FAST_MS, `${r.status} ${r.ms}ms`);
+const resRow = await prisma.labResource.findUniqueOrThrow({ where: { id: resId }, include: { projectLinks: true } });
+t("resources PUT: the refused requests left the stored links untouched (atomic)", resRow.researchAreaId === area.id && resRow.groupId === group.id && resRow.projectLinks.length === 1 && resRow.projectLinks[0].projectId === projPub.id);
+
+// ---- PUT /api/events/:id: assertMayLinkProject runs inside the update transaction ---------------------------------------------------
+const mkEv = await AD.req("POST", "/api/events", { title: "Tx event", startsAt: "2032-05-01T10:00:00.000Z" });
+t("events: create answers 201", mkEv.status === 201, `${mkEv.status} ${JSON.stringify(mkEv.json)}`);
+const evId: string = mkEv.json?.id;
+const putEv = (b: Browser, body: unknown) => b.req("PUT", `/api/events/${evId}`, body);
+r = await putEv(AD, { projectId: projPub.id });
+t("events PUT: linking an existing project answers 200 promptly", r.status === 200 && r.ms < FAST_MS, `${r.status} ${r.ms}ms ${r.status === 200 ? "" : JSON.stringify(r.json)}`);
+r = await putEv(AD, { projectId: "cjld2cjxh0000qzrmn831i7rn" });
+t("events PUT: an unknown project is refused (400) inside the transaction, promptly", r.status === 400 && r.ms < FAST_MS, `${r.status} ${r.ms}ms`);
+r = await putEv(OT, { projectId: projPub.id });
+t("events PUT: a plain member is still refused, promptly", (r.status === 403 || r.status === 404) && r.ms < FAST_MS, `${r.status} ${r.ms}ms`);
+const evRow = await prisma.event.findUniqueOrThrow({ where: { id: evId } });
+t("events PUT: the refused requests left the stored link untouched (atomic)", evRow.projectId === projPub.id);
 
 t("no request in this run timed out inside Prisma (no P2028 / expired-transaction message was logged)", !logged.some((l) => /P2028|expired transaction|Transaction already closed/i.test(l)), logged.filter((l) => /P2028|expired|closed/i.test(l)).slice(0, 2).join(" | "));
 

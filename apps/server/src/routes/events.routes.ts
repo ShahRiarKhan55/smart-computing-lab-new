@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Prisma } from "@prisma/client";
 import {
   canCreateEvent,
   canDeleteEvent,
@@ -24,11 +25,14 @@ const router = Router();
 const AUDITED_FIELDS = ["title", "description", "location", "url", "kind", "startsAt", "endsAt", "allDay", "projectId", "visibility"] as const;
 
 /** Only managers link an event to a project, and the project must exist (400 otherwise). */
-async function assertMayLinkProject(actor: Express.Request["user"], projectId: string | null | undefined, current: string | null) {
+/** The shared client, or the transaction client when called inside `prisma.$transaction` (see resources.routes.ts for why this matters). */
+type Db = typeof prisma | Prisma.TransactionClient;
+
+async function assertMayLinkProject(db: Db, actor: Express.Request["user"], projectId: string | null | undefined, current: string | null) {
   if (projectId === undefined || projectId === current) return;
   if (!canLinkEventToProject(actor!)) throw new HttpError(403, "Only lab managers and admins can link an event to a project.");
   if (projectId === null) return;
-  const project = await prisma.researchProject.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await db.researchProject.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) throw new HttpError(400, "Project not found.");
 }
 
@@ -70,7 +74,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { translations, visibility, projectId, ...rest } = parseOrThrow(createEventSchema, req.body);
     assertMayChangeVisibility(req.user!, visibility);
-    await assertMayLinkProject(req.user!, projectId, null);
+    await assertMayLinkProject(prisma, req.user!, projectId, null);
     const times = normalizeEventTimes({ startsAt: new Date(rest.startsAt), endsAt: rest.endsAt ? new Date(rest.endsAt) : null, allDay: rest.allDay });
 
     const created = await prisma.$transaction(async (tx) => {
@@ -113,7 +117,7 @@ router.put(
         throw new HttpError(403, "Forbidden");
       }
       assertMayChangeVisibility(req.user!, visibility);
-      await assertMayLinkProject(req.user!, projectId, existing.projectId);
+      await assertMayLinkProject(tx, req.user!, projectId, existing.projectId);
 
       // The stored range after this update must still be valid (start and end may arrive separately).
       const merged = {

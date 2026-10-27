@@ -367,6 +367,9 @@ async function connect() {
     check("9.1 another member's profile: no owner controls", !t.includes("This is your profile") && !t.includes("Edit profile") && !(await exists(".admin-bar")));
     await go("/publications");
     await waitText("Publications");
+    // The button exists only once the session lookup (/api/auth/me) has resolved, which can be after the page header is already visible; clicking
+    // before that did nothing and the check then waited in vain (reproduced by delaying /api/auth/me by 600ms).
+    await waitFor(`[...document.querySelectorAll("button,a")].some((e) => e.innerText.trim().toLowerCase().includes("+ add publication"))`);
     await clickText("+ Add publication");
     check("9.1 add-publication form offers 'show on my member profile' (server says they own a profile)", await waitText("Also show this publication on my member profile"));
     await clickText("cancel", ".modal button");

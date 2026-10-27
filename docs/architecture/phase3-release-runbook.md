@@ -288,3 +288,8 @@ Point-in-time recovery for the Production database was **not** verified in this 
 1. Operator confirms PITR availability and records the recovery point (section 4.1.3), and the approvals of 4.1.4.
 2. Explicit approval to apply the migration to Production, then to merge PR #16 (which deploys), in that order (section 4.2).
 3. Re-run the executor inspection on Production immediately before applying (state must still be: this migration `absent`, earlier ones `applied`).
+\n
+### 10.8 Later finding (Stage 4): the "no global client in a transaction" scan missed two helpers
+The scan behind scenario 13 ("none found ... by a syntax-tree scan, which does not see helpers that use the global client indirectly") was right about its own limit: `PUT /api/resources/:id` (`assertLinks`) and
+`PUT /api/events/:id` (`assertMayLinkProject`) both called a helper that queried the shared client from inside `$transaction`, and would stall ~5 s and answer 500 on a serialized connection. Fixed by passing the client
+explicitly, covered by `test:transaction-client` (resources, events) and guarded by `unit-tx-client-scan` in `test:unit`. See `stage4-ui-a11y-quality.md`.
