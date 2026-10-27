@@ -22,6 +22,9 @@ interface ProfileValues {
   department: string;
   bio: string;
   photoUrl: string;
+  googleScholarUrl: string;
+  researchGateUrl: string;
+  orcidUrl: string;
 }
 
 type FieldErrors = Partial<Record<keyof ProfileValues, string>>;
@@ -38,6 +41,9 @@ function toValues(member: TeamMember): ProfileValues {
     bio: member.bio,
     // The field is the EXTERNAL photo URL: empty while an uploaded photo is in use.
     photoUrl: isUploadedPhoto(member.photoUrl) ? "" : member.photoUrl,
+    googleScholarUrl: member.googleScholarUrl,
+    researchGateUrl: member.researchGateUrl,
+    orcidUrl: member.orcidUrl,
   };
 }
 
@@ -478,13 +484,21 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
     // photoUrl is validated and sent only if this form changed it: an uploaded photo is a same-site /api/files/ path, which the
     // external-URL rule rightly rejects, and an unchanged value must never be written back over a newer upload.
     const photoChanged = values.photoUrl !== savedValues.photoUrl;
-    const parsed = updateOwnProfileSchema.safeParse({ ...values, photoUrl: photoChanged ? values.photoUrl : undefined });
+    // The research links follow the same rule: each is sent only if this form changed it.
+    const linkIfChanged = (k: "googleScholarUrl" | "researchGateUrl" | "orcidUrl") => (values[k] !== savedValues[k] ? values[k] : undefined);
+    const parsed = updateOwnProfileSchema.safeParse({
+      ...values,
+      photoUrl: photoChanged ? values.photoUrl : undefined,
+      googleScholarUrl: linkIfChanged("googleScholarUrl"),
+      researchGateUrl: linkIfChanged("researchGateUrl"),
+      orcidUrl: linkIfChanged("orcidUrl"),
+    });
     if (!parsed.success) {
       const errors: FieldErrors = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0] as keyof ProfileValues | undefined;
-        if (key === undefined) setFormError(issue.message);
-        else if (!errors[key]) errors[key] = issue.message;
+        if (key === undefined) setFormError(knownMessage(issue.message, t));
+        else if (!errors[key]) errors[key] = knownMessage(issue.message, t);
       }
       setFieldErrors(errors);
       return;
@@ -503,7 +517,7 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
       setSuccess(true);
     } catch (err) {
       if (err instanceof ApiError) {
-        setFormError(err.status === 401 ? t("profile.sessionExpired") : err.message);
+        setFormError(err.status === 401 ? t("profile.sessionExpired") : knownMessage(err.message, t));
       } else {
         setFormError(t("error.network"));
       }
@@ -521,6 +535,11 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
       "aria-invalid": message ? (true as const) : undefined,
       "aria-describedby": message ? `f_${key}_error` : undefined,
     };
+  }
+
+  /** aria-describedby for a field that has a hint line (and, when invalid, its error line). */
+  function describe(key: keyof ProfileValues) {
+    return [fieldErrors[key] ? `f_${key}_error` : null, `f_${key}_hint`].filter(Boolean).join(" ");
   }
 
   function fieldError(key: keyof ProfileValues) {
@@ -588,6 +607,28 @@ function ProfileForm({ initial }: { initial: TeamMember }) {
             )}
             {fieldError("photoUrl")}
           </div>
+
+          <fieldset className="form-fieldset">
+            <legend>{t("research.linksLegend")}</legend>
+            <div className="form-group">
+              <label htmlFor="f_googleScholarUrl">{t("research.googleScholar")}</label>
+              <input {...field("googleScholarUrl")} placeholder="https://scholar.google.com/citations?user=…" inputMode="url" maxLength={300} aria-describedby={describe("googleScholarUrl")} />
+              <p className="form-hint" id="f_googleScholarUrl_hint">{t("research.googleScholarHint")}</p>
+              {fieldError("googleScholarUrl")}
+            </div>
+            <div className="form-group">
+              <label htmlFor="f_researchGateUrl">{t("research.researchGate")}</label>
+              <input {...field("researchGateUrl")} placeholder="https://www.researchgate.net/profile/…" inputMode="url" maxLength={300} aria-describedby={describe("researchGateUrl")} />
+              <p className="form-hint" id="f_researchGateUrl_hint">{t("research.researchGateHint")}</p>
+              {fieldError("researchGateUrl")}
+            </div>
+            <div className="form-group">
+              <label htmlFor="f_orcidUrl">{t("research.orcid")}</label>
+              <input {...field("orcidUrl")} placeholder="0000-0000-0000-0000" maxLength={300} aria-describedby={describe("orcidUrl")} />
+              <p className="form-hint" id="f_orcidUrl_hint">{t("research.orcidHint")}</p>
+              {fieldError("orcidUrl")}
+            </div>
+          </fieldset>
 
           <div className="form-actions">
             <button className="btn btn--primary form-submit" type="submit" disabled={saving || !dirty} aria-busy={saving}>

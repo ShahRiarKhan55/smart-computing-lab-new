@@ -26,7 +26,7 @@ import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } 
 
 const router = Router();
 
-const AUDITED_FIELDS = ["name", "initials", "role", "category", "department", "bio", "photoUrl", "sortOrder", "isPublished"] as const;
+const AUDITED_FIELDS = ["name", "initials", "role", "category", "department", "bio", "photoUrl", "googleScholarUrl", "researchGateUrl", "orcidUrl", "sortOrder", "isPublished"] as const;
 
 // GET /api/team -> list the CURRENT team members the viewer may see, grouped by category order (public).
 // Alumni are not part of the roster: they are listed by GET /api/alumni (routes/alumni.routes.ts), so every existing consumer of this
@@ -87,6 +87,9 @@ router.post(
           department: body.department,
           bio: body.bio,
           photoUrl: body.photoUrl,
+          googleScholarUrl: body.googleScholarUrl,
+          researchGateUrl: body.researchGateUrl,
+          orcidUrl: body.orcidUrl,
           sortOrder: body.sortOrder,
           isPublished: !isAlumni,
         },
@@ -154,6 +157,9 @@ router.put(
         department: body.department ?? existing.department,
         bio: body.bio ?? existing.bio,
         photoUrl: body.photoUrl ?? existing.photoUrl,
+        googleScholarUrl: body.googleScholarUrl ?? existing.googleScholarUrl,
+        researchGateUrl: body.researchGateUrl ?? existing.researchGateUrl,
+        orcidUrl: body.orcidUrl ?? existing.orcidUrl,
         category: targetCategory,
         sortOrder: mayPlace ? body.sortOrder ?? existing.sortOrder : existing.sortOrder,
         // The publication flag is written ONLY when the category actually enters or leaves ALUMNI. Entering unpublishes (consent has not
@@ -164,8 +170,15 @@ router.put(
       };
       // photoUrl is written only when the request names it, in BOTH write branches below, so no edit (a text-only save or a category
       // change) can put back a stale photo that a concurrent upload or removal has just replaced.
-      const { photoUrl: _unchanged, ...textData } = data;
-      const writeData = body.photoUrl === undefined ? textData : data;
+      const { photoUrl: _unchanged, googleScholarUrl: _gs, researchGateUrl: _rg, orcidUrl: _oc, ...textData } = data;
+      // The research links follow the same rule: each is written only when the request names it.
+      const writeData = {
+        ...textData,
+        ...(body.photoUrl === undefined ? {} : { photoUrl: data.photoUrl }),
+        ...(body.googleScholarUrl === undefined ? {} : { googleScholarUrl: data.googleScholarUrl }),
+        ...(body.researchGateUrl === undefined ? {} : { researchGateUrl: data.researchGateUrl }),
+        ...(body.orcidUrl === undefined ? {} : { orcidUrl: data.orcidUrl }),
+      };
       let row;
       if (willBeAlumni && !wasAlumni) {
         // Conditional on "still has no account", so an account linked concurrently can never end up on an alumni profile.

@@ -2,6 +2,7 @@ export * from "./schemas/enums.js";
 export * from "./schemas/common.js";
 export * from "./schemas/auth.js";
 export * from "./schemas/user.js";
+export * from "./schemas/researchLinks.js";
 export * from "./schemas/team.js";
 export * from "./schemas/publication.js";
 export * from "./schemas/news.js";

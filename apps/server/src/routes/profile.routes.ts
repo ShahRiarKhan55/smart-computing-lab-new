@@ -20,7 +20,7 @@ const router = Router();
 
 router.use(requireAuth);
 
-const AUDITED_FIELDS = ["name", "initials", "role", "department", "bio", "photoUrl"] as const;
+const AUDITED_FIELDS = ["name", "initials", "role", "department", "bio", "photoUrl", "googleScholarUrl", "researchGateUrl", "orcidUrl"] as const;
 
 // GET /api/profile -> the logged-in user's own team profile
 router.get(
@@ -58,11 +58,22 @@ router.put(
         department: body.department ?? member.department,
         bio: body.bio ?? member.bio,
         photoUrl: body.photoUrl ?? member.photoUrl,
+        googleScholarUrl: body.googleScholarUrl ?? member.googleScholarUrl,
+        researchGateUrl: body.researchGateUrl ?? member.researchGateUrl,
+        orcidUrl: body.orcidUrl ?? member.orcidUrl,
       };
       // photoUrl is written only when the request names it, so a text-only save can never put back a stale photo that a
       // concurrent upload has just replaced.
-      const { photoUrl: _unchanged, ...textData } = data;
-      const row = await tx.teamMember.update({ where: { id: member.id }, data: body.photoUrl === undefined ? textData : data });
+      const { photoUrl: _unchanged, googleScholarUrl: _gs, researchGateUrl: _rg, orcidUrl: _oc, ...textData } = data;
+      // The research links follow the same rule: each is written only when the request names it.
+      const writeData = {
+        ...textData,
+        ...(body.photoUrl === undefined ? {} : { photoUrl: data.photoUrl }),
+        ...(body.googleScholarUrl === undefined ? {} : { googleScholarUrl: data.googleScholarUrl }),
+        ...(body.researchGateUrl === undefined ? {} : { researchGateUrl: data.researchGateUrl }),
+        ...(body.orcidUrl === undefined ? {} : { orcidUrl: data.orcidUrl }),
+      };
+      const row = await tx.teamMember.update({ where: { id: member.id }, data: writeData });
       // Replacing or clearing an uploaded photo retires the old file in this same transaction (no-op if the URL is unchanged).
       const retiredKey = await retireReplacedPhoto(tx, { memberId: member.id, previousPhotoUrl: member.photoUrl, nextPhotoUrl: row.photoUrl, actor: req.user!, reason: "replaced-profile-photo" });
       const changed = changedFields(member, data, [...AUDITED_FIELDS]);

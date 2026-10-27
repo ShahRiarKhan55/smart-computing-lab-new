@@ -108,6 +108,11 @@ model TeamMember {
   // changes for current members; an ALUMNI profile is created UNPUBLISHED and an admin publishes it
   // explicitly (lib/memberVisibility.ts). Only `true` is public: see publishedMemberWhere().
   isPublished Boolean  @default(true)
+  // Phase 3C: optional links to the member's research profiles on three distinct external services. "" = none (same convention as photoUrl);
+  // the shared validators (packages/shared/src/schemas/researchLinks.ts) are the only writers' gate and store each in a canonical form.
+  googleScholarUrl String @default("")
+  researchGateUrl  String @default("")
+  orcidUrl         String @default("")
 
   user             User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   historyEntries   HistoryEntry[]

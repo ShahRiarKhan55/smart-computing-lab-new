@@ -1,4 +1,4 @@
-import { ALUMNI_MESSAGES, KNOWLEDGE_CATEGORIES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
+import { ALUMNI_MESSAGES, KNOWLEDGE_CATEGORIES, RESEARCH_LINK_MESSAGES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -29,6 +29,11 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   [ALUMNI_MESSAGES.publicationField]: "error.alumniPublicationField",
   [ALUMNI_MESSAGES.alumniOnlyPublication]: "error.alumniOnlyPublication",
   [ALUMNI_MESSAGES.publicationConflict]: "error.publicationConflict",
+  // Research profile links (Phase 3C): the fixed messages of the three validators (RESEARCH_LINK_MESSAGES in @scl/shared).
+  [RESEARCH_LINK_MESSAGES.googleScholar]: "error.researchLinkGoogleScholar",
+  [RESEARCH_LINK_MESSAGES.researchGate]: "error.researchLinkResearchGate",
+  [RESEARCH_LINK_MESSAGES.orcid]: "error.researchLinkOrcid",
+  [RESEARCH_LINK_MESSAGES.tooLong]: "error.researchLinkTooLong",
   "Request body must be a JSON object.": "error.requestBodyInvalid",
   // Google account linking (Phase 2.2).
   "A Google account is already connected.": "error.googleAlreadyConnected",

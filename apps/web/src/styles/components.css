@@ -1869,3 +1869,46 @@ button.notification-item--plain {
   padding-left: 18px;
   color: var(--danger);
 }
+
+/* ------------------------------------------------------------
+   Research profile links (Phase 3C): circular, neutral text marks (GS / RG / iD), no third-party logos.
+   44px square meets the touch-target minimum; the focus ring comes from the global :focus-visible rule.
+   ------------------------------------------------------------ */
+.research-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.research-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: var(--green-800);
+  background: var(--green-50);
+  border: 1px solid var(--green-600);
+  border-radius: 50%;
+}
+
+.research-link:hover {
+  color: #fff;
+  background: var(--green-800);
+  border-color: var(--green-800);
+}
+
+.team-card .research-links {
+  margin-top: var(--space-3);
+}

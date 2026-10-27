@@ -1,4 +1,4 @@
-import { canEditOwnProfile, isAdmin } from "@scl/shared";
+import { canEditOwnProfile, isAdmin, isGoogleScholarUrl, isOrcidUrl, isResearchGateUrl } from "@scl/shared";
 import type {
   AreaRef,
   NewsItem,
@@ -22,6 +22,19 @@ export const isOwnProfile = (viewer: Viewer, profileUserId: string | null): bool
   canEditOwnProfile(viewer, profileUserId);
 
 /** A team profile as the public API shows it. Never includes `userId`. */
+/**
+ * The three research links of a profile, re-checked on every read: a stored value is returned only if it is exactly the canonical
+ * URL the write path produces for that service, otherwise "" (defence in depth against a value that reached the column some other
+ * way, e.g. a manual edit). Callers only pass rows that are already visible to the viewer, so this adds no new exposure.
+ */
+export function safeResearchLinks(row: { googleScholarUrl: string; researchGateUrl: string; orcidUrl: string }) {
+  return {
+    googleScholarUrl: isGoogleScholarUrl(row.googleScholarUrl) ? row.googleScholarUrl : "",
+    researchGateUrl: isResearchGateUrl(row.researchGateUrl) ? row.researchGateUrl : "",
+    orcidUrl: isOrcidUrl(row.orcidUrl) ? row.orcidUrl : "",
+  };
+}
+
 export function toTeamMember(
   row: {
     id: string;
@@ -33,6 +46,9 @@ export function toTeamMember(
     department: string;
     bio: string;
     photoUrl: string;
+    googleScholarUrl: string;
+    researchGateUrl: string;
+    orcidUrl: string;
     sortOrder: number;
     isPublished: boolean;
   },
@@ -48,6 +64,7 @@ export function toTeamMember(
     department: row.department,
     bio: row.bio,
     photoUrl: row.photoUrl,
+    ...safeResearchLinks(row),
     sortOrder: row.sortOrder,
     // Administrators only (they alone can see an unpublished profile or change the flag); the shape for everyone else is unchanged.
     // Strict: anything but `true` reads back as false.

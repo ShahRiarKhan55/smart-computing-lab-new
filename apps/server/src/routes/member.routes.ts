@@ -19,7 +19,7 @@ import { isMemberVisible, mayManageAlumni } from "../lib/memberVisibility.js";
 import { optionalAuth, requireOwnerOrManager } from "../middleware/auth.js";
 import { assertValidId, diffLinks } from "../lib/authorLinks.js";
 import { visibleTo } from "../lib/visibility.js";
-import { asGroupRole, asProjectRole, asProjectStatus, isOwnProfile } from "../lib/serializers.js";
+import { asGroupRole, asProjectRole, asProjectStatus, isOwnProfile, safeResearchLinks } from "../lib/serializers.js";
 import { idList, recordAudit } from "../lib/audit.js";
 import { localizedNews, localizedPublications, loadRefTranslations, pick, ROLLUP_LIMIT } from "../lib/researchGraph.js";
 import { eventInclude, serializeEvents } from "../lib/eventSerializers.js";
@@ -141,6 +141,7 @@ router.get(
       department: member.department,
       bio: member.bio,
       photoUrl: member.photoUrl,
+      ...safeResearchLinks(member),
       history: member.historyEntries.map(toHistoryEntry),
       publications: await localizedPublications(publications, viewer, locale),
       news: await localizedNews(news, viewer, locale),

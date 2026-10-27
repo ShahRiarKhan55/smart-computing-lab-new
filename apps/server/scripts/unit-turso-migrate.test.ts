@@ -78,6 +78,7 @@ const GALLERY_1 = { name: "20261011130000_gallery_item_images", sha256: "aee1e5a
 const GALLERY_2 = { name: "20261011140000_gallery_upload_attempts", sha256: "20d099cc1dd7f7c30deaabf92a10ed12355b982e627435142efb17c585228e81" };
 const OAUTH = { name: "20261012100000_oauth_identity", sha256: "7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e" };
 const TEAM = { name: "20261020120000_team_member_is_published", sha256: "502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b" };
+const RESEARCH = { name: "20261027120000_team_member_research_links", sha256: "61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44" };
 const copyMigrations = (dest: string, names: string[]) => {
   for (const n of names) {
     mkdirSync(path.join(dest, n), { recursive: true });
@@ -90,8 +91,8 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
 // 1. Migration files: pinned, additive, parsed
 {
   const m = reviewed();
-  t("the reviewed set is exactly the two gallery migrations, the OAuth identity migration and the Phase 3B isPublished column, in that order, with these exact pins", JSON.stringify(REVIEWED_MIGRATIONS) === JSON.stringify([GALLERY_1, GALLERY_2, OAUTH, TEAM]));
-  t("the four reviewed migrations load (hashes match the files on disk)", m.length === 4 && m[0].name === GALLERY_1.name && m[1].name === GALLERY_2.name && m[2].name === OAUTH.name && m[3].name === TEAM.name);
+  t("the reviewed set is exactly the two gallery migrations, the OAuth identity migration, the Phase 3B isPublished column and the Phase 3C research links, in that order, with these exact pins", JSON.stringify(REVIEWED_MIGRATIONS) === JSON.stringify([GALLERY_1, GALLERY_2, OAUTH, TEAM, RESEARCH]));
+  t("the five reviewed migrations load (hashes match the files on disk)", m.length === 5 && m[0].name === GALLERY_1.name && m[1].name === GALLERY_2.name && m[2].name === OAUTH.name && m[3].name === TEAM.name && m[4].name === RESEARCH.name);
   t("the OAuth migration file on disk hashes to its pin", sha256(readFileSync(path.join(MIGRATIONS_DIR, OAUTH.name, "migration.sql"), "utf8").replace(/\r\n/g, "\n")) === OAUTH.sha256);
   t("the first three contain 3 statements each (1 table + 2 indexes)", m.slice(0, 3).every((x) => x.statements.length === 3 && x.statements.filter((s) => s.kind === "table").length === 1));
   t("the Phase 3B migration is exactly one column statement: TeamMember.isPublished BOOLEAN NOT NULL DEFAULT true", m[3].statements.length === 1 && m[3].statements[0].kind === "column" && m[3].statements[0].name === "TeamMember.isPublished" && m[3].statements[0].column?.type === "BOOLEAN" && m[3].statements[0].column?.defaultValue === "true");
@@ -102,7 +103,7 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
     mkdirSync(path.join(tamper, r.name), { recursive: true });
     copyFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), path.join(tamper, r.name, "migration.sql"));
   }
-  t("an untouched copy still loads", loadReviewedMigrations(tamper).length === 4);
+  t("an untouched copy still loads", loadReviewedMigrations(tamper).length === 5);
   const f = path.join(tamper, REVIEWED_MIGRATIONS[1].name, "migration.sql");
   writeFileSync(f, readFileSync(f, "utf8") + "\nCREATE INDEX \"Extra_idx\" ON \"User\"(\"id\");\n");
   t("a modified migration file is refused (hash mismatch)", await rejects(() => loadReviewedMigrations(tamper), "MIGRATION_FILE"));
@@ -115,7 +116,7 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
     return d;
   };
   const exact = fresh("oauth-exact");
-  t("OAuth: the exact reviewed file is approved", loadReviewedMigrations(exact).length === 4);
+  t("OAuth: the exact reviewed file is approved", loadReviewedMigrations(exact).length === 5);
   const oauthRaw = readFileSync(oauthPath(exact), "utf8");
   const variants: [string, string][] = [
     ["an appended statement", oauthRaw + '\nCREATE INDEX "Extra_idx" ON "User"("id");\n'],
@@ -133,13 +134,13 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
   t("OAuth: a CRLF checkout of the exact file still matches", (() => {
     const d = fresh("oauth-crlf");
     writeFileSync(oauthPath(d), oauthRaw.replace(/\n/g, "\r\n"));
-    return loadReviewedMigrations(d).length === 4;
+    return loadReviewedMigrations(d).length === 5;
   })());
   // Unknown migrations stay rejected: an unpinned directory is never loaded, and a pin that does not match is refused.
   const withUnknown = fresh("oauth-unknown");
   mkdirSync(path.join(withUnknown, "20261099000000_unreviewed"), { recursive: true });
   writeFileSync(path.join(withUnknown, "20261099000000_unreviewed", "migration.sql"), 'CREATE TABLE "Unreviewed" ("id" TEXT NOT NULL PRIMARY KEY);\n');
-  t("an unreviewed migration directory is never loaded (only the pinned names)", loadReviewedMigrations(withUnknown).map((x) => x.name).join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name].join());
+  t("an unreviewed migration directory is never loaded (only the pinned names)", loadReviewedMigrations(withUnknown).map((x) => x.name).join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name, RESEARCH.name].join());
   t("a pin for an unknown migration with a wrong hash is refused", await rejects(() => loadReviewedMigrations(withUnknown, [...REVIEWED_MIGRATIONS, { name: "20261099000000_unreviewed", sha256: "0".repeat(64) }]), "MIGRATION_FILE"));
   t("a pin for a migration that does not exist is refused", await rejects(() => loadReviewedMigrations(withUnknown, [...REVIEWED_MIGRATIONS, { name: "20261098000000_nonexistent", sha256: "0".repeat(64) }]), "MIGRATION_FILE"));
   // Even a hash-matching file must still pass the SQL-pattern safeguards (the hash is not the only gate).
@@ -217,12 +218,12 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
   const before = await schemaDump(db.client);
   const countsBefore = await countTables(db.client);
   const check = await execute(db.client, reviewed(), { apply: false });
-  t("inspect-only: reports all four migrations absent and a plan", check.outcome === "planned" && check.before.length === 4 && check.before.every((s) => s.status === "absent"));
+  t("inspect-only: reports all five migrations absent and a plan", check.outcome === "planned" && check.before.length === 5 && check.before.every((s) => s.status === "absent"));
   t("inspect-only: the database is byte-for-byte unchanged (schema dump identical)", (await schemaDump(db.client)) === before);
   t("the seeded rows are counted (so the later 'unchanged' check is meaningful)", countsBefore.GalleryItem === 1 && countsBefore.StoredFile === 1 && countsBefore.User >= 1);
 
   const applied = await execute(db.client, reviewed(), { apply: true });
-  t("apply: outcome applied, all four migrations applied in order", applied.outcome === "applied" && applied.appliedMigrations.join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name].join() && applied.after.every((s) => s.status === "applied"));
+  t("apply: outcome applied, all five migrations applied in order", applied.outcome === "applied" && applied.appliedMigrations.join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name, RESEARCH.name].join() && applied.after.every((s) => s.status === "applied"));
   t("apply: existing GalleryItem / StoredFile / User row counts unchanged", JSON.stringify(applied.countsBefore) === JSON.stringify(applied.countsAfter));
   const names = (await db.client.execute(`SELECT name FROM sqlite_master WHERE name IN ('GalleryImage','GalleryUploadAttempt','GalleryImage_fileId_key','GalleryImage_itemId_sortOrder_idx','GalleryUploadAttempt_createdAt_idx','GalleryUploadAttempt_userId_key_key')`)).rows;
   t("apply: both tables and all four indexes exist", names.length === 6);
@@ -249,16 +250,16 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
   direct.client.close();
 }
 {
-  // The expected production shape: the gallery migrations already applied, OAuth and the Phase 3B column absent -> exactly those two are applied.
+  // The release-time shape (before Phase 3B was applied): the gallery migrations already applied, OAuth, the Phase 3B column and the Phase 3C columns absent -> exactly those three are applied.
   const db = await preReleaseDb();
   await addRows(db.client);
   await db.client.executeMultiple(reviewed()[0].sql);
   await db.client.executeMultiple(reviewed()[1].sql);
   const countsBefore = await countTables(db.client);
   const plan = await execute(db.client, reviewed(), { apply: false });
-  t("production shape: inspect-only plans exactly the OAuth and Phase 3B migrations", plan.outcome === "planned" && plan.before.map((s) => s.status).join() === "applied,applied,absent,absent");
+  t("production shape: inspect-only plans exactly the OAuth, Phase 3B and Phase 3C migrations", plan.outcome === "planned" && plan.before.map((s) => s.status).join() === "applied,applied,absent,absent,absent");
   const r = await execute(db.client, reviewed(), { apply: true });
-  t("production shape: apply runs ONLY the OAuth and Phase 3B migrations and leaves existing rows alone", r.outcome === "applied" && r.appliedMigrations.join() === [OAUTH.name, TEAM.name].join() && JSON.stringify(await countTables(db.client)) === JSON.stringify(countsBefore));
+  t("production shape: apply runs ONLY the OAuth, Phase 3B and Phase 3C migrations and leaves existing rows alone", r.outcome === "applied" && r.appliedMigrations.join() === [OAUTH.name, TEAM.name, RESEARCH.name].join() && JSON.stringify(await countTables(db.client)) === JSON.stringify(countsBefore));
   t("production shape: a second apply is a no-op", (await execute(db.client, reviewed(), { apply: true })).outcome === "nothing-to-do");
   db.client.close();
 }
@@ -317,7 +318,7 @@ await failsClosedOn(async (c) => {
   const db = await preReleaseDb();
   await db.client.executeMultiple(reviewed()[0].sql);
   const r = await execute(db.client, reviewed(), { apply: true });
-  t("with the first migration already applied, the other three are applied", r.outcome === "applied" && r.appliedMigrations.join() === [reviewed()[1].name, reviewed()[2].name, reviewed()[3].name].join());
+  t("with the first migration already applied, the other four are applied", r.outcome === "applied" && r.appliedMigrations.join() === [reviewed()[1].name, reviewed()[2].name, reviewed()[3].name, reviewed()[4].name].join());
   db.client.close();
 }
 {
@@ -428,7 +429,7 @@ await failsClosedOn(async (c) => {
   t("an interrupted run reports an error", err instanceof Error);
   t("... and after reconnecting the database is exactly as it was (no partial schema)", (await schemaDump(reopened)) === dump);
   const states = await Promise.all(reviewed().map(async (m) => (await classify(reopened, m, await expectedSchema(m))).status));
-  t("... all migrations classify as absent, so a re-run is safe", states.length === 4 && states.every((s) => s === "absent"));
+  t("... all migrations classify as absent, so a re-run is safe", states.length === 5 && states.every((s) => s === "absent"));
   reopened.close();
 }
 {
@@ -696,6 +697,102 @@ t("COUNTED_TABLES covers the data tables named in the task", ["User", "StoredFil
     t("Phase 3B: a failed COMMIT is reported, not guessed", err instanceof MigrationRefusal && err.code === "COMMIT");
     t("... and the column is NOT there (rolled back, schema identical)", (await schemaDump(db.client)) === dump);
     t("... a retry then succeeds", (await execute(db.client, teamOnly(), { apply: true })).outcome === "applied");
+    db.client.close();
+  }
+
+  // ---- Phase 3C: three optional research-link columns (TEXT NOT NULL DEFAULT '') -------------------------------------------------
+  const rdir = path.join(TMP, "research-pin");
+  copyMigrations(rdir, [RESEARCH.name]);
+  const researchOnly = [RESEARCH];
+  const rspec = loadReviewedMigrations(rdir, researchOnly);
+  t("Phase 3C: the file loads under its pin", rspec.length === 1);
+  t("Phase 3C: exactly three column statements: TeamMember.googleScholarUrl / researchGateUrl / orcidUrl, each TEXT with default ''", rspec[0].statements.length === 3 && rspec[0].statements.every((s) => s.kind === "column" && s.table === "TeamMember" && s.column?.type === "TEXT" && s.column?.defaultValue === "''") && rspec[0].statements.map((s) => s.name).join() === "TeamMember.googleScholarUrl,TeamMember.researchGateUrl,TeamMember.orcidUrl");
+  const rf = path.join(rdir, RESEARCH.name, "migration.sql");
+  const rraw = readFileSync(rf, "utf8");
+  for (const [label, edited] of [["a changed default", rraw.replace("\"orcidUrl\" TEXT NOT NULL DEFAULT ''", "\"orcidUrl\" TEXT NOT NULL DEFAULT 'x'")], ["a trailing space", rraw.replace(/\n$/, " \n")], ["a fourth column", rraw + 'ALTER TABLE "TeamMember" ADD COLUMN "extraUrl" TEXT NOT NULL DEFAULT \'\';\n'], ["a removed column", rraw.replace(/ALTER TABLE "TeamMember" ADD COLUMN "orcidUrl"[^\n]*\n/, "")]] as [string, string][]) {
+    writeFileSync(rf, edited);
+    t(`the Phase 3C file with ${label} is refused (hash mismatch)`, await rejects(() => loadReviewedMigrations(rdir, researchOnly), "MIGRATION_FILE"));
+  }
+  writeFileSync(rf, rraw);
+  // The narrow quote allowance: only the empty default of an added text column, as a whole statement. Everything else stays refused.
+  const OK3C = 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL DEFAULT \'\'';
+  t("Phase 3C parser: the exact text-column form is accepted", parseAdditive(OK3C + ";").length === 1 && parseAdditive(OK3C + ";")[0].column?.type === "TEXT");
+  const refused3c: [string, string][] = [
+    ["a non-empty default", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL DEFAULT \'a\''],
+    ["a nullable text column", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT DEFAULT \'\''],
+    ["a text column with no default", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL'],
+    ["another type with an empty-string default", 'ALTER TABLE "TeamMember" ADD COLUMN "x" VARCHAR NOT NULL DEFAULT \'\''],
+    ["a semicolon hidden in a literal", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL DEFAULT \';\''],
+    ["an empty literal followed by more text", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL DEFAULT \'\' CHECK (1)'],
+    ["an empty default inside CREATE TABLE", 'CREATE TABLE "Extra" ("id" TEXT NOT NULL PRIMARY KEY, "n" TEXT NOT NULL DEFAULT \'\')'],
+    ["a backtick", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL DEFAULT `x`'],
+    ["a block comment", 'ALTER TABLE "TeamMember" ADD COLUMN "x" TEXT NOT NULL DEFAULT \'\' /* x */'],
+    ["an empty default mixed with CREATE TABLE", OK3C + ';\nCREATE TABLE "Extra" ("id" TEXT NOT NULL PRIMARY KEY)'],
+    ["a smuggled DROP after the column", OK3C + ';\nDROP TABLE "User"'],
+    ["an UPDATE after the column", OK3C + ';\nUPDATE "TeamMember" SET "x" = \'\''],
+  ];
+  for (const [label, sql] of refused3c) t(`Phase 3C refused: ${label}`, await rejects(() => parseAdditive(sql + ";"), "NOT_ADDITIVE"));
+  {
+    const db = await preReleaseDb();
+    for (const r of REVIEWED_MIGRATIONS.slice(0, 4)) await db.client.executeMultiple(readFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), "utf8"));
+    await insertMember(db.client, "m1");
+    await insertMember(db.client, "m2", "ALUMNI");
+    await db.client.execute(`UPDATE "TeamMember" SET "isPublished" = 0 WHERE "id" = 'm2'`);
+    await db.client.execute({ sql: `INSERT INTO "HistoryEntry" ("id","teamMemberId","year","title","updatedAt") VALUES ('h1','m1','2020','t',CURRENT_TIMESTAMP)`, args: [] });
+    const researchSpec = () => loadReviewedMigrations(MIGRATIONS_DIR, researchOnly);
+    const plan = await execute(db.client, researchSpec(), { apply: false });
+    t("Phase 3C: inspect-only plans the three columns and writes nothing", plan.outcome === "planned" && plan.before[0].status === "absent" && plan.before[0].missing.length === 3 && !(await db.client.execute(`PRAGMA table_info("TeamMember")`)).rows.some((r) => String(r.name) === "orcidUrl"));
+    const done = await execute(db.client, researchSpec(), { apply: true });
+    t("Phase 3C: apply succeeds", done.outcome === "applied" && done.appliedMigrations.join() === RESEARCH.name && done.after[0].status === "applied");
+    const rows = (await db.client.execute(`SELECT "id","isPublished","googleScholarUrl" AS g,"researchGateUrl" AS r,"orcidUrl" AS o FROM "TeamMember" ORDER BY "id"`)).rows;
+    t("Phase 3C: every pre-existing row reads back '' for the three columns and none was lost", rows.length === 2 && rows.every((x) => x.g === "" && x.r === "" && x.o === ""));
+    t("Phase 3C: the unpublished alumnus is still unpublished (the consent flag is untouched)", Number(rows.find((x) => x.id === "m2")?.isPublished) === 0 && Number(rows.find((x) => x.id === "m1")?.isPublished) === 1);
+    t("Phase 3C: dependent rows survived and there are no foreign-key violations", Number((await db.client.execute(`SELECT COUNT(*) AS n FROM "HistoryEntry"`)).rows[0].n) === 1 && (await db.client.execute("PRAGMA foreign_key_check")).rows.length === 0);
+    const cols = (await db.client.execute(`PRAGMA table_info("TeamMember")`)).rows;
+    t("Phase 3C: each column is TEXT NOT NULL DEFAULT ''", ["googleScholarUrl", "researchGateUrl", "orcidUrl"].every((n) => { const c = cols.find((r) => r.name === n); return String(c?.type) === "TEXT" && Number(c?.notnull) === 1 && String(c?.dflt_value) === "''"; }));
+    t("Phase 3C: a row inserted by older code (naming none of the columns) gets ''", (await insertMember(db.client, "old1"), String((await db.client.execute(`SELECT "googleScholarUrl" AS g FROM "TeamMember" WHERE "id" = 'old1'`)).rows[0].g) === ""));
+    t("Phase 3C: a second apply is a no-op (idempotent)", (await execute(db.client, researchSpec(), { apply: true })).outcome === "nothing-to-do");
+    const direct = await preReleaseDb();
+    for (const r of REVIEWED_MIGRATIONS.slice(0, 5)) await direct.client.executeMultiple(readFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), "utf8"));
+    const dump = async (c: Client) => JSON.stringify((await c.execute(`PRAGMA table_info("TeamMember")`)).rows.map((r) => [r.name, r.type, r.notnull, r.dflt_value]));
+    t("Phase 3C: the executor's result equals applying the migration file directly", (await dump(db.client)) === (await dump(direct.client)));
+    db.client.close();
+    direct.client.close();
+  }
+  {
+    // Partial: one of the three columns already exists exactly -> refused (STATE), the other two are not added.
+    const db = await preReleaseDb();
+    for (const r of REVIEWED_MIGRATIONS.slice(0, 4)) await db.client.executeMultiple(readFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), "utf8"));
+    await db.client.execute(`ALTER TABLE "TeamMember" ADD COLUMN "googleScholarUrl" TEXT NOT NULL DEFAULT ''`);
+    const dump = await schemaDump(db.client);
+    t("Phase 3C: a PARTIAL state (1 of 3 columns) is refused, never completed blindly", await rejects(() => execute(db.client, loadReviewedMigrations(MIGRATIONS_DIR, researchOnly), { apply: true }), "STATE"));
+    t("... and nothing was written", (await schemaDump(db.client)) === dump);
+    db.client.close();
+  }
+  {
+    // Divergent: a column exists with a different shape.
+    const db = await preReleaseDb();
+    for (const r of REVIEWED_MIGRATIONS.slice(0, 4)) await db.client.executeMultiple(readFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), "utf8"));
+    await insertMember(db.client, "m1");
+    await db.client.execute(`ALTER TABLE "TeamMember" ADD COLUMN "orcidUrl" TEXT`);
+    const dump = await schemaDump(db.client);
+    t("Phase 3C: a column that exists with a different shape is DIVERGENT and the run is refused", await rejects(() => execute(db.client, loadReviewedMigrations(MIGRATIONS_DIR, researchOnly), { apply: true }), "STATE"));
+    t("... and nothing was written", (await schemaDump(db.client)) === dump);
+    db.client.close();
+  }
+  {
+    // A failure inside the write transaction rolls all three ALTERs back (atomic).
+    const db = await preReleaseDb();
+    for (const r of REVIEWED_MIGRATIONS.slice(0, 4)) await db.client.executeMultiple(readFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), "utf8"));
+    await insertMember(db.client, "m1");
+    const dump = await schemaDump(db.client);
+    const wrap = (tx: Transaction): Transaction =>
+      new Proxy(tx, { get(target, prop) { if (prop === "commit") return async () => { throw new Error("injected commit failure"); }; const v = Reflect.get(target, prop); return typeof v === "function" ? v.bind(target) : v; } }) as Transaction;
+    let err: unknown;
+    try { await execute(db.client, loadReviewedMigrations(MIGRATIONS_DIR, researchOnly), { apply: true, wrapTransaction: wrap }); } catch (e) { err = e; }
+    t("Phase 3C: a failed COMMIT is reported, not guessed", err instanceof MigrationRefusal && err.code === "COMMIT");
+    t("... and none of the three columns is there (rolled back, schema identical)", (await schemaDump(db.client)) === dump);
+    t("... a retry then succeeds", (await execute(db.client, loadReviewedMigrations(MIGRATIONS_DIR, researchOnly), { apply: true })).outcome === "applied");
     db.client.close();
   }
 }

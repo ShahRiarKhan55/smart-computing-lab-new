@@ -22,6 +22,10 @@ export const memberProfileSchema = z.object({
   department: z.string(),
   bio: z.string(),
   photoUrl: z.string(),
+  /** Phase 3C optional research links (canonical URL or ""); see teamMemberSchema. */
+  googleScholarUrl: z.string(),
+  researchGateUrl: z.string(),
+  orcidUrl: z.string(),
   history: z.array(historyEntrySchema),
   publications: z.array(publicationSchema),
   news: z.array(newsItemSchema),

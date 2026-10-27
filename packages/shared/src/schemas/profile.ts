@@ -14,6 +14,9 @@ export const updateOwnProfileSchema = z
     department: teamMemberFields.department.optional(),
     bio: teamMemberFields.bio.optional(),
     photoUrl: teamMemberFields.photoUrl.optional(),
+    googleScholarUrl: teamMemberFields.googleScholarUrl.optional(),
+    researchGateUrl: teamMemberFields.researchGateUrl.optional(),
+    orcidUrl: teamMemberFields.orcidUrl.optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
 export type UpdateOwnProfileInput = z.infer<typeof updateOwnProfileSchema>;

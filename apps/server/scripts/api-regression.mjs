@@ -880,10 +880,11 @@ async function phase91(admin, guest) {
 
   // ------------------------------------------------------------------
   section("phase 9.1: profile privacy — no account ids in any response");
-  const PROFILE_KEYS = "bio,category,department,id,initials,isOwn,name,photoUrl,role,sortOrder";
+  // Phase 3C added the three research links (googleScholarUrl, orcidUrl, researchGateUrl); the allow-list stays exact.
+  const PROFILE_KEYS = "bio,category,department,googleScholarUrl,id,initials,isOwn,name,orcidUrl,photoUrl,researchGateUrl,role,sortOrder";
   // canMessage added in Phase 12 (private messaging): a UX hint the /member/:id serializer sends
   // alongside isOwn, never an account id.
-  const MEMBER_KEYS = "areas,bio,canMessage,category,department,events,groups,history,id,initials,isOwn,name,news,photoUrl,projects,publications,role";
+  const MEMBER_KEYS = "areas,bio,canMessage,category,department,events,googleScholarUrl,groups,history,id,initials,isOwn,name,news,orcidUrl,photoUrl,projects,publications,researchGateUrl,role";
   // Any key that names an account/credential, or any value equal to a real account id.
   const leakOf = (res) => {
     const txt = JSON.stringify(res.json ?? null);
