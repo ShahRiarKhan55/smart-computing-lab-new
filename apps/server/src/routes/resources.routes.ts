@@ -1,5 +1,6 @@
 import { publishedMemberWhere } from "../lib/memberVisibility.js";
 import { Router } from "express";
+import type { Prisma } from "@prisma/client";
 import {
   asResourceType,
   canCreateResource,
@@ -61,34 +62,38 @@ type CurrentLinks = { [K in keyof SingleLinks]-?: string | null };
  * exactly like a missing one). A link that is not being changed is not re-checked, so an editor can still save
  * a resource whose linked record was later hidden. `projectIds` is checked only for projects NEWLY added.
  */
-async function assertLinks(actor: Viewer, links: SingleLinks, current: CurrentLinks | null, addedProjectIds: string[]) {
+/** The shared client, or the transaction client when called inside `prisma.$transaction`: a query on the shared client from inside a transaction
+ * waits for the connection (and, with the libsql adapter, the mutex) that the transaction itself holds, until Prisma's 5 s timeout, then 500. */
+type Db = typeof prisma | Prisma.TransactionClient;
+
+async function assertLinks(db: Db, actor: Viewer, links: SingleLinks, current: CurrentLinks | null, addedProjectIds: string[]) {
   const changed = (key: keyof SingleLinks) => links[key] !== undefined && links[key] !== null && links[key] !== (current?.[key] ?? null);
   if (changed("researchAreaId")) {
-    const a = await prisma.researchArea.findUnique({ where: { id: links.researchAreaId! }, select: { visibility: true } });
+    const a = await db.researchArea.findUnique({ where: { id: links.researchAreaId! }, select: { visibility: true } });
     if (!a || !canView(actor, a.visibility)) throw new HttpError(400, "Research area not found.");
   }
   if (changed("groupId")) {
-    const g = await prisma.researchGroup.findUnique({ where: { id: links.groupId! }, select: { visibility: true } });
+    const g = await db.researchGroup.findUnique({ where: { id: links.groupId! }, select: { visibility: true } });
     if (!g || !canView(actor, g.visibility)) throw new HttpError(400, "Group not found.");
   }
   if (changed("knowledgeDocId")) {
-    const d = await prisma.knowledgeDoc.findUnique({ where: { id: links.knowledgeDocId! }, select: { visibility: true } });
+    const d = await db.knowledgeDoc.findUnique({ where: { id: links.knowledgeDocId! }, select: { visibility: true } });
     if (!d || !canView(actor, d.visibility)) throw new HttpError(400, "Document not found.");
   }
   if (changed("publicationId")) {
-    const p = await prisma.publication.findUnique({ where: { id: links.publicationId! }, select: { visibility: true } });
+    const p = await db.publication.findUnique({ where: { id: links.publicationId! }, select: { visibility: true } });
     if (!p || !canView(actor, p.visibility)) throw new HttpError(400, "Publication not found.");
   }
   if (changed("eventId")) {
-    const e = await prisma.event.findUnique({ where: { id: links.eventId! }, select: { visibility: true } });
+    const e = await db.event.findUnique({ where: { id: links.eventId! }, select: { visibility: true } });
     if (!e || !canView(actor, e.visibility)) throw new HttpError(400, "Event not found.");
   }
   if (changed("teamMemberId")) {
-    const t = await prisma.teamMember.findFirst({ where: { id: links.teamMemberId!, ...publishedMemberWhere(actor) }, select: { id: true } });
+    const t = await db.teamMember.findFirst({ where: { id: links.teamMemberId!, ...publishedMemberWhere(actor) }, select: { id: true } });
     if (!t) throw new HttpError(400, "Researcher not found.");
   }
   if (addedProjectIds.length > 0) {
-    const found = await prisma.researchProject.findMany({ where: { id: { in: addedProjectIds } }, select: { visibility: true } });
+    const found = await db.researchProject.findMany({ where: { id: { in: addedProjectIds } }, select: { visibility: true } });
     if (found.length !== addedProjectIds.length || found.some((p) => !canView(actor, p.visibility))) throw new HttpError(400, "Project not found.");
   }
 }
@@ -142,7 +147,7 @@ router.post(
     const { translations, visibility, metadata, projectIds, ...rest } = input;
     const { name, resourceType, description, version, vendor, identifier, url, environment, ...links } = rest;
     assertMayChangeVisibility(req.user!, visibility);
-    await assertLinks(req.user!, links, null, projectIds ?? []);
+    await assertLinks(prisma, req.user!, links, null, projectIds ?? []);
 
     const created = await prisma.$transaction(async (tx) => {
       const row = await tx.labResource.create({
@@ -233,7 +238,7 @@ router.put(
       const nextIds = projectIds === undefined ? currentIds : [...projectIds, ...hiddenKept.filter((id) => !projectIds.includes(id))];
       const addedIds = nextIds.filter((id) => !currentIds.includes(id));
       const removedIds = currentIds.filter((id) => !nextIds.includes(id));
-      await assertLinks(req.user!, links, existing, addedIds);
+      await assertLinks(tx, req.user!, links, existing, addedIds);
 
       const data = {
         ...fields,
