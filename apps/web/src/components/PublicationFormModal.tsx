@@ -6,6 +6,8 @@ import { VisibilityField } from "./VisibilityField";
 import { apiErrorMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { useT } from "../i18n/LocaleContext";
+import { DuplicateConfirm } from "./DuplicateConfirm";
+import { useDuplicateConfirm } from "../hooks/useDuplicateConfirm";
 
 /** What the form hands to the page: the validated, trimmed publication fields. */
 export interface PublicationFormFields {
@@ -20,6 +22,8 @@ export interface PublicationFormFields {
   visibility?: Visibility;
   /** Japanese title/venue overrides (Phase 19). An empty box on an existing publication clears that override. */
   translations?: { ja: Record<string, string> };
+  /** Set only after a duplicate warning was explicitly confirmed (lab manager / admin). */
+  confirmDuplicate?: boolean;
 }
 
 interface FormState {
@@ -74,6 +78,7 @@ export function PublicationFormModal({
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "PUBLIC");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const dup = useDuplicateConfirm();
   const { values: ja, setField: setJa, base } = useEntityTranslations("PUBLICATION", initial?.id, open);
 
   useEffect(() => {
@@ -82,6 +87,7 @@ export function PublicationFormModal({
       setLinkSelf(false);
       setVisibility(initial?.visibility ?? "PUBLIC");
       setError(null);
+      dup.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
@@ -95,6 +101,7 @@ export function PublicationFormModal({
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+    dup.reset(); // a changed field invalidates any earlier duplicate warning and its confirmation
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -113,9 +120,10 @@ export function PublicationFormModal({
 
     setSubmitting(true);
     try {
-      await onSubmit((canSetVisibility ? { ...withTranslations, visibility } : withTranslations) as PublicationFormFields, linkSelf);
+      await onSubmit({ ...(canSetVisibility ? { ...withTranslations, visibility } : withTranslations), ...dup.extra } as PublicationFormFields, linkSelf);
       onClose();
     } catch (err) {
+      dup.capture(err);
       setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
@@ -125,6 +133,7 @@ export function PublicationFormModal({
   return (
     <Modal open={open} onClose={submitting ? () => {} : onClose} title={title}>
       {error && <div className="form-error" role="alert">{error}</div>}
+      <DuplicateConfirm conflict={dup.conflict} confirmed={dup.confirmed} onConfirmedChange={dup.setConfirmed} />
       <form onSubmit={handleSubmit} noValidate>
         <fieldset className="form-fieldset">
           <legend>{t("publications.form.groupDetails")}</legend>

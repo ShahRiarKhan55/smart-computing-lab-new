@@ -6,6 +6,7 @@ import type { NewsItem } from "./news.js";
 import type { AreaRef, GroupRef, ProjectRef } from "./project.js";
 import { parseSearchText, SEARCH_MAX_TERMS, SEARCH_QUERY_MAX_LENGTH } from "./search.js";
 import { translationsField } from "./translations.js";
+import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
 
 export const MIN_PUBLICATION_YEAR = 1900;
 export const MAX_PUBLICATION_YEAR = 2100;
@@ -65,6 +66,8 @@ export const createPublicationSchema = z.object({
   teamMemberIds: teamMemberIdListSchema.optional(),
   /** Japanese title/venue override (Phase 19); see translations.ts. */
   translations: translationsField(PUBLICATION_TRANSLATION_MAX),
+  /** Explicit confirmation that a flagged near-duplicate is a different record (lab manager or admin only; see duplicates.ts). */
+  confirmDuplicate: confirmDuplicateField,
 });
 export type CreatePublicationInput = z.infer<typeof createPublicationSchema>;
 
@@ -84,8 +87,9 @@ export const updatePublicationSchema = z
     teamMemberIds: teamMemberIdListSchema.optional(),
     /** Japanese title/venue override (Phase 19). */
     translations: translationsField(PUBLICATION_TRANSLATION_MAX),
+    confirmDuplicate: confirmDuplicateField,
   })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
+  .refine(hasUpdateField, "Nothing to update.");
 export type UpdatePublicationInput = z.infer<typeof updatePublicationSchema>;
 
 export const setPublicationAuthorsSchema = z.object({ teamMemberIds: teamMemberIdListSchema });

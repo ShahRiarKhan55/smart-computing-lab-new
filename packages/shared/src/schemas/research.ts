@@ -6,6 +6,7 @@ import type { Publication } from "./publication.js";
 import type { NewsItem } from "./news.js";
 import type { LabEvent } from "./event.js";
 import { translationsField } from "./translations.js";
+import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
 
 /** Mirrors the English field lengths above — see i18n/translatableFields.ts (RESEARCH_AREA). */
 export const RESEARCH_AREA_TRANSLATION_MAX = { title: 200, description: 2000 };
@@ -49,6 +50,8 @@ export const createResearchAreaSchema = z.object({
   visibility: visibilitySchema.optional(),
   /** Japanese title/description override (Phase 14); see translations.ts. */
   translations: translationsField(RESEARCH_AREA_TRANSLATION_MAX),
+  /** Explicit confirmation that a flagged near-duplicate is a different record (lab manager or admin only; see duplicates.ts). */
+  confirmDuplicate: confirmDuplicateField,
 });
 export type CreateResearchAreaInput = z.infer<typeof createResearchAreaSchema>;
 
@@ -62,8 +65,9 @@ export const updateResearchAreaSchema = z
     /** Lab managers and admins only (403 for anyone else). */
     visibility: visibilitySchema.optional(),
     translations: translationsField(RESEARCH_AREA_TRANSLATION_MAX),
+    confirmDuplicate: confirmDuplicateField,
   })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
+  .refine(hasUpdateField, "Nothing to update.");
 export type UpdateResearchAreaInput = z.infer<typeof updateResearchAreaSchema>;
 
 // ---- Phase 18: research-area detail + relationship writes ---------------------------------------

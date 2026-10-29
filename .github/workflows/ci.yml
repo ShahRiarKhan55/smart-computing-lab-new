@@ -86,4 +86,5 @@ jobs:
           npm run test:integration-photos-alumni -w apps/server
           npm run test:profile-photo -w apps/server
           npm run test:research-links -w apps/server
+          npm run test:duplicates -w apps/server
         timeout-minutes: 5

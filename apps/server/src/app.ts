@@ -51,7 +51,8 @@ export function createApp() {
 
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     if (err instanceof ValidationError || err instanceof HttpError) {
-      res.status(err.status).json({ error: err.message });
+      // `extra` (HttpError only) is spread FIRST so it can never replace the message.
+      res.status(err.status).json({ ...(err instanceof HttpError ? err.extra : undefined), error: err.message });
       return;
     }
     // Body-parser failures (malformed JSON, oversized body) are client errors, not server errors.

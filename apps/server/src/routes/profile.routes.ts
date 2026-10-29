@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { changedFields, recordAudit } from "../lib/audit.js";
+import { guardTeamName, overrideDetails } from "../lib/duplicates.js";
 import { toTeamMember } from "../lib/serializers.js";
 import { assertIsImage, uploadSingleFile, validateUpload } from "../lib/fileService.js";
 import { saveFile } from "../lib/storage.js";
@@ -51,6 +52,9 @@ router.put(
       if (!member) {
         throw new HttpError(404, "No team profile is linked to your account yet. Ask the admin to link one.");
       }
+      // A rename onto another visible profile's name is warned about (shared/duplicates.ts). Only a lab manager or admin may confirm it.
+      const overridden =
+        body.name === undefined ? null : await guardTeamName(tx, req.user!, { name: body.name, excludeId: member.id, previousName: member.name, confirm: body.confirmDuplicate });
       const data = {
         name: body.name ?? member.name,
         initials: body.initials ?? member.initials,
@@ -83,7 +87,7 @@ router.put(
           action: "TEAM_MEMBER_UPDATED",
           entityType: "TEAM_MEMBER",
           entityId: row.id,
-          details: { name: row.name, changed, own: true },
+          details: { name: row.name, changed, own: true, ...overrideDetails(overridden) },
         });
       }
       return { updated: row, retiredKey };

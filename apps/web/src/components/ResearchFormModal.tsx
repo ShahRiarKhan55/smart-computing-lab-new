@@ -6,6 +6,8 @@ import { VisibilityField } from "./VisibilityField";
 import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
+import { DuplicateConfirm } from "./DuplicateConfirm";
+import { useDuplicateConfirm } from "../hooks/useDuplicateConfirm";
 
 /** What the form hands to the page: the validated, trimmed research fields. */
 export type ResearchFormFields = CreateResearchAreaInput;
@@ -46,6 +48,7 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "PUBLIC");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const dup = useDuplicateConfirm();
   const { values: ja, setField: setJa, base } = useEntityTranslations("RESEARCH_AREA", initial?.id, open);
 
   useEffect(() => {
@@ -53,6 +56,7 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
       setValues(toFormState(initial));
       setVisibility(initial?.visibility ?? "PUBLIC");
       setError(null);
+      dup.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
@@ -66,6 +70,7 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+    dup.reset(); // a changed field invalidates any earlier duplicate warning and its confirmation
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -86,13 +91,14 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
     // Only an existing area has somewhere for a translation override to attach (see
     // useEntityTranslations.ts); a new one is created English-only, and the Japanese section
     // becomes available the next time it's edited.
-    const payload = initial ? { ...fields, translations: { ja } } : fields;
+    const payload = { ...(initial ? { ...fields, translations: { ja } } : fields), ...dup.extra };
 
     setSubmitting(true);
     try {
       await onSubmit(payload);
       onClose();
     } catch (err) {
+      dup.capture(err);
       setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
@@ -102,6 +108,7 @@ export function ResearchFormModal({ open, title, initial, canSetVisibility = fal
   return (
     <Modal open={open} onClose={submitting ? () => {} : onClose} title={title}>
       {error && <div className="form-error" role="alert">{error}</div>}
+      <DuplicateConfirm conflict={dup.conflict} confirmed={dup.confirmed} onConfirmedChange={dup.setConfirmed} />
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-row">
           <div className="form-group">

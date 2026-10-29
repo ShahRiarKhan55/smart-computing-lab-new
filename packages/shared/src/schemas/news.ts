@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requiredText, teamMemberIdListSchema } from "./common.js";
 import { visibilitySchema } from "./enums.js";
 import { translationsField } from "./translations.js";
+import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
 
 /** Mirrors the English field lengths below — see i18n/translatableFields.ts (NEWS_ITEM). */
 export const NEWS_TRANSLATION_MAX = { title: 300, description: 5000 };
@@ -63,6 +64,8 @@ export const createNewsItemSchema = z.object({
   teamMemberIds: teamMemberIdListSchema.optional(),
   /** Japanese title/description override (Phase 14); see translations.ts. */
   translations: translationsField(NEWS_TRANSLATION_MAX),
+  /** Explicit confirmation that a flagged near-duplicate is a different record (lab manager or admin only; see duplicates.ts). */
+  confirmDuplicate: confirmDuplicateField,
 });
 export type CreateNewsItemInput = z.infer<typeof createNewsItemSchema>;
 
@@ -79,8 +82,9 @@ export const updateNewsItemSchema = z
     /** When present, replaces the full set of linked team members (same transaction as the field update). */
     teamMemberIds: teamMemberIdListSchema.optional(),
     translations: translationsField(NEWS_TRANSLATION_MAX),
+    confirmDuplicate: confirmDuplicateField,
   })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
+  .refine(hasUpdateField, "Nothing to update.");
 export type UpdateNewsItemInput = z.infer<typeof updateNewsItemSchema>;
 
 export const setNewsAuthorsSchema = z.object({ teamMemberIds: teamMemberIdListSchema });

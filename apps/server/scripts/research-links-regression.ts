@@ -168,7 +168,8 @@ const linksOf = (o: any) => [o?.googleScholarUrl, o?.researchGateUrl, o?.orcidUr
   const base = { name: "Dana D", initials: "DD", role: "Researcher", category: "PHD" };
   const c = await AD.post("/api/team", { ...base, googleScholarUrl: GS, researchGateUrl: RG, orcidUrl: OC });
   t("admin create: links stored canonical and returned", c.status === 201 && linksOf(c.json) === [GS, RG, OC].join("|") && linksOf(await row(c.json.id)) === [GS, RG, OC].join("|"), c.text);
-  const d = await AD.post("/api/team", base);
+  // A distinct name: two profiles with the same name now draw a duplicate warning (see duplicate-prevention-regression.ts); this check is about the links.
+  const d = await AD.post("/api/team", { ...base, name: "Dana E" });
   t("admin create: omitted links are empty", d.status === 201 && linksOf(d.json) === "||");
   const n0 = await prisma.teamMember.count();
   const bad = await AD.post("/api/team", { ...base, name: "Bad Link", orcidUrl: "not-an-orcid" });

@@ -15,6 +15,8 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { assertValidId } from "../lib/authorLinks.js";
 import { recordAudit } from "../lib/audit.js";
+import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { guardInvitedProfileName, guardTeamName, lockForDuplicateCheck, overrideDetails } from "../lib/duplicates.js";
 import { assertProfileMayHaveAccount } from "../lib/alumni.js";
 import { generateInvitationToken, hashInvitationToken } from "../lib/invitationToken.js";
 import { isInvitationRateLimited, recordInvitationAttempt } from "../lib/invitationRateLimit.js";
@@ -93,7 +95,10 @@ router.post(
     const tokenHash = hashInvitationToken(rawToken);
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
+    const createsProfile = !body.teamMemberId && Boolean(body.name && body.initials && body.memberRole && body.category);
     const created = await prisma.$transaction(async (tx) => {
+      // An invitation that will create a NEW profile is checked for a same-name profile now, while an administrator can confirm it.
+      if (createsProfile) await lockForDuplicateCheck(tx, "teamMember");
       const existingUser = await tx.user.findUnique({ where: { email: body.email }, select: { id: true } });
       if (existingUser) throw new HttpError(409, "An account with that email already exists.");
 
@@ -109,6 +114,7 @@ router.post(
         assertProfileMayHaveAccount(member); // alumni are never invited
         if (member.userId) throw new HttpError(409, "That team member already has a linked account.");
       }
+      const overridden = createsProfile ? await guardTeamName(tx, req.user!, { name: body.name!, confirm: body.confirmDuplicate }) : null;
 
       const invitation = await tx.accountInvitation.create({
         data: {
@@ -130,7 +136,7 @@ router.post(
         action: "INVITATION_CREATED",
         entityType: "ACCOUNT_INVITATION",
         entityId: invitation.id,
-        details: { email: invitation.email, role: invitation.role },
+        details: { email: invitation.email, role: invitation.role, ...overrideDetails(overridden) },
       });
 
       return invitation;
@@ -272,6 +278,9 @@ router.post(
         if (linked.count !== 1) throw new HttpError(409, "The team profile for this invitation is no longer available. Contact your administrator.");
       } else if (current.name && current.initials && current.memberRole && current.category) {
         assertProfileMayHaveAccount({ category: current.category }); // a stored ALUMNI category never becomes an account
+        // The name was checked (and, if needed, confirmed by an administrator) when the invitation was issued; only a profile created
+        // since then counts here, and the invitee cannot override. The whole acceptance rolls back on a match.
+        await guardInvitedProfileName(tx, { name: current.name, invitedAt: current.createdAt });
         await tx.teamMember.create({
           data: {
             userId: createdUser.id,
@@ -303,5 +312,8 @@ router.post(
     res.status(201).json({ user: { id: user.id, email: user.email, role: user.role } });
   }),
 );
+
+// Lock contention on the duplicate-check write lock (lib/duplicates.ts) answers 503 + Retry-After instead of a generic 500.
+router.use(transientContentionAs503);
 
 export default router;
