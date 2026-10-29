@@ -79,6 +79,7 @@ const GALLERY_2 = { name: "20261011140000_gallery_upload_attempts", sha256: "20d
 const OAUTH = { name: "20261012100000_oauth_identity", sha256: "7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e" };
 const TEAM = { name: "20261020120000_team_member_is_published", sha256: "502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b" };
 const RESEARCH = { name: "20261027120000_team_member_research_links", sha256: "61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44" };
+const PUBLICATION = { name: "20261029120000_publication_bibliographic_fields", sha256: "b6cdc2ce390cbdcfc2f82bd2d3aec6c7874cab9cd61fe7c171f442b50454212e" };
 const copyMigrations = (dest: string, names: string[]) => {
   for (const n of names) {
     mkdirSync(path.join(dest, n), { recursive: true });
@@ -91,8 +92,8 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
 // 1. Migration files: pinned, additive, parsed
 {
   const m = reviewed();
-  t("the reviewed set is exactly the two gallery migrations, the OAuth identity migration, the Phase 3B isPublished column and the Phase 3C research links, in that order, with these exact pins", JSON.stringify(REVIEWED_MIGRATIONS) === JSON.stringify([GALLERY_1, GALLERY_2, OAUTH, TEAM, RESEARCH]));
-  t("the five reviewed migrations load (hashes match the files on disk)", m.length === 5 && m[0].name === GALLERY_1.name && m[1].name === GALLERY_2.name && m[2].name === OAUTH.name && m[3].name === TEAM.name && m[4].name === RESEARCH.name);
+  t("the reviewed set is exactly the two gallery migrations, the OAuth identity migration, the Phase 3B isPublished column, the Phase 3C research links and the publication bibliographic columns, in that order, with these exact pins", JSON.stringify(REVIEWED_MIGRATIONS) === JSON.stringify([GALLERY_1, GALLERY_2, OAUTH, TEAM, RESEARCH, PUBLICATION]));
+  t("the six reviewed migrations load (hashes match the files on disk)", m.length === 6 && m[0].name === GALLERY_1.name && m[1].name === GALLERY_2.name && m[2].name === OAUTH.name && m[3].name === TEAM.name && m[4].name === RESEARCH.name && m[5].name === PUBLICATION.name);
   t("the OAuth migration file on disk hashes to its pin", sha256(readFileSync(path.join(MIGRATIONS_DIR, OAUTH.name, "migration.sql"), "utf8").replace(/\r\n/g, "\n")) === OAUTH.sha256);
   t("the first three contain 3 statements each (1 table + 2 indexes)", m.slice(0, 3).every((x) => x.statements.length === 3 && x.statements.filter((s) => s.kind === "table").length === 1));
   t("the Phase 3B migration is exactly one column statement: TeamMember.isPublished BOOLEAN NOT NULL DEFAULT true", m[3].statements.length === 1 && m[3].statements[0].kind === "column" && m[3].statements[0].name === "TeamMember.isPublished" && m[3].statements[0].column?.type === "BOOLEAN" && m[3].statements[0].column?.defaultValue === "true");
@@ -103,7 +104,7 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
     mkdirSync(path.join(tamper, r.name), { recursive: true });
     copyFileSync(path.join(MIGRATIONS_DIR, r.name, "migration.sql"), path.join(tamper, r.name, "migration.sql"));
   }
-  t("an untouched copy still loads", loadReviewedMigrations(tamper).length === 5);
+  t("an untouched copy still loads", loadReviewedMigrations(tamper).length === 6);
   const f = path.join(tamper, REVIEWED_MIGRATIONS[1].name, "migration.sql");
   writeFileSync(f, readFileSync(f, "utf8") + "\nCREATE INDEX \"Extra_idx\" ON \"User\"(\"id\");\n");
   t("a modified migration file is refused (hash mismatch)", await rejects(() => loadReviewedMigrations(tamper), "MIGRATION_FILE"));
@@ -116,7 +117,7 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
     return d;
   };
   const exact = fresh("oauth-exact");
-  t("OAuth: the exact reviewed file is approved", loadReviewedMigrations(exact).length === 5);
+  t("OAuth: the exact reviewed file is approved", loadReviewedMigrations(exact).length === 6);
   const oauthRaw = readFileSync(oauthPath(exact), "utf8");
   const variants: [string, string][] = [
     ["an appended statement", oauthRaw + '\nCREATE INDEX "Extra_idx" ON "User"("id");\n'],
@@ -134,13 +135,13 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
   t("OAuth: a CRLF checkout of the exact file still matches", (() => {
     const d = fresh("oauth-crlf");
     writeFileSync(oauthPath(d), oauthRaw.replace(/\n/g, "\r\n"));
-    return loadReviewedMigrations(d).length === 5;
+    return loadReviewedMigrations(d).length === 6;
   })());
   // Unknown migrations stay rejected: an unpinned directory is never loaded, and a pin that does not match is refused.
   const withUnknown = fresh("oauth-unknown");
   mkdirSync(path.join(withUnknown, "20261099000000_unreviewed"), { recursive: true });
   writeFileSync(path.join(withUnknown, "20261099000000_unreviewed", "migration.sql"), 'CREATE TABLE "Unreviewed" ("id" TEXT NOT NULL PRIMARY KEY);\n');
-  t("an unreviewed migration directory is never loaded (only the pinned names)", loadReviewedMigrations(withUnknown).map((x) => x.name).join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name, RESEARCH.name].join());
+  t("an unreviewed migration directory is never loaded (only the pinned names)", loadReviewedMigrations(withUnknown).map((x) => x.name).join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name, RESEARCH.name, PUBLICATION.name].join());
   t("a pin for an unknown migration with a wrong hash is refused", await rejects(() => loadReviewedMigrations(withUnknown, [...REVIEWED_MIGRATIONS, { name: "20261099000000_unreviewed", sha256: "0".repeat(64) }]), "MIGRATION_FILE"));
   t("a pin for a migration that does not exist is refused", await rejects(() => loadReviewedMigrations(withUnknown, [...REVIEWED_MIGRATIONS, { name: "20261098000000_nonexistent", sha256: "0".repeat(64) }]), "MIGRATION_FILE"));
   // Even a hash-matching file must still pass the SQL-pattern safeguards (the hash is not the only gate).
@@ -218,12 +219,12 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
   const before = await schemaDump(db.client);
   const countsBefore = await countTables(db.client);
   const check = await execute(db.client, reviewed(), { apply: false });
-  t("inspect-only: reports all five migrations absent and a plan", check.outcome === "planned" && check.before.length === 5 && check.before.every((s) => s.status === "absent"));
+  t("inspect-only: reports all six migrations absent and a plan", check.outcome === "planned" && check.before.length === 6 && check.before.every((s) => s.status === "absent"));
   t("inspect-only: the database is byte-for-byte unchanged (schema dump identical)", (await schemaDump(db.client)) === before);
   t("the seeded rows are counted (so the later 'unchanged' check is meaningful)", countsBefore.GalleryItem === 1 && countsBefore.StoredFile === 1 && countsBefore.User >= 1);
 
   const applied = await execute(db.client, reviewed(), { apply: true });
-  t("apply: outcome applied, all five migrations applied in order", applied.outcome === "applied" && applied.appliedMigrations.join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name, RESEARCH.name].join() && applied.after.every((s) => s.status === "applied"));
+  t("apply: outcome applied, all six migrations applied in order", applied.outcome === "applied" && applied.appliedMigrations.join() === [GALLERY_1.name, GALLERY_2.name, OAUTH.name, TEAM.name, RESEARCH.name, PUBLICATION.name].join() && applied.after.every((s) => s.status === "applied"));
   t("apply: existing GalleryItem / StoredFile / User row counts unchanged", JSON.stringify(applied.countsBefore) === JSON.stringify(applied.countsAfter));
   const names = (await db.client.execute(`SELECT name FROM sqlite_master WHERE name IN ('GalleryImage','GalleryUploadAttempt','GalleryImage_fileId_key','GalleryImage_itemId_sortOrder_idx','GalleryUploadAttempt_createdAt_idx','GalleryUploadAttempt_userId_key_key')`)).rows;
   t("apply: both tables and all four indexes exist", names.length === 6);
@@ -257,9 +258,9 @@ const schemaDump = async (c: Client) => JSON.stringify((await c.execute(`SELECT 
   await db.client.executeMultiple(reviewed()[1].sql);
   const countsBefore = await countTables(db.client);
   const plan = await execute(db.client, reviewed(), { apply: false });
-  t("production shape: inspect-only plans exactly the OAuth, Phase 3B and Phase 3C migrations", plan.outcome === "planned" && plan.before.map((s) => s.status).join() === "applied,applied,absent,absent,absent");
+  t("production shape: inspect-only plans exactly the OAuth, Phase 3B, Phase 3C and publication migrations", plan.outcome === "planned" && plan.before.map((s) => s.status).join() === "applied,applied,absent,absent,absent,absent");
   const r = await execute(db.client, reviewed(), { apply: true });
-  t("production shape: apply runs ONLY the OAuth, Phase 3B and Phase 3C migrations and leaves existing rows alone", r.outcome === "applied" && r.appliedMigrations.join() === [OAUTH.name, TEAM.name, RESEARCH.name].join() && JSON.stringify(await countTables(db.client)) === JSON.stringify(countsBefore));
+  t("production shape: apply runs ONLY the OAuth, Phase 3B, Phase 3C and publication migrations and leaves existing rows alone", r.outcome === "applied" && r.appliedMigrations.join() === [OAUTH.name, TEAM.name, RESEARCH.name, PUBLICATION.name].join() && JSON.stringify(await countTables(db.client)) === JSON.stringify(countsBefore));
   t("production shape: a second apply is a no-op", (await execute(db.client, reviewed(), { apply: true })).outcome === "nothing-to-do");
   db.client.close();
 }
@@ -318,7 +319,7 @@ await failsClosedOn(async (c) => {
   const db = await preReleaseDb();
   await db.client.executeMultiple(reviewed()[0].sql);
   const r = await execute(db.client, reviewed(), { apply: true });
-  t("with the first migration already applied, the other four are applied", r.outcome === "applied" && r.appliedMigrations.join() === [reviewed()[1].name, reviewed()[2].name, reviewed()[3].name, reviewed()[4].name].join());
+  t("with the first migration already applied, the other five are applied", r.outcome === "applied" && r.appliedMigrations.join() === [reviewed()[1].name, reviewed()[2].name, reviewed()[3].name, reviewed()[4].name, reviewed()[5].name].join());
   db.client.close();
 }
 {
@@ -429,7 +430,7 @@ await failsClosedOn(async (c) => {
   t("an interrupted run reports an error", err instanceof Error);
   t("... and after reconnecting the database is exactly as it was (no partial schema)", (await schemaDump(reopened)) === dump);
   const states = await Promise.all(reviewed().map(async (m) => (await classify(reopened, m, await expectedSchema(m))).status));
-  t("... all migrations classify as absent, so a re-run is safe", states.length === 5 && states.every((s) => s === "absent"));
+  t("... all migrations classify as absent, so a re-run is safe", states.length === 6 && states.every((s) => s === "absent"));
   reopened.close();
 }
 {

@@ -213,6 +213,17 @@ model Publication {
   extraUrl   String   @default("")
   extraLabel String   @default("")
   visibility String   @default("PUBLIC") // PUBLIC | LAB_ONLY
+  // Optional bibliographic metadata (publication list import). Every one has a constant default, so rows written before these columns existed
+  // read back as "not stated": status "" (| PUBLISHED | ACCEPTED | SUBMITTED), pubMonth 0 (or 1-12), text "" . acceptedDate is "" or an ISO date.
+  status       String   @default("")
+  pubMonth     Int      @default(0)
+  volume       String   @default("")
+  pageStart    String   @default("")
+  pageEnd      String   @default("")
+  issn         String   @default("")
+  isbn         String   @default("")
+  category     String   @default("")
+  acceptedDate String   @default("")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

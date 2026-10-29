@@ -52,6 +52,10 @@ export const REVIEWED_MIGRATIONS: readonly ReviewedMigration[] = [
   // Phase 3C: THREE `ALTER TABLE "TeamMember" ADD COLUMN "<x>Url" TEXT NOT NULL DEFAULT ''` (googleScholarUrl, researchGateUrl, orcidUrl; metadata-only; existing
   // rows read back as ''). Local rehearsal only so far; NOT applied to any remote database. See docs/architecture/phase3c-research-links.md.
   { name: "20261027120000_team_member_research_links", sha256: "61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44" },
+  // Publication list import: NINE `ALTER TABLE "Publication" ADD COLUMN ...` (status, pubMonth, volume, pageStart, pageEnd, issn, isbn, category,
+  // acceptedDate; constant defaults '' / 0, metadata-only; existing rows read back as "not stated"). Local rehearsal only; NOT applied to any remote
+  // database. See docs/architecture/publication-list-import.md.
+  { name: "20261029120000_publication_bibliographic_fields", sha256: "b6cdc2ce390cbdcfc2f82bd2d3aec6c7874cab9cd61fe7c171f442b50454212e" },
 ];
 
 /** Tables that must already exist in the target for it to be this application's database. */
