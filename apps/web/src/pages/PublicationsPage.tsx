@@ -7,6 +7,7 @@ import {
   MIN_PUBLICATION_YEAR,
   PUBLICATION_MAX_PAGE,
   PUBLICATION_SORTS,
+  PUBLICATION_STATUS_FILTERS,
   SEARCH_QUERY_MAX_LENGTH,
   type Publication,
   type PublicationAuthorsResponse,
@@ -33,12 +34,14 @@ import { PublicationFormModal } from "../components/PublicationFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { useLocale } from "../i18n/LocaleContext";
+import { STATUS_LABEL_KEY, STATUS_ORDER, STATUS_SECTION_KEY } from "../lib/publicationDisplay";
 import type { TranslationKey } from "@scl/shared";
 
 /** What the URL asks for, after every value has been checked. Anything malformed is dropped, never sent to the API. */
 interface Filters {
   q: string;
   year: string;
+  status: string;
   researcher: string;
   project: string;
   area: string;
@@ -48,7 +51,9 @@ interface Filters {
   page: number;
 }
 
-const FILTER_KEYS = ["q", "year", "researcher", "project", "area", "group", "visibility", "sort", "page"] as const;
+/** Records per request. A section (status) must not be split across pages, so the list asks for the largest page the API allows. */
+const PAGE_LIMIT = 50;
+const FILTER_KEYS = ["q", "year", "status", "researcher", "project", "area", "group", "visibility", "sort", "page"] as const;
 const SORT_LABEL_KEY: Record<PublicationSort, TranslationKey> = {
   newest: "publications.hub.sort.newest",
   oldest: "publications.hub.sort.oldest",
@@ -70,6 +75,9 @@ function readFilters(sp: URLSearchParams, mayFilterVisibility: boolean): { filte
   const year = raw("year");
   const yearOk = /^\d{4}$/.test(year) && Number(year) >= MIN_PUBLICATION_YEAR && Number(year) <= MAX_PUBLICATION_YEAR;
   if (year !== "" && !yearOk) ignored = true;
+  const status = raw("status");
+  const statusOk = (PUBLICATION_STATUS_FILTERS as readonly string[]).includes(status);
+  if (status !== "" && !statusOk) ignored = true;
   const sort = raw("sort");
   const sortOk = (PUBLICATION_SORTS as readonly string[]).includes(sort);
   if (sort !== "" && !sortOk) ignored = true;
@@ -86,6 +94,7 @@ function readFilters(sp: URLSearchParams, mayFilterVisibility: boolean): { filte
     filters: {
       q: qOk ? q : "",
       year: yearOk ? year : "",
+      status: statusOk ? status : "",
       researcher: id("researcher"),
       project: id("project"),
       area: id("area"),
@@ -102,6 +111,7 @@ function toQuery(f: Partial<Filters>): URLSearchParams {
   const sp = new URLSearchParams();
   if (f.q) sp.set("q", f.q);
   if (f.year) sp.set("year", f.year);
+  if (f.status) sp.set("status", f.status);
   if (f.researcher) sp.set("researcher", f.researcher);
   if (f.project) sp.set("project", f.project);
   if (f.area) sp.set("area", f.area);
@@ -142,7 +152,9 @@ export function PublicationsPage() {
   const { filters, ignored } = useMemo(() => readFilters(sp, policy.isManager), [sp, policy.isManager]);
   const queryString = toQuery(filters).toString();
 
-  const { data, loading, error, reload } = useApiResource<PublicationListResponse>(`/publications/browse${queryString ? `?${queryString}` : ""}`);
+  const apiParams = new URLSearchParams(queryString);
+  apiParams.set("limit", String(PAGE_LIMIT));
+  const { data, loading, error, reload } = useApiResource<PublicationListResponse>(`/publications/browse?${apiParams.toString()}`);
   const { data: team } = useApiResource<TeamMember[]>("/team");
   const { data: projects } = useApiResource<ProjectSummary[]>("/projects");
   const { data: areas } = useApiResource<ResearchArea[]>("/research");
@@ -180,12 +192,17 @@ export function PublicationsPage() {
 
   const filtersActive = FILTER_KEYS.some((k) => k !== "page" && k !== "sort" && String(filters[k]) !== "") || filters.sort !== "newest";
 
-  // Under a date sort the list reads as an academic record, grouped by year; under A–Z it is one flat list.
-  const grouped = useMemo(() => {
+  // Under a date sort the list reads as an academic record: one section per status (accepted and under-submission papers are kept apart
+  // from published ones), each grouped by year in the API's chronological order. Under A–Z it is one flat list.
+  const sections = useMemo(() => {
     if (!data || filters.sort === "title") return null;
-    const groups2 = new Map<number, Publication[]>();
-    for (const p of data.items) groups2.set(p.year, [...(groups2.get(p.year) ?? []), p]);
-    return [...groups2.entries()];
+    const byStatus = new Map<Publication["status"], Publication[]>();
+    for (const p of data.items) byStatus.set(p.status, [...(byStatus.get(p.status) ?? []), p]);
+    return STATUS_ORDER.filter((s) => byStatus.has(s)).map((s) => {
+      const years = new Map<number, Publication[]>();
+      for (const p of byStatus.get(s)!) years.set(p.year, [...(years.get(p.year) ?? []), p]);
+      return { status: s, count: byStatus.get(s)!.length, years: [...years.entries()] };
+    });
   }, [data, filters.sort]);
 
   async function openManageAuthors(pub: Publication) {
@@ -270,6 +287,14 @@ export function PublicationsPage() {
             />
           </div>
           <FilterSelect id="pub_f_year" label={t("publications.hub.yearLabel")} value={draft.year} options={yearOptions} anyLabel={t("publications.hub.any")} onChange={(v) => setDraft({ ...draft, year: v })} />
+          <FilterSelect
+            id="pub_f_status"
+            label={t("publications.hub.statusLabel")}
+            value={draft.status}
+            options={PUBLICATION_STATUS_FILTERS.map((s) => ({ value: s, label: t(STATUS_LABEL_KEY[s === "UNSPECIFIED" ? "" : s]) }))}
+            anyLabel={t("publications.hub.any")}
+            onChange={(v) => setDraft({ ...draft, status: v })}
+          />
           <FilterSelect
             id="pub_f_researcher"
             label={t("publications.hub.researcherLabel")}
@@ -368,15 +393,28 @@ export function PublicationsPage() {
               </EmptyState>
             )}
 
-            {grouped
-              ? grouped.map(([year, items]) => (
-                  <section key={year} aria-labelledby={`pubs-${year}`}>
-                    <h2 className="year-heading" id={`pubs-${year}`}>
-                      {year} <small>{t(items.length === 1 ? "publications.yearCountOne" : "publications.yearCountOther", { count: items.length })}</small>
-                    </h2>
-                    <div className="pub-list">{items.map(renderItem)}</div>
-                  </section>
-                ))
+            {sections
+              ? sections.map((section) => {
+                  const sectionId = `pubs-status-${section.status || "none"}`;
+                  const YearTag = sections.length > 1 ? "h3" : "h2";
+                  return (
+                    <section key={section.status || "none"} aria-labelledby={sections.length > 1 ? sectionId : undefined}>
+                      {sections.length > 1 && (
+                        <h2 className="section-title" id={sectionId}>
+                          {t(STATUS_SECTION_KEY[section.status])} <small>{t(section.count === 1 ? "publications.yearCountOne" : "publications.yearCountOther", { count: section.count })}</small>
+                        </h2>
+                      )}
+                      {section.years.map(([year, items]) => (
+                        <div key={year} role="group" aria-labelledby={`pubs-${section.status || "none"}-${year}`}>
+                          <YearTag className="year-heading" id={`pubs-${section.status || "none"}-${year}`}>
+                            {year} <small>{t(items.length === 1 ? "publications.yearCountOne" : "publications.yearCountOther", { count: items.length })}</small>
+                          </YearTag>
+                          <div className="pub-list">{items.map(renderItem)}</div>
+                        </div>
+                      ))}
+                    </section>
+                  );
+                })
               : data.items.length > 0 && <div className="pub-list">{data.items.map(renderItem)}</div>}
 
             {data.pageCount > 1 && (

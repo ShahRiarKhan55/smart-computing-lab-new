@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { createPublicationSchema, type Publication, type Visibility } from "@scl/shared";
+import { PUBLICATION_STATUSES, createPublicationSchema, type Publication, type PublicationStatusOrNone, type Visibility } from "@scl/shared";
+import { STATUS_LABEL_KEY } from "../lib/publicationDisplay";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { apiErrorMessage } from "../i18n/errorMessages";
@@ -19,6 +20,16 @@ export interface PublicationFormFields {
   doiUrl: string;
   extraUrl: string;
   extraLabel: string;
+  /** Optional bibliographic metadata ("" / 0 = not stated). */
+  status: PublicationStatusOrNone;
+  pubMonth: number;
+  volume: string;
+  pageStart: string;
+  pageEnd: string;
+  issn: string;
+  isbn: string;
+  category: string;
+  acceptedDate: string;
   visibility?: Visibility;
   /** Japanese title/venue overrides (Phase 19). An empty box on an existing publication clears that override. */
   translations?: { ja: Record<string, string> };
@@ -35,6 +46,15 @@ interface FormState {
   doiUrl: string;
   extraUrl: string;
   extraLabel: string;
+  status: string;
+  pubMonth: string;
+  volume: string;
+  pageStart: string;
+  pageEnd: string;
+  issn: string;
+  isbn: string;
+  category: string;
+  acceptedDate: string;
 }
 
 interface PublicationFormModalProps {
@@ -60,6 +80,15 @@ function toFormState(initial?: Publication | null): FormState {
     doiUrl: initial?.doiUrl ?? "",
     extraUrl: initial?.extraUrl ?? "",
     extraLabel: initial?.extraLabel ?? "",
+    status: initial?.status ?? "",
+    pubMonth: initial && initial.pubMonth > 0 ? String(initial.pubMonth) : "",
+    volume: initial?.volume ?? "",
+    pageStart: initial?.pageStart ?? "",
+    pageEnd: initial?.pageEnd ?? "",
+    issn: initial?.issn ?? "",
+    isbn: initial?.isbn ?? "",
+    category: initial?.category ?? "",
+    acceptedDate: initial?.acceptedDate ?? "",
   };
 }
 
@@ -170,6 +199,64 @@ export function PublicationFormModal({
             required
           />
         </div>
+        </fieldset>
+
+        <fieldset className="form-fieldset">
+          <legend>{t("publications.form.groupBibliographic")}</legend>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_status">{t("publications.form.statusLabel")}</label>
+              <select id="pub_status" value={values.status} onChange={(e) => set("status", e.target.value)}>
+                <option value="">{t("publications.form.statusNone")}</option>
+                {PUBLICATION_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {t(STATUS_LABEL_KEY[s])}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_month">{t("publications.form.monthLabel")}</label>
+              <input id="pub_month" type="number" inputMode="numeric" min={1} max={12} value={values.pubMonth} onChange={(e) => set("pubMonth", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_volume">{t("publications.form.volumeLabel")}</label>
+              <input id="pub_volume" value={values.volume} maxLength={100} onChange={(e) => set("volume", e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_category">{t("publications.form.categoryLabel")}</label>
+              <input id="pub_category" value={values.category} maxLength={200} onChange={(e) => set("category", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_pageStart">{t("publications.form.pageStartLabel")}</label>
+              <input id="pub_pageStart" value={values.pageStart} maxLength={30} onChange={(e) => set("pageStart", e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_pageEnd">{t("publications.form.pageEndLabel")}</label>
+              <input id="pub_pageEnd" value={values.pageEnd} maxLength={30} onChange={(e) => set("pageEnd", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_issn">{t("publications.form.issnLabel")}</label>
+              <input id="pub_issn" value={values.issn} maxLength={9} placeholder="1234-5678" onChange={(e) => set("issn", e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_isbn">{t("publications.form.isbnLabel")}</label>
+              <input id="pub_isbn" value={values.isbn} maxLength={20} onChange={(e) => set("isbn", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label htmlFor="pub_acceptedDate">{t("publications.form.acceptedDateLabel")}</label>
+            <input id="pub_acceptedDate" value={values.acceptedDate} maxLength={10} placeholder="YYYY-MM-DD" aria-describedby="pub_acceptedDate_hint" onChange={(e) => set("acceptedDate", e.target.value)} />
+            <p className="form-hint" id="pub_acceptedDate_hint">
+              {t("publications.form.acceptedDateHint")}
+            </p>
+          </div>
         </fieldset>
 
         <fieldset className="form-fieldset">

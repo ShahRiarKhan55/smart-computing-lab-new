@@ -32,7 +32,7 @@ import { guardPublication, lockForDuplicateCheck, overrideDetails } from "../lib
 
 const router = Router();
 
-const AUDITED_FIELDS = ["year", "title", "authors", "venue", "pdfUrl", "doiUrl", "extraUrl", "extraLabel", "visibility"] as const;
+const AUDITED_FIELDS = ["year", "title", "authors", "venue", "pdfUrl", "doiUrl", "extraUrl", "extraLabel", "status", "pubMonth", "volume", "pageStart", "pageEnd", "issn", "isbn", "category", "acceptedDate", "visibility"] as const;
 
 /** Field NAMES whose Japanese override differs between two snapshots (never the text: audit convention). */
 async function auditTranslationChange(
@@ -62,7 +62,7 @@ router.get(
     const viewer = req.user ?? null;
     const rows = await prisma.publication.findMany({
       where: visibleTo(viewer),
-      orderBy: [{ year: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+      orderBy: [{ year: "desc" }, { pubMonth: "desc" }, { createdAt: "desc" }, { id: "asc" }],
     });
     res.json(await localizedPublications(rows, viewer, resolveLocale(req)));
   }),

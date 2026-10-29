@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { PublicationAuthorsResponse, PublicationDetail, TeamMember } from "@scl/shared";
+import { formatPageRange, type PublicationAuthorsResponse, type PublicationDetail, type TeamMember } from "@scl/shared";
 import { usePolicy } from "../auth/usePolicy";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiFetch, ApiError } from "../lib/api";
@@ -21,7 +21,8 @@ import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { VisibilityBadge } from "../components/VisibilityField";
 import { PROJECT_STATUS_LABEL_KEY } from "../i18n/labels";
-import { useT } from "../i18n/LocaleContext";
+import { useLocale } from "../i18n/LocaleContext";
+import { STATUS_LABEL_KEY, formatIsoDate, formatYearMonth, isoYearMonth, mayClaimDatePublished, publicationDateLabel, yearMayBeAcceptanceYear } from "../lib/publicationDisplay";
 
 /**
  * One publication and what it is really linked to. Researchers and projects are direct links; areas,
@@ -32,7 +33,7 @@ import { useT } from "../i18n/LocaleContext";
 export function PublicationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const t = useT();
+  const { locale, t } = useLocale();
   const policy = usePolicy();
   const { data: pub, loading, error, status, reload } = useApiResource<PublicationDetail>(`/publications/${id}`);
 
@@ -97,7 +98,7 @@ export function PublicationDetailPage() {
       <PageHeader
         crumbs={[...crumbsTo, { label: pub.title }]}
         title={pub.title}
-        seoDescription={`${pub.authors} — ${pub.venue} (${pub.year})`}
+        seoDescription={`${pub.authors} — ${pub.venue} (${publicationDateLabel(pub, locale, t)})`}
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "ScholarlyArticle",
@@ -107,7 +108,8 @@ export function PublicationDetailPage() {
             .map((name) => name.trim())
             .filter(Boolean)
             .map((name) => ({ "@type": "Person", name })),
-          datePublished: String(pub.year),
+          // Only for a paper that is (or is not stated to be anything but) published, and never a year that may just be the acceptance year.
+          ...(mayClaimDatePublished(pub) ? { datePublished: isoYearMonth(pub) } : {}),
           ...(pub.venue ? { publisher: { "@type": "Organization", name: pub.venue } } : {}),
         }}
       />
@@ -139,12 +141,48 @@ export function PublicationDetailPage() {
           <div className="detail-layout__a">
             <div className="detail-meta">
               <span className="detail-meta__item">
-                <Icon name="calendar" size={14} /> {pub.year}
+                <Icon name="calendar" size={14} /> {publicationDateLabel(pub, locale, t)}
               </span>
+              {pub.status && <span className={`badge ${pub.status === "PUBLISHED" ? "badge--brand" : pub.status === "ACCEPTED" ? "badge--info" : ""}`}>{t(STATUS_LABEL_KEY[pub.status])}</span>}
               <VisibilityBadge visibility={pub.visibility} />
             </div>
             <p className="pub-detail__authors">{pub.authors}</p>
             <p className="pub-detail__venue">{pub.venue}</p>
+            <h2 className="panel__title" id="pub-biblio">
+              {t("publications.detail.biblioHeading")}
+            </h2>
+            <dl className="pub-biblio" aria-labelledby="pub-biblio">
+              {(
+                [
+                  ["venue", pub.venue],
+                  ["status", pub.status ? t(STATUS_LABEL_KEY[pub.status]) : ""],
+                  ["date", yearMayBeAcceptanceYear(pub) ? "" : formatYearMonth(pub.year, pub.pubMonth, locale)],
+                  ["acceptedDate", pub.acceptedDate ? formatIsoDate(pub.acceptedDate, locale) : ""],
+                  ["volume", pub.volume],
+                  ["pages", formatPageRange(pub.pageStart, pub.pageEnd)],
+                  ["issn", pub.issn],
+                  ["isbn", pub.isbn],
+                  ["category", pub.category],
+                  ["doi", pub.doiUrl],
+                ] as const
+              ).map(([key, value]) => (
+                <div key={key} className="pub-biblio__row" style={{ display: "contents" }}>
+                  <dt>{t(`publications.detail.field.${key}`)}</dt>
+                  <dd className={value ? undefined : "is-missing"}>
+                    {value === "" ? (
+                      t("publications.detail.notProvided")
+                    ) : key === "doi" ? (
+                      <a href={value} className="pub-link" target="_blank" rel="noopener noreferrer">
+                        {value}
+                        <span className="sr-only">{t("publications.opensInNewTab")}</span>
+                      </a>
+                    ) : (
+                      value
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
             {links.length > 0 && (
               <div className="pub-item__links">
                 {links.map((l) => (

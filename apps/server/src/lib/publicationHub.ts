@@ -35,15 +35,16 @@ import { loadTranslations, localize } from "./translations.js";
 const orderBy = (sort: PublicationListQuery["sort"]): Prisma.PublicationOrderByWithRelationInput[] => {
   switch (sort) {
     case "oldest":
-      return [{ year: "asc" }, { createdAt: "asc" }, { id: "asc" }];
+      return [{ year: "asc" }, { pubMonth: "asc" }, { createdAt: "asc" }, { id: "asc" }];
     case "title":
       return [{ title: "asc" }, { year: "desc" }, { id: "asc" }];
     default:
-      return [{ year: "desc" }, { createdAt: "desc" }, { id: "asc" }];
+      // Newest first by the stated year, then the stated month (0 = no month stated, so it sorts after any real month).
+      return [{ year: "desc" }, { pubMonth: "desc" }, { createdAt: "desc" }, { id: "asc" }];
   }
 };
 
-/** Words AND-ed, each matched against title/authors/venue/linked researcher names (and the year for a 4-digit word). */
+/** Words AND-ed, each matched against title/authors/venue/DOI/ISSN/linked researcher names (and the year for a 4-digit word). */
 function textWhere(terms: string[], translatedIds: Set<string> | null): Prisma.PublicationWhereInput | null {
   if (terms.length === 0) return null;
   const english: Prisma.PublicationWhereInput = {
@@ -52,6 +53,8 @@ function textWhere(terms: string[], translatedIds: Set<string> | null): Prisma.P
         { title: { contains: term } },
         { authors: { contains: term } },
         { venue: { contains: term } },
+        { doiUrl: { contains: term } },
+        { issn: { contains: term } },
         { authorLinks: { some: { teamMember: { isPublished: true, name: { contains: term } } } } },
         ...(/^\d{4}$/.test(term) ? [{ year: Number(term) }] : []),
       ],
@@ -67,6 +70,7 @@ export async function browsePublications(query: PublicationListQuery, viewer: Vi
 
   const and: Prisma.PublicationWhereInput[] = [visible];
   if (query.year !== undefined) and.push({ year: query.year });
+  if (query.status) and.push({ status: query.status === "UNSPECIFIED" ? "" : query.status });
   if (query.visibility) and.push({ visibility: query.visibility });
   if (query.researcher) and.push({ authorLinks: { some: { teamMemberId: query.researcher, teamMember: publishedMemberWhere(viewer) } } });
 

@@ -25,6 +25,7 @@ export * from "./schemas/resource.js";
 export * from "./schemas/invitation.js";
 export * from "./permissions.js";
 export * from "./duplicates.js";
+export * from "./publicationMeta.js";
 export * from "./i18n/index.js";
 
 export * from "./schemas/admin.js";

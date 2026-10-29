@@ -1,4 +1,4 @@
-import { canEditOwnProfile, isAdmin, isGoogleScholarUrl, isOrcidUrl, isResearchGateUrl } from "@scl/shared";
+import { canEditOwnProfile, isAdmin, isGoogleScholarUrl, isOrcidUrl, isPublicationStatus, isResearchGateUrl } from "@scl/shared";
 import type {
   AreaRef,
   NewsItem,
@@ -83,6 +83,15 @@ export function toPublication(
     doiUrl: string;
     extraUrl: string;
     extraLabel: string;
+    status: string;
+    pubMonth: number;
+    volume: string;
+    pageStart: string;
+    pageEnd: string;
+    issn: string;
+    isbn: string;
+    category: string;
+    acceptedDate: string;
     visibility: string;
   },
   viewer: Viewer,
@@ -97,6 +106,16 @@ export function toPublication(
     doiUrl: row.doiUrl,
     extraUrl: row.extraUrl,
     extraLabel: row.extraLabel,
+    // Unknown stored values read back as "not stated" rather than leaking an unvalidated string into the API.
+    status: isPublicationStatus(row.status) ? row.status : "",
+    pubMonth: Number.isInteger(row.pubMonth) && row.pubMonth >= 1 && row.pubMonth <= 12 ? row.pubMonth : 0,
+    volume: row.volume,
+    pageStart: row.pageStart,
+    pageEnd: row.pageEnd,
+    issn: row.issn,
+    isbn: row.isbn,
+    category: row.category,
+    acceptedDate: row.acceptedDate,
     ...visibilityField(viewer, row.visibility),
   };
 }

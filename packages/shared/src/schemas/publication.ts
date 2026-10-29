@@ -7,6 +7,7 @@ import type { AreaRef, GroupRef, ProjectRef } from "./project.js";
 import { parseSearchText, SEARCH_MAX_TERMS, SEARCH_QUERY_MAX_LENGTH } from "./search.js";
 import { translationsField } from "./translations.js";
 import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
+import { PUBLICATION_STATUSES, isIsbn, isIsoDate, isIssn, type PublicationStatusOrNone } from "../publicationMeta.js";
 
 export const MIN_PUBLICATION_YEAR = 1900;
 export const MAX_PUBLICATION_YEAR = 2100;
@@ -24,10 +25,22 @@ export const publicationSchema = z.object({
   doiUrl: z.string(),
   extraUrl: z.string(),
   extraLabel: z.string(),
+  /** Optional bibliographic metadata. "" / 0 mean "not stated" (never a guess); see publicationMeta.ts. */
+  status: z.union([z.enum(PUBLICATION_STATUSES), z.literal("")]),
+  /** 1-12, or 0 when the source states no month. */
+  pubMonth: z.number(),
+  volume: z.string(),
+  pageStart: z.string(),
+  pageEnd: z.string(),
+  issn: z.string(),
+  isbn: z.string(),
+  category: z.string(),
+  /** ISO date YYYY-MM-DD, or "". */
+  acceptedDate: z.string(),
   /** Only sent to accounts that may change visibility (lab managers, admins). */
   visibility: visibilitySchema.optional(),
 });
-export type Publication = z.infer<typeof publicationSchema>;
+export type Publication = z.infer<typeof publicationSchema> & { status: PublicationStatusOrNone };
 
 // The form sends the year as text; accept a numeric string but nothing else
 // (so null, booleans and arrays do not silently coerce into a year; "" counts as missing).
@@ -49,6 +62,19 @@ const publicationFields = {
   doiUrl: optionalHttpUrl("DOI URL"),
   extraUrl: optionalHttpUrl("Extra link URL"),
   extraLabel: z.string().trim().max(60, "Extra link label must be at most 60 characters."),
+  status: z.union([z.enum(PUBLICATION_STATUSES), z.literal("")], { errorMap: () => ({ message: `Status must be one of: ${PUBLICATION_STATUSES.join(", ")}, or empty.` }) }),
+  // The form sends the month as text; "" means "not stated" (0).
+  pubMonth: z.preprocess(
+    (v) => (typeof v === "string" ? (v.trim() === "" ? 0 : Number(v)) : v),
+    z.number({ invalid_type_error: "Month must be a number." }).int("Month must be a whole number.").min(0, "Month must be between 1 and 12.").max(12, "Month must be between 1 and 12."),
+  ),
+  volume: z.string().trim().max(100, "Volume must be at most 100 characters."),
+  pageStart: z.string().trim().max(30, "Start page must be at most 30 characters."),
+  pageEnd: z.string().trim().max(30, "End page must be at most 30 characters."),
+  issn: z.string().trim().max(9, "ISSN must look like 1234-5678.").refine((v) => v === "" || isIssn(v), "ISSN must look like 1234-5678."),
+  isbn: z.string().trim().max(20, "ISBN must be a valid ISBN-10 or ISBN-13.").refine((v) => v === "" || isIsbn(v), "ISBN must be a valid ISBN-10 or ISBN-13."),
+  category: z.string().trim().max(200, "Category must be at most 200 characters."),
+  acceptedDate: z.string().trim().refine((v) => v === "" || isIsoDate(v), "Acceptance date must be a real date written YYYY-MM-DD."),
 };
 
 export const createPublicationSchema = z.object({
@@ -60,6 +86,15 @@ export const createPublicationSchema = z.object({
   doiUrl: publicationFields.doiUrl.optional().default(""),
   extraUrl: publicationFields.extraUrl.optional().default(""),
   extraLabel: publicationFields.extraLabel.optional().default(""),
+  status: publicationFields.status.optional().default(""),
+  pubMonth: publicationFields.pubMonth.optional().default(0),
+  volume: publicationFields.volume.optional().default(""),
+  pageStart: publicationFields.pageStart.optional().default(""),
+  pageEnd: publicationFields.pageEnd.optional().default(""),
+  issn: publicationFields.issn.optional().default(""),
+  isbn: publicationFields.isbn.optional().default(""),
+  category: publicationFields.category.optional().default(""),
+  acceptedDate: publicationFields.acceptedDate.optional().default(""),
   /** Lab managers and admins only (403 for anyone else); omitted = PUBLIC. */
   visibility: visibilitySchema.optional(),
   /** Optional team members to link as authors, applied in the same transaction as the create. */
@@ -81,6 +116,15 @@ export const updatePublicationSchema = z
     doiUrl: publicationFields.doiUrl.optional(),
     extraUrl: publicationFields.extraUrl.optional(),
     extraLabel: publicationFields.extraLabel.optional(),
+    status: publicationFields.status.optional(),
+    pubMonth: publicationFields.pubMonth.optional(),
+    volume: publicationFields.volume.optional(),
+    pageStart: publicationFields.pageStart.optional(),
+    pageEnd: publicationFields.pageEnd.optional(),
+    issn: publicationFields.issn.optional(),
+    isbn: publicationFields.isbn.optional(),
+    category: publicationFields.category.optional(),
+    acceptedDate: publicationFields.acceptedDate.optional(),
     /** Lab managers and admins only (403 for anyone else). */
     visibility: visibilitySchema.optional(),
     /** When present, replaces the full set of linked team members (same transaction as the field update). */
@@ -100,6 +144,9 @@ export type PublicationAuthorsResponse = z.infer<typeof publicationAuthorsRespon
 
 // ---- Phase 19: the knowledge hub ----------------------------------------------------
 export const PUBLICATION_SORTS = ["newest", "oldest", "title"] as const;
+/** The status filter of the browse endpoint: one of the three statuses, or UNSPECIFIED for records that state none. */
+export const PUBLICATION_STATUS_FILTERS = [...PUBLICATION_STATUSES, "UNSPECIFIED"] as const;
+export type PublicationStatusFilter = (typeof PUBLICATION_STATUS_FILTERS)[number];
 export type PublicationSort = (typeof PUBLICATION_SORTS)[number];
 export const PUBLICATION_DEFAULT_LIMIT = 20;
 export const PUBLICATION_MAX_LIMIT = 50;
@@ -158,6 +205,7 @@ const textParam = z.preprocess(one, z.string({ invalid_type_error: "Search text 
 export const publicationListQuerySchema = z.object({
   q: textParam,
   year: queryInt("Year", MIN_PUBLICATION_YEAR, MAX_PUBLICATION_YEAR),
+  status: enumParam(PUBLICATION_STATUS_FILTERS, "Status"),
   researcher: idParam("Researcher"),
   project: idParam("Project"),
   area: idParam("Research area"),
