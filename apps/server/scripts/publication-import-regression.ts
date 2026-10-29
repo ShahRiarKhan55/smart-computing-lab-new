@@ -316,6 +316,108 @@ await prisma.publication.update({ where: { id: one.id }, data: { visibility: "PU
 }
 
 // =====================================================================================================================================
+// 8b. Review decisions: 7 and 21 prefer the spreadsheet (explicit update only), 13 is the stored arXiv record, 8 / 10 / 16 stay blocked
+// =====================================================================================================================================
+const decisions = lib.parseDecisions(JSON.parse(fs.readFileSync(path.join(HERE, "fixtures", "publication-list-review-decisions.json"), "utf8")));
+const decisionsPath = path.join(HERE, "fixtures", "publication-list-review-decisions.json");
+async function seedStored(db: any) {
+  const signals = await db.publication.create({ data: { year: 2026, title: "Optimizing FPGA and Wafer Test Coverage with Spatial Sampling and Machine Learning: Analysis of Local Spatial Consistency", authors: "Weiquan Wang, K.M Shahriar Alam Adib, Foisal Ahmed, Riaz-ul-haque Mian", venue: "MDPI Signals", doiUrl: "https://doi.org/10.3390/signals7030053" } });
+  const integration = await db.publication.create({ data: { year: 2025, title: "A progressive self-training semi-supervised model to enhance discontinuous change detection", authors: "Yamane Soma, Sakai Yuwa, Riaz-ul-haque Mian", venue: "Elsevier Integration", doiUrl: "https://doi.org/10.1016/j.vlsi.2025.102609" } });
+  const preprint = await db.publication.create({ data: { year: 2025, title: "Optimizing FPGA and wafer test coverage with spatial sampling and machine learning", authors: "Wang WeiQuan", venue: "IEEE 2025 5th International Conference on Electrical, Computer and Energy Technologies (ICECET)", doiUrl: "https://doi.org/10.48550/arXiv.2506.03556" } });
+  const todaes = await db.publication.create({ data: { year: 2026, title: "Enhanced detection of recycled FPGAs using Gaussian process regression with LHS and active sampling", authors: "Yoshito Hagihara, Foisal Ahmed, Yamane Shoma, Riaz-Ul-Haque Mian", venue: "ACM Transactions on Design Automation of Electronic Systems", doiUrl: "https://doi.org/10.1145/3765907" } });
+  const person = await db.teamMember.create({ data: { name: "Linked Author", initials: "LA", role: "r", category: "MSC" } });
+  await db.publicationAuthor.create({ data: { publicationId: signals.id, teamMemberId: person.id } });
+  await db.publicationAuthor.create({ data: { publicationId: integration.id, teamMemberId: person.id } });
+  await db.translation.create({ data: { entityType: "PUBLICATION", entityId: signals.id, locale: "ja", field: "venue", value: "既存の会場名" } });
+  await db.translation.create({ data: { entityType: "PUBLICATION", entityId: integration.id, locale: "ja", field: "title", value: "既存の題目" } });
+  await db.auditLog.create({ data: { actorEmail: "someone@example.org", action: "PUBLICATION_CREATED", entityType: "PUBLICATION", entityId: signals.id, details: JSON.stringify({ title: "history" }) } });
+  return { signals, integration, preprint, todaes, person };
+}
+const planOf = async (db: any, overrides?: any) => lib.buildPlan(xlsx, (await lib.loadExistingPublications(db)).rows, overrides, decisions);
+const D0 = { visibility: "PUBLIC" as const, fillEmpty: false, confirmDistinct: new Set<string>() };
+{
+  const dbFile = await makeDb("decisions.db");
+  const db = new PrismaClient({ datasources: { db: { url: `file:${dbFile}` } } });
+  const st = await seedStored(db);
+  const storedRows = async () => JSON.stringify(await db.publication.findMany({ where: { id: { in: [st.signals.id, st.integration.id, st.preprint.id, st.todaes.id] } }, orderBy: { id: "asc" } }));
+  const keep = { rows: await storedRows(), links: await db.publicationAuthor.count(), tr: await db.translation.count(), history: JSON.stringify(await db.auditLog.findMany({ orderBy: { id: "asc" } })) };
+
+  const plan = await planOf(db);
+  const disp = (n: number) => plan.plan.entries[n - 1].disposition;
+  t("decisions: the plan (a dry run) says 16 new, 1 identical, 1 confirmed, 2 explicit updates, 3 blocked, nothing else", JSON.stringify(plan.plan.counts) === JSON.stringify({ total: 23, new: 16, "existing-match": 1, conflict: 0, "possible-match": 0, "duplicate-in-source": 0, invalid: 3, "update-required": 2, "confirmed-match": 1 }), JSON.stringify(plan.plan.counts));
+  t("decisions: record 7 and 21 require an explicit update; 13 is a confirmed match; 8, 10, 16 are blocked", disp(7) === "update-required" && disp(21) === "update-required" && disp(13) === "confirmed-match" && [8, 10, 16].every((n) => disp(n) === "invalid"));
+  t("decisions: planning wrote nothing", (await storedRows()) === keep.rows && (await db.publication.count()) === 4);
+
+  // a plain apply (no explicit-update switch)
+  const plain = await lib.applyPlan(db, plan.plan, D0);
+  const oc = (rs: any[], n: number) => rs.find((r) => r.ordinal === n)?.outcome;
+  t("plain apply: 16 created, 2 pending explicit updates, 2 untouched, 3 blocked skipped", (() => { const o = outcomes(plain) as Record<string, number>; return o.created === 16 && o["pending-update"] === 2 && o.unchanged === 2 && o.skipped === 3 && Object.keys(o).length === 4; })(), JSON.stringify(outcomes(plain)));
+  t("plain apply: records 7 and 21 are NOT updated (the year is still 2025, the venue still 'MDPI Signals')", oc(plain, 7) === "pending-update" && oc(plain, 21) === "pending-update" && (await db.publication.findUnique({ where: { id: st.integration.id } }))?.year === 2025 && (await db.publication.findUnique({ where: { id: st.signals.id } }))?.venue === "MDPI Signals");
+  t("plain apply: all four stored records are byte-for-byte as they were (nothing overwritten automatically)", (await storedRows()) === keep.rows);
+  t("plain apply: record 13 was NOT created (no second copy of the arXiv publication)", oc(plain, 13) === "unchanged" && (await db.publication.count({ where: { title: { contains: "Classification (Accepted for" } } })) === 0);
+  t("plain apply: records 8, 10, 16 were not created", [8, 10, 16].every((n) => oc(plain, n) === "skipped") && (await db.publication.count({ where: { OR: [{ title: { contains: "Design of low power" } }, { title: { contains: "Green Building" } }, { title: { contains: "HALT-ViT" } }] } })) === 0);
+  t("plain apply: author links, translations and the earlier audit history are preserved; only creation audits were added", (await db.publicationAuthor.count()) === keep.links && (await db.translation.count()) === keep.tr && (await db.auditLog.count({ where: { action: "PUBLICATION_UPDATED" } })) === 0 && (await db.auditLog.count()) === 17);
+  t("plain apply: the history rows that existed before are unchanged", JSON.stringify(await db.auditLog.findMany({ where: { actorEmail: "someone@example.org" } })) === JSON.stringify(JSON.parse(keep.history)));
+  t("plain apply: 20 publications (4 + 16)", (await db.publication.count()) === 20);
+
+  // the explicit step
+  const beforeExplicit = { sig: await db.publication.findUnique({ where: { id: st.signals.id } }), int: await db.publication.findUnique({ where: { id: st.integration.id } }), pre: await db.publication.findUnique({ where: { id: st.preprint.id } }), tod: await db.publication.findUnique({ where: { id: st.todaes.id } }) };
+  const explicit = await lib.applyPlan(db, (await planOf(db)).plan, { ...D0, applyDecidedUpdates: true });
+  t("explicit update: exactly records 7 and 21 are updated, nothing is created", oc(explicit, 7) === "updated" && oc(explicit, 21) === "updated" && !explicit.some((r) => r.outcome.startsWith("created")) && (await db.publication.count()) === 20, JSON.stringify(outcomes(explicit)));
+  const afterInt = await db.publication.findUnique({ where: { id: st.integration.id } });
+  const afterSig = await db.publication.findUnique({ where: { id: st.signals.id } });
+  const differs = (a: any, b: any) => Object.keys(a).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).sort().join();
+  t("explicit update 7: ONLY the year changed (2025 -> 2026); its venue, authors, DOI and title are as stored", afterInt?.year === 2026 && differs(beforeExplicit.int, afterInt) === "updatedAt,year" && afterInt?.venue === "Elsevier Integration");
+  t("explicit update 21: ONLY the venue changed ('MDPI Signals' -> 'Signals')", afterSig?.venue === "Signals" && differs(beforeExplicit.sig, afterSig) === "updatedAt,venue" && afterSig?.year === 2026);
+  t("explicit update: the arXiv record (13) and the identical TODAES record are untouched", JSON.stringify(await db.publication.findUnique({ where: { id: st.preprint.id } })) === JSON.stringify(beforeExplicit.pre) && JSON.stringify(await db.publication.findUnique({ where: { id: st.todaes.id } })) === JSON.stringify(beforeExplicit.tod));
+  t("explicit update: author links and Japanese translations of the updated records are preserved", (await db.publicationAuthor.count()) === keep.links && (await db.translation.count()) === keep.tr && (await db.translation.count({ where: { entityId: st.signals.id, field: "venue", value: "既存の会場名" } })) === 1);
+  const upd = await db.auditLog.findMany({ where: { action: "PUBLICATION_UPDATED" }, orderBy: { createdAt: "asc" } });
+  t("explicit update: one audit row per updated record naming the changed field (not its text) and the source", upd.length === 2 && upd.every((a: any) => a.actorId === null && /"source":"xlsx-import-decision"/.test(a.details)) && upd.some((a: any) => /"changed":"year"/.test(a.details)) && upd.some((a: any) => /"changed":"venue"/.test(a.details)));
+  t("explicit update: the earlier audit history is untouched and nothing was deleted", (await db.auditLog.count()) === 19 && JSON.stringify(await db.auditLog.findMany({ where: { actorEmail: "someone@example.org" } })) === JSON.stringify(JSON.parse(keep.history)));
+  const snap = await snapshot(db);
+  const rerun = await lib.applyPlan(db, (await planOf(db)).plan, { ...D0, applyDecidedUpdates: true });
+  t("explicit update: running it again changes nothing at all", !rerun.some((r) => ["updated", "created", "created-confirmed", "filled"].includes(r.outcome)) && (await snapshot(db)) === snap && (await db.auditLog.count()) === 19);
+  const after = await planOf(db);
+  t("after the update, record 7 stays visible as a conflict only for its undecided venue wording; 21 is an identical match", after.plan.entries[6].disposition === "conflict" && after.plan.entries[6].undecided.map((x) => x.field).join() === "venue" && after.plan.entries[20].disposition === "existing-match");
+
+  // a person cannot override the decisions through the overrides file
+  const sneaky = await planOf(db, { records: { "8": { expectTitle: "Design of low power", year: 2017 }, "10": { expectTitle: "Green Building", year: 2020 }, "16": { expectTitle: "HALT-ViT", year: 2026 } }, confirmDistinct: ["13"] });
+  const sneakyRun = await lib.applyPlan(db, sneaky.plan, { ...D0, confirmDistinct: new Set(["13"]), applyDecidedUpdates: true });
+  t("blocked stays blocked: supplying years in an overrides file does not import records 8, 10, 16", [8, 10, 16].every((n) => sneaky.plan.entries[n - 1].disposition === "invalid" && oc(sneakyRun, n) === "skipped") && (await db.publication.count()) === 20);
+  t("record 13 cannot be created by confirmDistinct either (the decision says it is the stored record)", sneaky.plan.entries[12].disposition === "confirmed-match" && (await db.publication.count({ where: { title: { contains: "Classification (Accepted for" } } })) === 0);
+
+  // compare-and-set: the stored value changed after the plan was made
+  const raceFile = await makeDb("race.db");
+  const raceDb = new PrismaClient({ datasources: { db: { url: `file:${raceFile}` } } });
+  const rs = await seedStored(raceDb);
+  const racePlan = await planOf(raceDb);
+  await raceDb.publication.update({ where: { id: rs.integration.id }, data: { year: 2024 } });
+  const raced = await lib.applyPlan(raceDb, racePlan.plan, { ...D0, applyDecidedUpdates: true });
+  t("compare-and-set: a stored year edited after the review is NOT overwritten (the update is refused, with the reason)", oc(raced, 7) === "skipped" && /no longer "2025"/.test(raced.find((r) => r.ordinal === 7)!.detail) && (await raceDb.publication.findUnique({ where: { id: rs.integration.id } }))?.year === 2024);
+  t("compare-and-set: the other decided update, whose stored value is unchanged, still applies", oc(raced, 21) === "updated" && (await raceDb.publication.findUnique({ where: { id: rs.signals.id } }))?.venue === "Signals");
+  const stalePlan = await planOf(raceDb);
+  t("a stale decision is not even proposed on the next plan", stalePlan.plan.entries[6].disposition !== "update-required" && stalePlan.plan.entries[6].notes.some((x: string) => /stale/.test(x)));
+
+  // the duplicate guard still has the last word on an update
+  const guardFile = await makeDb("guard2.db");
+  const guardDb = new PrismaClient({ datasources: { db: { url: `file:${guardFile}` } } });
+  const gs = await seedStored(guardDb);
+  const guardPlan = await planOf(guardDb);
+  await guardDb.publication.create({ data: { year: 2026, title: gs.integration.title, authors: "x", venue: "y" } }); // would collide on title + year after the update
+  const guarded = await lib.applyPlan(guardDb, guardPlan.plan, { ...D0, applyDecidedUpdates: true });
+  t("update guard: if the new year would duplicate another publication, the update is refused and nothing changes", oc(guarded, 7) === "skipped" && /duplicate guard/.test(guarded.find((r) => r.ordinal === 7)!.detail) && (await guardDb.publication.findUnique({ where: { id: gs.integration.id } }))?.year === 2025);
+
+  // a database without the stored arXiv record: 13 is blocked, never created
+  const emptyFile = await makeDb("nostored.db");
+  const emptyDb = new PrismaClient({ datasources: { db: { url: `file:${emptyFile}` } } });
+  const emptyPlan = await planOf(emptyDb);
+  const emptyRun = await lib.applyPlan(emptyDb, emptyPlan.plan, { ...D0, applyDecidedUpdates: true });
+  t("record 13 on a database that lacks the stored record is blocked with the reason, not created", emptyPlan.plan.entries[12].disposition === "invalid" && emptyPlan.plan.entries[12].candidate.errors.some((e: any) => e.code === "decision-target-missing") && oc(emptyRun, 13) === "skipped" && (await emptyDb.publication.count({ where: { title: { contains: "Classification (Accepted for" } } })) === 0);
+  t("…and records 7 and 21, with nothing stored to update, are simply created as new (the decisions only concern stored records)", oc(emptyRun, 7) === "created" && oc(emptyRun, 21) === "created");
+  await Promise.all([db, raceDb, guardDb, emptyDb].map((d) => d.$disconnect()));
+}
+
+// =====================================================================================================================================
 // 9. The command line
 // =====================================================================================================================================
 function runCli(args: string[], env: Record<string, string> = {}) {
@@ -367,6 +469,46 @@ function runCli(args: string[], env: Record<string, string> = {}) {
   }
   const leak = runCli(["--file", xlsxPath, "--expect-target", "x-y.turso.io", "--apply"], { IMPORT_TARGET_URL: "libsql://x-y.turso.io", IMPORT_TARGET_TOKEN: "SECRET-TOKEN-VALUE-12345" });
   t("CLI never prints the token or the connection URL", !leak.out.includes("SECRET-TOKEN-VALUE-12345") && !leak.out.includes("libsql://"));
+
+  // review decisions through the command
+  {
+    const dFile = await makeDb("cli-decisions.db");
+    const dUrl = `file:${dFile}`;
+    const dDb = new PrismaClient({ datasources: { db: { url: dUrl } } });
+    const dst = await seedStored(dDb);
+    await dDb.$disconnect();
+    const dBase = ["--file", xlsxPath, "--expect-target", dUrl, "--decisions", decisionsPath];
+    const dEnv = { IMPORT_TARGET_URL: dUrl };
+    const h0 = sha(dFile);
+    const dry2 = runCli([...dBase, "--report-dir", path.join(workDir, "report-decisions")], dEnv);
+    const rep2 = JSON.parse(fs.readFileSync(path.join(workDir, "report-decisions", "report.json"), "utf8"));
+    const dispOf = (n: number) => rep2.records[n - 1].disposition;
+    t("CLI dry run with decisions: exit 0, the database file is byte-identical", dry2.code === 0 && sha(dFile) === h0);
+    t("CLI dry run with decisions: the report says exactly which records are created, matched, blocked or need an explicit update", rep2.summary.counts.new === 16 && rep2.summary.counts["update-required"] === 2 && rep2.summary.counts["confirmed-match"] === 1 && rep2.summary.counts["existing-match"] === 1 && rep2.summary.counts.invalid === 3 && dispOf(7) === "update-required" && dispOf(21) === "update-required" && dispOf(13) === "confirmed-match" && [8, 10, 16].every((n) => dispOf(n) === "invalid"));
+    t("CLI dry run with decisions: the console summary names the explicit updates", /Requires an explicit update \(review decision; not applied automatically\) \| 2/.test(dry2.out) && /Confirmed by review as an already stored publication \(never created\) \| 1/.test(dry2.out));
+    const md2 = fs.readFileSync(path.join(workDir, "report-decisions", "report.md"), "utf8");
+    t("CLI report: blocked records show both reasons; updates show stored -> spreadsheet values; 13 shows its undecided differences", /blocked-by-review/.test(md2) && /no-year/.test(md2) && md2.includes('will change **year** from "2025" to "2026"') && md2.includes('will change **venue** from "MDPI Signals" to "Signals"') && /differs in \*\*authors\*\* with NO decision to change it/.test(md2));
+    const plainApply = runCli([...dBase, "--apply"], dEnv);
+    const chk = new PrismaClient({ datasources: { db: { url: dUrl } } });
+    t("CLI --apply with decisions (no explicit-update switch): creates the 16, leaves records 7 and 21 as stored", plainApply.code === 0 && (await chk.publication.count()) === 20 && (await chk.publication.findUnique({ where: { id: dst.integration.id } }))?.year === 2025 && (await chk.publication.findUnique({ where: { id: dst.signals.id } }))?.venue === "MDPI Signals");
+    const explicitApply = runCli([...dBase, "--apply", "--apply-decided-updates"], dEnv);
+    t("CLI --apply --apply-decided-updates: updates exactly the decided year and venue", explicitApply.code === 0 && (await chk.publication.findUnique({ where: { id: dst.integration.id } }))?.year === 2026 && (await chk.publication.findUnique({ where: { id: dst.signals.id } }))?.venue === "Signals" && (await chk.publication.findUnique({ where: { id: dst.integration.id } }))?.venue === "Elsevier Integration" && (await chk.publication.count()) === 20);
+    const h1b = sha(dFile);
+    const rerun2 = runCli([...dBase, "--apply", "--apply-decided-updates"], dEnv);
+    t("CLI re-run of the explicit update: nothing changes (byte-identical)", rerun2.code === 0 && sha(dFile) === h1b);
+    await chk.$disconnect();
+
+    for (const [name, args] of [
+      ["--apply-decided-updates without --decisions", [...base, "--apply", "--apply-decided-updates"]],
+      ["--apply-decided-updates without --apply", [...dBase, "--apply-decided-updates"]],
+      ["a --decisions file that is not JSON", [...base, "--decisions", xlsxPath]],
+      ["a --decisions file with an unknown decision kind", [...base, "--decisions", (() => { const f = path.join(workDir, "bad-decisions.json"); fs.writeFileSync(f, JSON.stringify({ version: 1, records: { "7": { decision: "overwrite", expectTitle: "A progressive self-training" } } })); return f; })()]],
+      ["a --decisions file that would change a DOI", [...base, "--decisions", (() => { const f = path.join(workDir, "bad-decisions2.json"); fs.writeFileSync(f, JSON.stringify({ version: 1, records: { "7": { decision: "prefer-source", expectTitle: "A progressive self-training", fields: { doiUrl: { expectExisting: "x" } } } } })); return f; })()]],
+    ] as Array<[string, string[]]>) {
+      const r = runCli(args, name.includes("dBase") ? dEnv : env);
+      t(`CLI refuses ${name} (exit 2)`, r.code === 2, `${r.code}: ${r.out.slice(-160).replace(/\n/g, " ")}`);
+    }
+  }
 
   const old = await makeDb("old.db", "20261027120000");
   const oldBefore = sha(old);

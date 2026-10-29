@@ -86,7 +86,7 @@ Options: `--visibility LAB_ONLY` creates the records visible to signed-in member
 database. Exit codes: 0 finished, 1 some records failed to write, 2 refused before touching the database, 4 unexpected error.
 
 The tool **only creates** records (and, with `--fill-empty`, fills empty bibliographic fields of an identical record). It never updates a
-non-empty field, never deletes, never alters the schema (it refuses `--apply` on a database without the migration), and never links
+non-empty field on its own (the one exception is a field a person decided explicitly: section 4a), never deletes, never alters the schema (it refuses `--apply` on a database without the migration), and never links
 publications to team members.
 
 ## 4. Reviewing the report and resolving conflicts
@@ -99,6 +99,8 @@ publications to team members.
 | `existing-match` | Already stored: identical title, year, venue and authors. | Nothing. (This is why a second run creates nothing.) |
 | `conflict` | Matches a stored record by DOI, or by title and year, but differs in a core field. **Nothing is overwritten.** | See below. |
 | `possible-match` | No rule fires exactly, but a stored title is contained in this one (for example an "(Accepted)" suffix). | See below. |
+| `confirmed-match` | A review decision says this record **is** the stored publication with a given DOI. Never created; nothing stored changes. | Nothing. |
+| `update-required` | A review decision prefers the spreadsheet value for named fields. **Reported only**, not applied by a plain `--apply`. | Run the explicit step (section 4a). |
 | `duplicate-in-source` | Another record of the same file already stands for it. | Fix the file. |
 | `invalid` | Cannot be imported as it stands (listed with the reason). | Supply the missing information. |
 
@@ -111,7 +113,7 @@ record added by someone else since the dry run is caught.
   (the edit form now has every field). If the stored record is right, do nothing.
 * **Conflict by title and year, or possible match**: if it really is a *different* publication, list its number in `confirmDistinct`; if it is the
   same publication, do nothing.
-* **Blocked record**: supply the missing year (after checking the source) in an overrides file. An override must carry `expectTitle`, which has to
+* **Blocked record**: supply the missing year (after checking the source) in an overrides file, unless a review decision keeps it blocked (4a). An override must carry `expectTitle`, which has to
   match the start of the record's title, so it can never land on the wrong record:
 
 ```json
@@ -125,10 +127,48 @@ Any destination field can be overridden the same way (`title`, `authors`, `venue
 `pageEnd`, `issn`, `isbn`, `category`, `acceptedDate`); each value goes through the same validation as the API, and each override is listed in the
 report. Re-run the dry run, then `--apply`.
 
+## 4a. Review decisions (`--decisions`)
+
+Decisions a person made about records the importer cannot settle live in a reviewed file,
+`apps/server/scripts/fixtures/publication-list-review-decisions.json`, and are passed with `--decisions <json>`. The file is strict (unknown
+keys or kinds are refused) and every entry names the record number **and** the start of its title, so a decision can never land on the wrong
+record; a mismatch blocks the record. Three kinds exist:
+
+| Decision | Effect |
+|---|---|
+| `same-as-existing` (`existingDoi`) | The record is the stored publication with that DOI: reported as `confirmed-match`, never created, nothing changed. Refused unless exactly one stored publication has that DOI. |
+| `prefer-source` (`fields`, each with `expectExisting`) | The spreadsheet value is preferred for those fields. Reported as `update-required` with old and new value. Title and DOI cannot be decided this way. |
+| `keep-blocked` (`reason`) | The record stays out of the import and the reason is printed. It wins over an overrides file. |
+
+**Nothing is overwritten automatically.** A dry run and a plain `--apply` only report `update-required`. The change happens only with
+`--apply --decisions <file> --apply-decided-updates`, and then per field only if the stored value is still exactly `expectExisting` (compare
+and set), through the application's duplicate guard, in one transaction, changing only the decided fields, with a `PUBLICATION_UPDATED` audit row
+(`"source":"xlsx-import-decision"`). Author links, translations and earlier audit history are untouched. If the stored value has changed, the
+update is skipped and reported; a repeat run finds nothing to do.
+
+Decisions in force for the example list:
+
+| Record | Decision | Result |
+|---|---|---|
+| 7 | prefer-source: `year` 2026 (stored 2025) | explicit update required; its venue difference stays undecided and is not changed |
+| 21 | prefer-source: `venue` "Signals" (stored "MDPI Signals") | explicit update required |
+| 13 | same-as-existing: DOI `arXiv.2506.03556` | confirmed match, not created |
+| 8, 10, 16 | keep-blocked: publication year unresolved | blocked, not imported |
+
+Against the seeded database this gives 16 new, 1 identical (15), 1 confirmed match (13), 2 explicit updates (7, 21), 3 blocked (8, 10, 16).
+
+```bash
+IMPORT_TARGET_URL=file:/abs/path/copy.db npm run import:publications -w apps/server -- \
+  --file /abs/path/publicationslist.xlsx --expect-target file:/abs/path/copy.db \
+  --decisions apps/server/scripts/fixtures/publication-list-review-decisions.json --apply --apply-decided-updates
+```
+
+The explicit flag requires both `--apply` and `--decisions`. It was only ever exercised on disposable databases.
+
 ## 5. Verifying counts and completeness
 
 After an apply, with the example file against a database seeded by `npm run seed` (4 existing publications): 23 source records give 16 created, 1
-already stored (identical), 2 conflicts, 1 possible match, 3 blocked. A second `--apply` creates nothing and leaves the database file
+already stored (identical), 2 conflicts, 1 possible match, 3 blocked (without decisions; with the decisions of section 4a see there). A second `--apply` creates nothing and leaves the database file
 byte-identical. To check a target yourself:
 
 * publications created by the import carry an audit row `PUBLICATION_CREATED` with `"source":"xlsx-import"` (count them in the admin audit view);
@@ -137,7 +177,7 @@ byte-identical. To check a target yourself:
 
 `--fill-empty` is the only way an existing record is touched: for a record that is already stored and identical, it fills the bibliographic fields
 that are **empty** (`doiUrl`, `status`, `pubMonth`, `volume`, `pageStart`, `pageEnd`, `issn`, `isbn`, `category`, `acceptedDate`) and records
-`PUBLICATION_UPDATED` in the audit log. Conflicting records (for this list: 7, 13 and 21 on a freshly seeded database) are never filled.
+`PUBLICATION_UPDATED` in the audit log. Conflicting records (for this list: 7, 13 and 21 without decisions) are never filled, and neither are records with a review decision.
 
 ## 6. Schema change, roll-out and rollback
 
@@ -168,7 +208,8 @@ remove them through the admin interface. There is no automated delete, by design
 
 ## 8. Limitations
 
-* The three blocked records need a year from a person; the report prints an overrides template with the value left to fill in.
+* The three blocked records (8, 10, 16) stay blocked by decision until a person resolves their year; the report states why and prints no override template for them.
+* Record 7 also differs in venue from the stored record; only the year was decided, so the venue is reported as undecided and left alone.
 * Record 6's list number `277` and record 11's month `2025` have no field and are reported, not stored.
 * `volume` keeps the sheet's text (it can contain the issue and article number); there is no separate issue field.
 * Publications are not linked to team members or accounts. The author list is text, in the original order; linking is done in the admin interface.

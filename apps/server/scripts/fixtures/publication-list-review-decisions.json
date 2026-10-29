@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "source": "publicationslist.xlsx",
+  "description": "Review decisions for the lab's publication list import (PR 22). Read by scripts/import-publications.ts with --decisions. A prefer-source decision is REPORTED by a dry run and by a plain --apply; it is carried out only by --apply-decided-updates, and only while the stored value is still the one named in expectExisting. Nothing here creates a record or changes a stored field by itself.",
+  "records": {
+    "7": {
+      "decision": "prefer-source",
+      "expectTitle": "A progressive self-training semi-supervised model",
+      "fields": { "year": { "expectExisting": 2025 } },
+      "note": "Reviewed: the spreadsheet year 2026 is preferred over the stored 2025. Only the year was decided: the venue wording (stored 'Elsevier Integration' vs file 'Integration') has NO decision and stays as stored."
+    },
+    "21": {
+      "decision": "prefer-source",
+      "expectTitle": "Optimizing FPGA and Wafer Test Coverage with Spatial Sampling and Machine Learning: Analysis",
+      "fields": { "venue": { "expectExisting": "MDPI Signals" } },
+      "note": "Reviewed: the spreadsheet venue 'Signals' is preferred over the stored 'MDPI Signals'. Only the venue was decided."
+    },
+    "13": {
+      "decision": "same-as-existing",
+      "expectTitle": "Optimizing FPGA and Wafer Test Coverage with Spatial Sampling and Machine Learning Classification",
+      "existingDoi": "https://doi.org/10.48550/arXiv.2506.03556",
+      "note": "Reviewed: the same publication as the stored arXiv-DOI record. It must not be created again. No decision was made to change any field of the stored record (authors, venue and title differ and stay as stored)."
+    },
+    "8": {
+      "decision": "keep-blocked",
+      "expectTitle": "Design of low power decimal logarithmic converter",
+      "reason": "Publication year unresolved: the source states no issue year and no acceptance date. Review confirmed it stays unresolved."
+    },
+    "10": {
+      "decision": "keep-blocked",
+      "expectTitle": "Green Building certification suitable for Bangladesh",
+      "reason": "Publication year unresolved: the source states no issue year and no acceptance date. Review confirmed it stays unresolved."
+    },
+    "16": {
+      "decision": "keep-blocked",
+      "expectTitle": "HALT-ViT: A Semi-Supervised Vision Transformer",
+      "reason": "Publication year unresolved: the source states no issue year and no acceptance date. Review confirmed it stays unresolved."
+    }
+  }
+}

@@ -1,10 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
+import type { Decisions } from "./decisions.js";
 import { crossRecordWarnings, mapRecord, type Candidate, type Overrides } from "./map.js";
 import { planImport, type ExistingPublication, type Plan } from "./plan.js";
 import { parseFormSheets, type ParsedSheets } from "./sheet.js";
 import { readWorkbook } from "./xlsx.js";
 
 export * from "./apply.js";
+export * from "./decisions.js";
 export * from "./map.js";
 export * from "./plan.js";
 export * from "./report.js";
@@ -22,12 +24,12 @@ export interface BuiltPlan {
 }
 
 /** Parse the workbook, map every record and classify it against `existing`. Pure: no database access, no writes. */
-export function buildPlan(workbook: Buffer, existing: readonly ExistingPublication[], overrides?: Overrides): BuiltPlan {
+export function buildPlan(workbook: Buffer, existing: readonly ExistingPublication[], overrides?: Overrides, decisions?: Decisions): BuiltPlan {
   const parsed = parseFormSheets(readWorkbook(workbook).sheets);
   const records = parsed.records.filter((r) => !r.empty);
   const candidates = records.map((r) => mapRecord(r, overrides));
   crossRecordWarnings(candidates);
-  return { parsed, candidates, plan: planImport(candidates, existing) };
+  return { parsed, candidates, plan: planImport(candidates, existing, decisions) };
 }
 
 /**
@@ -41,7 +43,7 @@ export async function loadExistingPublications(db: PrismaClient): Promise<{ rows
   const hasNewColumns = NEW_COLUMNS.every((c) => present.has(c));
   const cols = [...LEGACY_COLUMNS, ...NEW_COLUMNS.filter((c) => present.has(c))].map((c) => `"${c}"`).join(", ");
   const raw = (await db.$queryRawUnsafe(`SELECT ${cols} FROM "Publication"`)) as Array<Record<string, unknown>>;
-  const rows = raw.map((r) => ({
+  const rows: ExistingPublication[] = raw.map((r) => ({
     id: String(r.id),
     title: String(r.title),
     authors: String(r.authors),
@@ -58,5 +60,14 @@ export async function loadExistingPublications(db: PrismaClient): Promise<{ rows
     category: String(r.category ?? ""),
     acceptedDate: String(r.acceptedDate ?? ""),
   }));
+  // Japanese overrides of title / venue (read-only), so a report can warn before a field with a translation is changed.
+  const ja = new Map<string, string[]>();
+  try {
+    const t = (await db.$queryRawUnsafe(`SELECT "entityId", "field" FROM "Translation" WHERE "entityType" = 'PUBLICATION' AND "locale" = 'ja'`)) as Array<{ entityId: string; field: string }>;
+    for (const r of t) ja.set(r.entityId, [...(ja.get(r.entityId) ?? []), r.field]);
+  } catch {
+    /* a database without the Translation table simply has no overrides */
+  }
+  for (const r of rows) if (ja.has(r.id)) r.jaOverrides = ja.get(r.id);
   return { rows, hasNewColumns };
 }

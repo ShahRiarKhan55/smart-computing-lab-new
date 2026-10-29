@@ -11,7 +11,7 @@ import fs from "node:fs";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanAuthors, cleanLine, crossRecordWarnings, FIELD_MAP, mapRecord, parseAcceptanceDate, parseFormSheets, planImport, readWorkbook, XlsxError, buildMarkdownReport, buildJsonReport, excelSerialToIso, type Candidate, type ExistingPublication } from "../src/lib/publicationImport/index.ts";
+import { DecisionsError, buildPlan, parseDecisions, cleanAuthors, cleanLine, crossRecordWarnings, FIELD_MAP, mapRecord, parseAcceptanceDate, parseFormSheets, planImport, readWorkbook, XlsxError, buildMarkdownReport, buildJsonReport, excelSerialToIso, type Candidate, type ExistingPublication } from "../src/lib/publicationImport/index.ts";
 import { buildXlsx, formWorkbook, loadFixtureRecords } from "./lib/xlsxFixture.ts";
 
 let ok = 0;
@@ -223,6 +223,80 @@ t("acceptance date: an impossible date is unreadable", D("2025-02-30").iso === "
   t("report: blocked records come with an overrides template that has no value filled in", md.includes("FILL IN AFTER CHECKING THE SOURCE") && md.includes("Design of low power"));
   t("report: it never contains a credential-looking value", !/(token|password|secret)\s*[:=]/i.test(md) && !/libsql:\/\//.test(md));
   t("report: JSON carries the dispositions", js.records[0].disposition === "existing-match" && js.records.filter((r) => r.disposition === "invalid").length === 3);
+}
+
+// ---- review decisions -----------------------------------------------------------------------------------------------------------------------
+{
+  const decisionsDoc = JSON.parse(readFileSync(path.join(here, "fixtures", "publication-list-review-decisions.json"), "utf8"));
+  const decisions = parseDecisions(decisionsDoc);
+  const kinds = Object.fromEntries(Object.entries(decisions.records).map(([k, v]) => [k, v.decision]));
+  t("decisions: the reviewed fixture parses and records exactly the confirmed decisions", JSON.stringify(kinds) === JSON.stringify({ 7: "prefer-source", 8: "keep-blocked", 10: "keep-blocked", 13: "same-as-existing", 16: "keep-blocked", 21: "prefer-source" }), JSON.stringify(kinds));
+  const d7 = decisions.records["7"], d21 = decisions.records["21"], d13 = decisions.records["13"];
+  t("decisions: 7 prefers the spreadsheet YEAR (stored 2025), 21 the VENUE (stored 'MDPI Signals'), and nothing else", d7.decision === "prefer-source" && JSON.stringify(d7.fields) === JSON.stringify({ year: { expectExisting: 2025 } }) && d21.decision === "prefer-source" && JSON.stringify(d21.fields) === JSON.stringify({ venue: { expectExisting: "MDPI Signals" } }));
+  t("decisions: 13 is the stored arXiv record (DOI canonicalised)", d13.decision === "same-as-existing" && d13.existingDoi === "10.48550/arxiv.2506.03556");
+  const bad = (mut: (d: any) => void) => { const doc = JSON.parse(JSON.stringify(decisionsDoc)); mut(doc); try { parseDecisions(doc); return "accepted"; } catch (e) { return e instanceof DecisionsError ? "refused" : "crashed"; } };
+  t("decisions: strict - an unknown top-level key, a wrong version and a non-object are refused", bad((d) => (d.surprise = 1)) === "refused" && bad((d) => (d.version = 2)) === "refused" && (() => { try { parseDecisions([]); return false; } catch (e) { return e instanceof DecisionsError; } })());
+  t("decisions: strict - an unknown decision kind, an unknown key and a bad record key are refused", bad((d) => (d.records["7"].decision = "overwrite")) === "refused" && bad((d) => (d.records["7"].extra = 1)) === "refused" && bad((d) => (d.records["seven"] = d.records["7"])) === "refused");
+  t("decisions: identity fields (title, DOI) can never be the subject of a prefer-source decision", bad((d) => (d.records["7"].fields = { title: { expectExisting: "x" } })) === "refused" && bad((d) => (d.records["7"].fields = { doiUrl: { expectExisting: "x" } })) === "refused");
+  t("decisions: a prefer-source decision must name a known field with a stored value of the right type", bad((d) => (d.records["7"].fields = { nonsense: { expectExisting: "x" } })) === "refused" && bad((d) => (d.records["7"].fields = { year: { expectExisting: "2025" } })) === "refused" && bad((d) => (d.records["7"].fields = {})) === "refused" && bad((d) => (d.records["21"].fields = { venue: {} })) === "refused");
+  t("decisions: every decision must assert the record's title; keep-blocked needs a reason; same-as-existing needs a real DOI", bad((d) => delete d.records["7"].expectTitle) === "refused" && bad((d) => (d.records["7"].expectTitle = "short")) === "refused" && bad((d) => delete d.records["8"].reason) === "refused" && bad((d) => (d.records["13"].existingDoi = "not a doi")) === "refused");
+
+  // the stored shapes of the lab's live records
+  const ex = (id: string, o: Partial<ExistingPublication> & { title: string; year: number }): ExistingPublication => ({ authors: "", venue: "", doiUrl: "", status: "", pubMonth: 0, volume: "", pageStart: "", pageEnd: "", issn: "", isbn: "", category: "", acceptedDate: "", id, ...o });
+  const f = (n: number) => candidates[n - 1].fields;
+  const stored = (over: { integration?: Partial<ExistingPublication>; signals?: Partial<ExistingPublication>; preprint?: Partial<ExistingPublication> | null } = {}): ExistingPublication[] => [
+    ex("sig", { title: f(21).title, year: 2026, venue: "MDPI Signals", authors: f(21).authors, doiUrl: f(21).doiUrl, ...over.signals }),
+    ex("int", { title: f(7).title, year: 2025, venue: "Elsevier Integration", authors: f(7).authors, doiUrl: f(7).doiUrl, ...over.integration }),
+    ex("tod", { title: f(15).title, year: 2026, venue: f(15).venue, authors: f(15).authors, doiUrl: f(15).doiUrl }),
+    ...(over.preprint === null ? [] : [ex("pre", { title: "Optimizing FPGA and wafer test coverage with spatial sampling and machine learning", year: 2025, venue: "IEEE 2025 5th International Conference on Electrical, Computer and Energy Technologies (ICECET)", authors: "Wang WeiQuan", doiUrl: "https://doi.org/10.48550/arXiv.2506.03556", ...over.preprint })]),
+  ];
+  const run = (rows: ExistingPublication[], decs = decisions) => buildPlan(workbook, rows, undefined, decs).plan;
+  const before = buildPlan(workbook, stored(), undefined, undefined).plan;
+  t("decisions: without them the three records are the conflicts PR 22 reported (7, 21) and a possible match (13)", before.entries[6].disposition === "conflict" && before.entries[20].disposition === "conflict" && before.entries[12].disposition === "possible-match");
+  const plan = run(stored());
+  const e = (n: number) => plan.entries[n - 1];
+  t("record 7: REQUIRES AN EXPLICIT UPDATE of exactly the year, 2025 -> 2026", e(7).disposition === "update-required" && JSON.stringify(e(7).updates) === JSON.stringify([{ field: "year", existing: "2025", incoming: "2026" }]) && e(7).matches[0].id === "int");
+  t("record 7: the venue difference has NO decision, so it is listed as undecided and stays as stored", JSON.stringify(e(7).undecided.map((x) => x.field)) === JSON.stringify(["venue"]) && e(7).undecided[0].existing === "Elsevier Integration");
+  t("record 21: REQUIRES AN EXPLICIT UPDATE of exactly the venue, 'MDPI Signals' -> 'Signals'", e(21).disposition === "update-required" && JSON.stringify(e(21).updates) === JSON.stringify([{ field: "venue", existing: "MDPI Signals", incoming: "Signals" }]) && e(21).undecided.length === 0);
+  t("record 13: confirmed as the stored arXiv record: never 'new', never created, no update asked", e(13).disposition === "confirmed-match" && e(13).matches[0].id === "pre" && e(13).matches[0].via === "review-decision" && e(13).updates.length === 0);
+  t("record 13: its differences from the stored record (title, venue, authors) are listed as having NO decision", ["title", "venue", "authors"].every((fld) => e(13).undecided.some((x) => x.field === fld)));
+  t("records 8, 10, 16: blocked, with BOTH the missing-year reason and the review decision", [8, 10, 16].every((n) => e(n).disposition === "invalid" && e(n).candidate.errors.some((x) => x.code === "no-year") && e(n).candidate.errors.some((x) => x.code === "blocked-by-review") && /review/i.test(e(n).reasons.join(" "))));
+  t("plan counts with decisions: 16 new, 1 identical, 1 confirmed, 2 updates required, 0 conflicts, 0 possible, 3 blocked", plan.counts.new === 16 && plan.counts["existing-match"] === 1 && plan.counts["confirmed-match"] === 1 && plan.counts["update-required"] === 2 && plan.counts.conflict === 0 && plan.counts["possible-match"] === 0 && plan.counts.invalid === 3, JSON.stringify(plan.counts));
+  t("no decision turns anything into 'new' that was not new, and none of 7, 13, 21 is ever 'new'", [7, 13, 21].every((n) => e(n).disposition !== "new") && plan.entries.filter((x) => x.disposition === "new").length === before.entries.filter((x) => x.disposition === "new").length);
+
+  // a decision is only as good as the stored value the reviewer saw
+  const stale = run(stored({ integration: { year: 2024 } }));
+  t("stale decision: the stored year is no longer the reviewed 2025, so NO update is asked and the reason is given", stale.entries[6].disposition !== "update-required" && stale.entries[6].updates.length === 0 && stale.entries[6].notes.some((x) => /stale/.test(x)));
+  const applied = run(stored({ integration: { year: 2026, venue: "Integration" } }));
+  t("already carried out: when the stored value equals the spreadsheet's the record is simply an existing match", applied.entries[6].disposition === "existing-match" && applied.entries[6].notes.some((x) => /already/.test(x)));
+  const venueDone = run(stored({ integration: { year: 2026 } }));
+  t("after the year update, record 7 stays a conflict ONLY because of its undecided venue", venueDone.entries[6].disposition === "conflict" && venueDone.entries[6].undecided.map((x) => x.field).join() === "venue" && venueDone.entries[6].updates.length === 0);
+  const jaNote = run([...stored({ signals: { jaOverrides: ["venue"] } })]);
+  t("a Japanese override on the field about to change is flagged in the report, not changed", jaNote.entries[20].notes.some((x) => /Japanese venue override/.test(x)));
+
+  // decisions that cannot be trusted block rather than act
+  const mism = JSON.parse(JSON.stringify(decisionsDoc)); mism.records["7"].expectTitle = "A completely different paper";
+  const mismatch = run(stored(), parseDecisions(mism));
+  t("a decision whose expectTitle does not match the record blocks that record (it never acts on the wrong one)", mismatch.entries[6].disposition === "invalid" && mismatch.entries[6].candidate.errors.some((x) => x.code === "decision-mismatch"));
+  const noTarget = run(stored({ preprint: null }));
+  t("record 13 with no stored target in the database: blocked, NOT created", noTarget.entries[12].disposition === "invalid" && noTarget.entries[12].candidate.errors.some((x) => x.code === "decision-target-missing"));
+  const sameDoiOnly = JSON.parse(JSON.stringify(decisionsDoc)); sameDoiOnly.records["21"].fields = { isbn: { expectExisting: "978-0" } };
+  const emptyIncoming = run(stored({ signals: { isbn: "978-0" } }), parseDecisions(sameDoiOnly));
+  t("a decision never blanks a stored value: if the spreadsheet states nothing, no update is asked", emptyIncoming.entries[20].updates.length === 0 && emptyIncoming.entries[20].notes.some((x) => /states no value/.test(x)));
+  const titleYear = buildPlan(workbook, [ex("t", { title: f(21).title, year: 2026, venue: "MDPI Signals", authors: f(21).authors })], undefined, decisions).plan.entries[20];
+  t("a prefer-source decision applies only to a stored record with the SAME DOI (a title+year match is left as a conflict)", titleYear.disposition === "conflict" && titleYear.updates.length === 0);
+
+  // keep-blocked beats an overrides file that would supply the year
+  const unblockTry = buildPlan(workbook, [], { records: { "8": { expectTitle: "Design of low power", year: 2017 } } }, decisions);
+  t("keep-blocked takes precedence over a person-supplied year in an overrides file", unblockTry.plan.entries[7].disposition === "invalid" && unblockTry.plan.entries[7].candidate.errors.some((x) => x.code === "blocked-by-review"));
+
+  // the report
+  const summary = { file: "publicationslist.xlsx", target: "file:/tmp/x.db", mode: "dry-run" as const, owner: parsed.owner, sheets: parsed.sheets, sourceRecords: 23, emptyBlocks: 0, counts: plan.counts };
+  const md = buildMarkdownReport(summary, plan);
+  t("report: it lists the explicit updates, the confirmed match and the blocked records, with the reasons", /Requires an explicit update/.test(md) && md.includes("will change **year** from \"2025\" to \"2026\"") && md.includes("will change **venue** from \"MDPI Signals\" to \"Signals\"") && /Confirmed by review as already stored/.test(md) && md.includes("Blocked by a review decision"));
+  t("report: it says nothing was changed and that the updates need --apply-decided-updates", /NOTHING was changed/.test(md) && md.includes("--apply-decided-updates"));
+  t("report: records held back by a decision get no 'fill in the year' template and no contradictory advice", !md.includes("FILL IN AFTER CHECKING THE SOURCE") && !md.includes("Supply one in the overrides file"));
+  t("report: the JSON carries updates and undecided differences per record", buildJsonReport(summary, plan).records[6].disposition === "update-required");
 }
 
 // ---- the documented mapping covers every destination ---------------------------------------------------------------------------------------

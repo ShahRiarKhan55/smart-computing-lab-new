@@ -91,8 +91,9 @@ export function buildMarkdownReport(summary: ImportSummary, plan: Plan, results?
   L.push("| | |", "|---|---|");
   L.push(`| Publication records found in the source | ${summary.sourceRecords} |`, `| Blank template blocks (not records) | ${summary.emptyBlocks} |`);
   L.push(`| New (will be / was created) | ${c.new} |`, `| Already stored, identical (existing match) | ${c["existing-match"]} |`);
+  L.push(`| Confirmed by review as an already stored publication (never created) | ${c["confirmed-match"]} |`, `| Requires an explicit update (review decision; not applied automatically) | ${c["update-required"]} |`);
   L.push(`| Conflicts with an existing record (human decision) | ${c.conflict} |`, `| Possible matches (human decision) | ${c["possible-match"]} |`);
-  L.push(`| Duplicates inside the file | ${c["duplicate-in-source"]} |`, `| Invalid / incomplete (blocked) | ${c.invalid} |`);
+  L.push(`| Duplicates inside the file | ${c["duplicate-in-source"]} |`, `| Invalid / blocked | ${c.invalid} |`);
   if (summary.applied) L.push("", "Applied: " + Object.entries(summary.applied).map(([k, v]) => `${k} ${v}`).join(", "));
 
   L.push("", "## Records", "", "| # | Source label | Year | Status | Title | Disposition | Notes |", "|---|---|---|---|---|---|---|");
@@ -107,9 +108,23 @@ export function buildMarkdownReport(summary: ImportSummary, plan: Plan, results?
     L.push("", `## ${title}`, "");
     for (const e of entries) L.push(...body(e), "");
   };
-  section("Blocked: needs information a person must supply", plan.entries.filter((e) => e.disposition === "invalid"), (e) => [
+  section("Blocked: not imported, and why", plan.entries.filter((e) => e.disposition === "invalid"), (e) => [
     `### Record ${e.candidate.ordinal} — ${cut(e.candidate.fields.title || "(no title)", 100)}`,
     ...e.candidate.errors.map((x) => `- **${x.code}**${x.cell ? ` (${x.cell})` : ""}: ${x.message}`),
+  ]);
+  section("Requires an explicit update: a reviewer prefers the spreadsheet value; NOTHING was changed", plan.entries.filter((e) => e.disposition === "update-required"), (e) => [
+    `### Record ${e.candidate.ordinal} — ${cut(e.candidate.fields.title, 100)}`,
+    ...e.reasons.map((r) => `- ${r}`),
+    ...e.matches.map((m) => `- Stored record \`${m.id}\` (matched by ${m.via}): "${cut(m.title, 100)}" (${m.year})`),
+    ...e.updates.map((u) => `  - will change **${u.field}** from "${cut(u.existing, 80)}" to "${cut(u.incoming, 80)}" (only with \`--apply-decided-updates\`, only if the stored value is still "${cut(u.existing, 40)}")`),
+    ...e.undecided.map((d) => `  - differs in **${d.field}** with NO decision: stays "${cut(d.existing, 80)}" (file says "${cut(d.incoming, 80)}")`),
+    ...e.notes.map((n) => `- note: ${n}`),
+  ]);
+  section("Confirmed by review as already stored: not created, stored record untouched", plan.entries.filter((e) => e.disposition === "confirmed-match"), (e) => [
+    `### Record ${e.candidate.ordinal} — ${cut(e.candidate.fields.title, 100)}`,
+    ...e.reasons.map((r) => `- ${r}`),
+    ...e.matches.map((m) => `- Stored record \`${m.id}\`: "${cut(m.title, 100)}" (${m.year})`),
+    ...e.undecided.map((d) => `  - differs in **${d.field}** with NO decision to change it: stays "${cut(d.existing, 80)}" (file says "${cut(d.incoming, 80)}")`),
   ]);
   section("Conflicts and possible matches: a human decides, nothing was overwritten", plan.entries.filter((e) => e.disposition === "conflict" || e.disposition === "possible-match"), (e) => [
     `### Record ${e.candidate.ordinal} — ${cut(e.candidate.fields.title, 100)}`,
@@ -128,7 +143,8 @@ export function buildMarkdownReport(summary: ImportSummary, plan: Plan, results?
     ...(e.candidate.overridden.length ? [`- human override applied to: ${e.candidate.overridden.join(", ")}`] : []),
   ]);
 
-  const blocked = plan.entries.filter((e) => e.disposition === "invalid" && e.candidate.errors.some((x) => x.code === "no-year"));
+  // A record that review decided to keep blocked gets no "fill in the year" template: unblocking it is a decision, not a data-entry step.
+  const blocked = plan.entries.filter((e) => e.disposition === "invalid" && e.candidate.errors.some((x) => x.code === "no-year") && !e.candidate.errors.some((x) => x.code === "blocked-by-review"));
   if (blocked.length > 0) {
     const template: Record<string, unknown> = {};
     for (const e of blocked) template[String(e.candidate.ordinal)] = { expectTitle: e.candidate.fields.title.slice(0, 30), year: "FILL IN AFTER CHECKING THE SOURCE" };

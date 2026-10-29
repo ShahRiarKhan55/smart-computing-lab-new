@@ -18,7 +18,11 @@
  *   --allow-remote             required together with --apply for a remote database
  *   --visibility PUBLIC|LAB_ONLY   visibility of created records (default PUBLIC; use LAB_ONLY to stage them for review)
  *   --fill-empty               for a record that is already stored and IDENTICAL, fill only its EMPTY bibliographic fields
- *   --overrides <json>         decisions made by a person: values for blocked records and the numbers listed in confirmDistinct
+ *   --overrides <json>         values a person supplies for blocked records, and the numbers listed in confirmDistinct
+ *   --decisions <json>         the reviewed decisions (scripts/fixtures/publication-list-review-decisions.json): prefer-source / same-as-existing /
+ *                              keep-blocked. They only make the plan more specific or more cautious; a prefer-source decision is REPORTED, not applied.
+ *   --apply-decided-updates    with --apply and --decisions: carry out the prefer-source updates (the only way an existing record's non-empty field is
+ *                              changed): exactly the decided fields, only if each stored value is still the one the reviewer saw
  *   --report-dir <dir>         write report.md and report.json there
  *
  * The target comes ONLY from IMPORT_TARGET_URL / IMPORT_TARGET_TOKEN. DATABASE_URL, TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are never read, so an
@@ -43,17 +47,19 @@ import type { ApplyResult, ImportSummary, Overrides } from "../src/lib/publicati
 delete process.env.TURSO_DATABASE_URL;
 delete process.env.TURSO_AUTH_TOKEN;
 process.env.DATABASE_URL = "file:./unused-by-import.db";
-const { XlsxError, applyPlan, buildJsonReport, buildMarkdownReport, buildPlan, loadExistingPublications } = await import("../src/lib/publicationImport/index.ts");
+const { DecisionsError, XlsxError, applyPlan, buildJsonReport, buildMarkdownReport, buildPlan, loadExistingPublications, parseDecisions } = await import("../src/lib/publicationImport/index.ts");
 
 class Refusal extends Error {}
 
 function parseArgs(argv: string[]) {
-  const out = { file: "", expectTarget: "", apply: false, allowRemote: false, visibility: "PUBLIC" as Visibility, fillEmpty: false, overrides: "", reportDir: "", unknown: [] as string[] };
+  const out = { file: "", expectTarget: "", apply: false, allowRemote: false, visibility: "PUBLIC" as Visibility, fillEmpty: false, overrides: "", decisions: "", applyDecidedUpdates: false, reportDir: "", unknown: [] as string[] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--apply") out.apply = true;
     else if (a === "--allow-remote") out.allowRemote = true;
     else if (a === "--fill-empty") out.fillEmpty = true;
+    else if (a === "--apply-decided-updates") out.applyDecidedUpdates = true;
+    else if (a === "--decisions") out.decisions = argv[++i] ?? "";
     else if (a === "--file") out.file = argv[++i] ?? "";
     else if (a === "--expect-target") out.expectTarget = argv[++i] ?? "";
     else if (a === "--overrides") out.overrides = argv[++i] ?? "";
@@ -74,6 +80,7 @@ async function main(): Promise<number> {
     if (!args.file) throw new Refusal("--file <path to the .xlsx> is required.");
     if (args.visibility !== "PUBLIC" && args.visibility !== "LAB_ONLY") throw new Refusal("--visibility must be PUBLIC or LAB_ONLY.");
     if (!fs.existsSync(args.file)) throw new Refusal("The --file does not exist.");
+    if (args.applyDecidedUpdates && (!args.apply || !args.decisions)) throw new Refusal("--apply-decided-updates needs both --apply and --decisions <json>.");
 
     const target = parseTarget({ url, authToken: token }, args.expectTarget);
     if (args.apply && target.kind === "remote" && !args.allowRemote) throw new Refusal("--apply to a REMOTE database also needs --allow-remote.");
@@ -87,6 +94,15 @@ async function main(): Promise<number> {
       }
     }
 
+    let decisions: ReturnType<typeof parseDecisions> | undefined;
+    if (args.decisions) {
+      try {
+        decisions = parseDecisions(JSON.parse(fs.readFileSync(args.decisions, "utf8")));
+      } catch (err) {
+        throw new Refusal(err instanceof DecisionsError ? err.message : "The --decisions file is missing or is not valid JSON.");
+      }
+    }
+
     // A client for exactly the confirmed target. The schema's DATABASE_URL is not consulted for it.
     const db =
       target.kind === "remote"
@@ -96,12 +112,12 @@ async function main(): Promise<number> {
       const { rows, hasNewColumns } = await loadExistingPublications(db);
       if (args.apply && !hasNewColumns) throw new Refusal("The target has not had the migration 20261029120000_publication_bibliographic_fields yet. Apply it first (see the documentation); this tool never alters the schema.");
 
-      const { parsed, plan } = buildPlan(fs.readFileSync(args.file), rows, overrides);
+      const { parsed, plan } = buildPlan(fs.readFileSync(args.file), rows, overrides, decisions);
       for (const issue of parsed.issues) if (issue.level === "error") throw new Refusal(issue.message);
 
       let results: ApplyResult[] | undefined;
       if (args.apply) {
-        results = await applyPlan(db, plan, { visibility: args.visibility, fillEmpty: args.fillEmpty, confirmDistinct: new Set(overrides?.confirmDistinct ?? []) });
+        results = await applyPlan(db, plan, { visibility: args.visibility, fillEmpty: args.fillEmpty, confirmDistinct: new Set(overrides?.confirmDistinct ?? []), applyDecidedUpdates: args.applyDecidedUpdates });
       }
       const applied = results ? results.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.outcome]: (acc[r.outcome] ?? 0) + 1 }), {}) : undefined;
       const summary: ImportSummary = {
@@ -121,7 +137,7 @@ async function main(): Promise<number> {
         fs.writeFileSync(path.join(args.reportDir, "report.md"), markdown);
         fs.writeFileSync(path.join(args.reportDir, "report.json"), JSON.stringify(buildJsonReport(summary, plan, results), null, 2));
       }
-      console.log(markdown.split("\n").slice(0, 24).join("\n"));
+      console.log(markdown.split("\n").slice(0, 26).join("\n"));
       console.log(`\n${args.reportDir ? `Full report: ${path.join(args.reportDir, "report.md")}` : "Use --report-dir to save the full report."}`);
       return results?.some((r) => r.outcome === "failed") ? 1 : 0;
     } finally {
