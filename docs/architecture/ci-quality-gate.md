@@ -11,7 +11,7 @@ on someone remembering to run them. It does **not** deploy, does not use any sec
 | Lint | `npm run lint -w apps/web` | fails on errors only; baseline when added: **15 warnings, 0 errors** |
 | Test database | `migrate:deploy` and `seed` on `file:./dev.db` | a throwaway SQLite file inside the runner workspace (gitignored) |
 | Unit tests | `npm run test:unit -w apps/server` | 32 files, including `unit-tx-client-scan` (no `$transaction` callback may query through the shared client); one file copies the seeded `dev.db`, which is why the step above exists |
-| Fast database suites | `test:alumni`, `test:publication-race`, `test:transaction-client`, `test:turso-shape`, `test:integration-photos-alumni`, `test:profile-photo`, `test:research-links`, `test:duplicates` | each uses a disposable local copy or an in-memory libSQL client, and each either refuses to run with `TURSO_*` set or clears it for its own server; 12 of 12 runs of the first seven passed in 1-3 s; `test:duplicates` takes about 4 s |
+| Fast database suites | `test:alumni`, `test:publication-race`, `test:transaction-client`, `test:turso-shape`, `test:integration-photos-alumni`, `test:profile-photo`, `test:research-links`, `test:duplicates`, `test:publication-import` | each uses a disposable local copy or an in-memory libSQL client, and each either refuses to run with `TURSO_*` set or clears it for its own server; 12 of 12 runs of the first seven passed in 1-3 s; `test:duplicates` takes about 4 s and `test:publication-import` about 17 s |
 
 Node 22 is used. The repository pins no Node version; Vite 8 and oxlint require `^20.19.0 || >=22.12.0` and the server types target 22.
 
