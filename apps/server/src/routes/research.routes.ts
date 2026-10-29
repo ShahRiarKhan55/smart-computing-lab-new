@@ -18,6 +18,8 @@ import { assertMayChangeVisibility, visibleTo } from "../lib/visibility.js";
 import { asProjectStatus, toResearchArea } from "../lib/serializers.js";
 import { loadProjectOutputs, loadRefTranslations, pick } from "../lib/researchGraph.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
+import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { guardResearchArea, lockForDuplicateCheck, overrideDetails } from "../lib/duplicates.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
 
 const router = Router();
@@ -136,10 +138,13 @@ router.post(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { translations, ...data } = parseOrThrow(createResearchAreaSchema, req.body);
+    const { translations, confirmDuplicate, ...data } = parseOrThrow(createResearchAreaSchema, req.body);
     assertMayChangeVisibility(req.user!, data.visibility);
 
     const created = await prisma.$transaction(async (tx) => {
+      // Duplicate warning (shared/duplicates.ts): the same normalised title (word order ignored). The tag is not compared.
+      await lockForDuplicateCheck(tx, "researchArea");
+      const overridden = await guardResearchArea(tx, req.user!, { next: { title: data.title }, confirm: confirmDuplicate });
       const row = await tx.researchArea.create({ data });
       await applyTranslationOverrides(tx, "RESEARCH_AREA", row.id, translations?.ja);
       await recordAudit(tx, {
@@ -147,7 +152,7 @@ router.post(
         action: "RESEARCH_CREATED",
         entityType: "RESEARCH_AREA",
         entityId: row.id,
-        details: { title: row.title, visibility: row.visibility },
+        details: { title: row.title, visibility: row.visibility, ...overrideDetails(overridden) },
       });
       return row;
     });
@@ -161,12 +166,23 @@ router.put(
   requireAuth,
   asyncHandler(async (req, res) => {
     assertValidId(req.params.id);
-    const { translations, ...data } = parseOrThrow(updateResearchAreaSchema, req.body);
+    const { translations, confirmDuplicate, ...data } = parseOrThrow(updateResearchAreaSchema, req.body);
     assertMayChangeVisibility(req.user!, data.visibility);
+    const touchesCompared = data.title !== undefined;
 
     const updated = await prisma.$transaction(async (tx) => {
+      if (touchesCompared) await lockForDuplicateCheck(tx, "researchArea");
       const existing = await tx.researchArea.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new HttpError(404, "Not found");
+      // Only an edit that changes the title is compared; the record itself is excluded.
+      const overridden = touchesCompared
+        ? await guardResearchArea(tx, req.user!, {
+            next: { title: data.title ?? existing.title },
+            previous: { title: existing.title },
+            excludeId: existing.id,
+            confirm: confirmDuplicate,
+          })
+        : null;
 
       const row = await tx.researchArea.update({ where: { id: existing.id }, data });
       await applyTranslationOverrides(tx, "RESEARCH_AREA", row.id, translations?.ja);
@@ -177,7 +193,7 @@ router.put(
           action: "RESEARCH_UPDATED",
           entityType: "RESEARCH_AREA",
           entityId: row.id,
-          details: { title: row.title, changed },
+          details: { title: row.title, changed, ...overrideDetails(overridden) },
         });
       }
       await recordVisibilityChange(tx, req.user!, "RESEARCH_AREA", row.id, existing.visibility, data.visibility);
@@ -210,5 +226,8 @@ router.delete(
     res.json({ success: true });
   }),
 );
+
+// Lock contention on the duplicate-check write lock (lib/duplicates.ts) answers 503 + Retry-After instead of a generic 500.
+router.use(transientContentionAs503);
 
 export default router;

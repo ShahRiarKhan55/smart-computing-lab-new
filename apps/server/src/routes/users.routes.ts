@@ -8,6 +8,8 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { parseOrThrow, HttpError } from "../lib/validate.js";
 import { assertValidId } from "../lib/authorLinks.js";
 import { recordAudit } from "../lib/audit.js";
+import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { guardTeamName, lockForDuplicateCheck, overrideDetails } from "../lib/duplicates.js";
 import { assertProfileMayHaveAccount } from "../lib/alumni.js";
 
 const router = Router();
@@ -55,9 +57,13 @@ router.post(
     const body = parseOrThrow(createUserSchema, req.body); // email is already lower-cased
     const passwordHash = await bcrypt.hash(body.password, 10);
 
+    const createsProfile = !body.teamMemberId && Boolean(body.name && body.initials && body.memberRole && body.category);
     const created = await prisma.$transaction(async (tx) => {
+      // Creating a NEW profile for the account: take the write lock first so two overlapping requests for one name serialise.
+      if (createsProfile) await lockForDuplicateCheck(tx, "teamMember");
       const existing = await tx.user.findUnique({ where: { email: body.email }, select: { id: true } });
       if (existing) throw new HttpError(409, "An account with that email already exists.");
+      const overridden = createsProfile ? await guardTeamName(tx, req.user!, { name: body.name!, confirm: body.confirmDuplicate }) : null;
 
       if (body.teamMemberId) {
         const member = await tx.teamMember.findUnique({ where: { id: body.teamMemberId }, select: { userId: true, category: true } });
@@ -98,7 +104,7 @@ router.post(
         action: "USER_CREATED",
         entityType: "USER",
         entityId: user.id,
-        details: { email: user.email, role: user.role, teamMemberId: profileId, profileCreated },
+        details: { email: user.email, role: user.role, teamMemberId: profileId, profileCreated, ...overrideDetails(overridden) },
       });
 
       return user;
@@ -205,5 +211,8 @@ router.delete(
     res.json({ success: true });
   }),
 );
+
+// Lock contention on the duplicate-check write lock (lib/duplicates.ts) answers 503 + Retry-After instead of a generic 500.
+router.use(transientContentionAs503);
 
 export default router;

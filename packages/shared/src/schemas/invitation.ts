@@ -3,6 +3,7 @@ import { roleSchema, accountCategorySchema } from "./enums.js";
 import { idSchema } from "./common.js";
 import { teamMemberFields } from "./team.js";
 import { emailField, newPasswordField } from "./user.js";
+import { confirmDuplicateField } from "../duplicates.js";
 
 /**
  * Researcher onboarding (see apps/server/src/routes/invitations.routes.ts): an ADMIN creates an
@@ -22,6 +23,8 @@ export const createInvitationSchema = z
     initials: teamMemberFields.initials.optional(),
     memberRole: teamMemberFields.role.optional(),
     category: accountCategorySchema.optional(),
+    /** Explicit confirmation that a flagged same-name profile is a different person (lab manager or admin only). */
+    confirmDuplicate: confirmDuplicateField,
   })
   .superRefine((data, ctx) => {
     const newFieldsGiven = [data.name, data.initials, data.memberRole, data.category].filter((v) => v !== undefined).length;

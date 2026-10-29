@@ -6,6 +6,8 @@ import { useT } from "../i18n/LocaleContext";
 import { apiErrorMessage, knownMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { CATEGORY_LABEL_KEY } from "../i18n/labels";
+import { DuplicateConfirm } from "./DuplicateConfirm";
+import { useDuplicateConfirm } from "../hooks/useDuplicateConfirm";
 
 export interface TeamMemberFormValues {
   name: string;
@@ -22,6 +24,8 @@ export interface TeamMemberFormValues {
   category: Category;
   sortOrder: number;
   translations?: { ja: Record<string, string> };
+  /** Set only after a duplicate-name warning was explicitly confirmed (lab manager / admin). */
+  confirmDuplicate?: boolean;
 }
 
 interface TeamMemberFormModalProps {
@@ -79,12 +83,14 @@ export function TeamMemberFormModal({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [removePhoto, setRemovePhoto] = useState(false);
+  const dup = useDuplicateConfirm();
   const { values: ja, setField: setJa, base } = useEntityTranslations("TEAM_MEMBER", initial?.id, open);
 
   useEffect(() => {
     if (open) {
       setValues(toFormValues(initial));
       setError(null);
+      dup.reset();
       setRemovePhoto(false); // the modal stays mounted between opens: a pending removal must never carry over to another open or member
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,6 +105,7 @@ export function TeamMemberFormModal({
 
   function set<K extends keyof ReturnType<typeof toFormValues>>(key: K, value: ReturnType<typeof toFormValues>[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+    dup.reset(); // a changed field invalidates any earlier duplicate warning and its confirmation
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -114,7 +121,7 @@ export function TeamMemberFormModal({
     const sentLinks = (v: typeof rest) =>
       Object.fromEntries(LINK_KEYS.filter((k) => !initial?.id || v[k] !== original[k]).map((k) => [k, v[k]]));
     const { googleScholarUrl: _gs, researchGateUrl: _rg, orcidUrl: _oc, ...restNoLinks } = rest;
-    const payload = { ...restNoLinks, ...sentLinks(rest), ...(removePhoto ? { photoUrl: "" } : photoChanged ? { photoUrl: values.photoUrl } : {}) };
+    const payload = { ...restNoLinks, ...sentLinks(rest), ...(removePhoto ? { photoUrl: "" } : photoChanged ? { photoUrl: values.photoUrl } : {}), ...dup.extra };
     const validation = createTeamMemberSchema.safeParse(payload);
     if (!validation.success) {
       setError(knownMessage(validation.error.issues[0]?.message ?? "", t) || t("common.checkForm"));
@@ -126,6 +133,7 @@ export function TeamMemberFormModal({
       await onSubmit({ ...payload, ...(initial?.id ? { translations: { ja } } : {}) });
       onClose();
     } catch (err) {
+      dup.capture(err);
       setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
@@ -135,6 +143,7 @@ export function TeamMemberFormModal({
   return (
     <Modal open={open} onClose={onClose} title={title}>
       {error && <div className="form-error" role="alert">{error}</div>}
+      <DuplicateConfirm conflict={dup.conflict} confirmed={dup.confirmed} onConfirmedChange={dup.setConfirmed} />
       <form onSubmit={handleSubmit}>
         <div className="form-row">
           <div className="form-group">

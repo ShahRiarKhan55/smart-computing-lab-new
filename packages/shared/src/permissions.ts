@@ -61,6 +61,14 @@ export const canManageContent = isManager;
 /** Forum moderation (used by a later phase; defined here so the matrix lives in one place). */
 export const canModerate = isManager;
 
+// ---- duplicate warnings ------------------------------------------------------
+/**
+ * Who may answer a duplicate warning with `confirmDuplicate: true` ("this is a different record, save it anyway"). Managers and admins
+ * only: any logged-in member can create a publication, news item or research area, but vouching that a near-duplicate is legitimate is
+ * a curation decision. A member who sends the flag is answered with the same 409 as one who does not.
+ */
+export const canOverrideDuplicate = isManager;
+
 // ---- team profiles ----------------------------------------------------------
 export const canEditOwnProfile = (a: MaybeActor, profileUserId: string | null | undefined): boolean =>
   Boolean(a && profileUserId && profileUserId === a.id);

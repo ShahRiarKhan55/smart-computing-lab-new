@@ -20,6 +20,7 @@ import { optionalAuth, requireCan, requireOwnerOrManager } from "../middleware/a
 import { toTeamMember } from "../lib/serializers.js";
 import { assertValidId } from "../lib/authorLinks.js";
 import { changedFields, recordAudit } from "../lib/audit.js";
+import { guardTeamName, lockForDuplicateCheck, overrideDetails } from "../lib/duplicates.js";
 import { assertMayBecomeAlumni, isAlumniCategory } from "../lib/alumni.js";
 import { isMemberVisible, mayManageAlumni, publishedMemberWhere, rejectPublicationField } from "../lib/memberVisibility.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
@@ -77,6 +78,9 @@ router.post(
     const isAlumni = isAlumniCategory(body.category);
     if (isAlumni && !mayManageAlumni(req.user)) throw new HttpError(403, ALUMNI_MESSAGES.adminOnly);
     const created = await prisma.$transaction(async (tx) => {
+      // Duplicate-name warning (shared/duplicates.ts). The write lock is taken first so two overlapping creates of the same name serialise.
+      await lockForDuplicateCheck(tx, "teamMember");
+      const overridden = await guardTeamName(tx, req.user!, { name: body.name, confirm: body.confirmDuplicate });
       const row = await tx.teamMember.create({
         data: {
           userId: null,
@@ -100,7 +104,7 @@ router.post(
         action: "TEAM_MEMBER_CREATED",
         entityType: "TEAM_MEMBER",
         entityId: row.id,
-        details: { name: row.name, category: row.category },
+        details: { name: row.name, category: row.category, ...overrideDetails(overridden) },
       });
       return row;
     });
@@ -147,6 +151,11 @@ router.put(
       const willBeAlumni = isAlumniCategory(targetCategory);
       if ((wasAlumni || willBeAlumni) && !mayManageAlumni(req.user)) throw new HttpError(403, ALUMNI_MESSAGES.adminOnly);
       if (willBeAlumni && !wasAlumni) assertMayBecomeAlumni(existing);
+
+      // A rename is checked against the other profiles this requester can see; an edit that leaves the name alone never is (the write lock
+      // was taken by the first statement above). The profile being edited is excluded.
+      const overridden =
+        body.name === undefined ? null : await guardTeamName(tx, req.user!, { name: body.name, excludeId: existing.id, previousName: existing.name, confirm: body.confirmDuplicate });
 
       // Only managers change category or sort order; for anyone else those two
       // fields are ignored, so editing your own profile can never move you.
@@ -198,7 +207,7 @@ router.put(
           action: "TEAM_MEMBER_UPDATED",
           entityType: "TEAM_MEMBER",
           entityId: row.id,
-          details: { name: row.name, changed },
+          details: { name: row.name, changed, ...overrideDetails(overridden) },
         });
       }
       return { updated: row, retiredKey };

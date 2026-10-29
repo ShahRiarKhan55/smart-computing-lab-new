@@ -27,9 +27,12 @@ export function parseOrThrow<T>(schema: ZodType<T, ZodTypeDef, unknown>, data: u
 
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Extra machine-readable fields merged into the JSON body next to `error` (e.g. the duplicate-conflict details). Never secrets. */
+  extra?: Record<string, unknown>;
+  constructor(status: number, message: string, extra?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.extra = extra;
   }
 }
 

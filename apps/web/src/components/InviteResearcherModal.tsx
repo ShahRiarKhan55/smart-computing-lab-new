@@ -4,6 +4,9 @@ import { CATEGORY_ORDER, createInvitationSchema, type Category, type CreateInvit
 import { Modal } from "./Modal";
 import { ApiError } from "../lib/api";
 import { useT } from "../i18n/LocaleContext";
+import { DuplicateConfirm } from "./DuplicateConfirm";
+import { useDuplicateConfirm } from "../hooks/useDuplicateConfirm";
+import { apiErrorMessage } from "../i18n/errorMessages";
 import { CATEGORY_LABEL_KEY } from "../i18n/labels";
 
 type LinkMode = "existing" | "new" | "none";
@@ -54,11 +57,13 @@ export function InviteResearcherModal({ open, unlinkedMembers, onClose, onCreate
   const [values, setValues] = useState<InviteValues>(() => emptyValues(unlinkedMembers));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const dup = useDuplicateConfirm();
 
   useEffect(() => {
     if (open) {
       setValues(emptyValues(unlinkedMembers));
       setError(null);
+      dup.reset();
     }
     // Only reset when the dialog opens; the member list is read fresh at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,6 +71,7 @@ export function InviteResearcherModal({ open, unlinkedMembers, onClose, onCreate
 
   function set<K extends keyof InviteValues>(key: K, value: InviteValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+    dup.reset(); // a changed field invalidates any earlier duplicate warning and its confirmation
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -97,10 +103,11 @@ export function InviteResearcherModal({ open, unlinkedMembers, onClose, onCreate
 
     setSubmitting(true);
     try {
-      await onCreate(parsed.data);
+      await onCreate({ ...parsed.data, ...dup.extra });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
+      // A duplicate-name warning is shown localized with the confirm checkbox; every other error keeps its previous presentation.
+      setError(dup.capture(err) ? apiErrorMessage(err, t) : err instanceof ApiError ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSubmitting(false);
     }
@@ -113,6 +120,7 @@ export function InviteResearcherModal({ open, unlinkedMembers, onClose, onCreate
           {error}
         </div>
       )}
+      <DuplicateConfirm conflict={dup.conflict} confirmed={dup.confirmed} onConfirmedChange={dup.setConfirmed} />
       <form onSubmit={handleSubmit} noValidate>
         <p className="form-hint">{t("admin.invite.intro")}</p>
         <div className="form-group">

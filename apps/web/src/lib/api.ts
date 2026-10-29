@@ -2,11 +2,14 @@ import { currentStoredLocale } from "../i18n/LocaleContext";
 
 export class ApiError extends Error {
   status: number;
+  /** The parsed JSON error body, when there was one (e.g. the machine-readable duplicate conflict, see lib/duplicateConflict.ts). */
+  body?: unknown;
   /** The raw server message (English, or whatever the server sent) — kept for logging/debugging.
    * UI code should localize via `apiErrorMessage()` (i18n/errorMessages.ts) rather than reading this directly. */
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -30,7 +33,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.error || "Request failed", res.status);
+    throw new ApiError(data?.error || "Request failed", res.status, data);
   }
 
   return data as T;

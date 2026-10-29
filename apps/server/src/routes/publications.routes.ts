@@ -27,6 +27,8 @@ import { browsePublications, loadPublicationDetail } from "../lib/publicationHub
 import { localizedPublications } from "../lib/researchGraph.js";
 import { applyTranslationOverrides, getEntityTranslations, resolveLocale } from "../lib/translations.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
+import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { guardPublication, lockForDuplicateCheck, overrideDetails } from "../lib/duplicates.js";
 
 const router = Router();
 
@@ -188,10 +190,14 @@ router.post(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { teamMemberIds, translations, ...fields } = parseOrThrow(createPublicationSchema, req.body);
+    const { teamMemberIds, translations, confirmDuplicate, ...fields } = parseOrThrow(createPublicationSchema, req.body);
     assertMayChangeVisibility(req.user!, fields.visibility);
 
     const created = await prisma.$transaction(async (tx) => {
+      // Duplicate warning (shared/duplicates.ts): identical canonical DOI, or same title + year when a DOI is missing. Write lock first so
+      // two overlapping creates serialise. Distinct DOIs (preprint / conference / journal versions) are never flagged.
+      await lockForDuplicateCheck(tx, "publication");
+      const overridden = await guardPublication(tx, req.user!, { next: { title: fields.title, year: fields.year, doiUrl: fields.doiUrl }, confirm: confirmDuplicate });
       const row = await tx.publication.create({ data: fields });
       await applyTranslationOverrides(tx, "PUBLICATION", row.id, translations?.ja);
       let linkedAuthors = 0;
@@ -204,7 +210,7 @@ router.post(
         action: "PUBLICATION_CREATED",
         entityType: "PUBLICATION",
         entityId: row.id,
-        details: { title: row.title, year: row.year, visibility: row.visibility, linkedAuthors },
+        details: { title: row.title, year: row.year, visibility: row.visibility, linkedAuthors, ...overrideDetails(overridden) },
       });
       await auditTranslationChange(tx, req.user!, row.id, { title: null, venue: null });
       return row;
@@ -222,12 +228,24 @@ router.put(
   requireAuth,
   asyncHandler(async (req, res) => {
     assertValidId(req.params.id);
-    const { teamMemberIds, translations, ...fields } = parseOrThrow(updatePublicationSchema, req.body);
+    const { teamMemberIds, translations, confirmDuplicate, ...fields } = parseOrThrow(updatePublicationSchema, req.body);
     assertMayChangeVisibility(req.user!, fields.visibility);
+    const touchesCompared = fields.title !== undefined || fields.year !== undefined || fields.doiUrl !== undefined;
 
     const updated = await prisma.$transaction(async (tx) => {
+      if (touchesCompared) await lockForDuplicateCheck(tx, "publication");
       const existing = await tx.publication.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new HttpError(404, "Not found");
+      // Only an edit that changes the title, year or DOI is compared; the record itself is excluded, and an existing duplicate never
+      // blocks an unrelated edit.
+      const overridden = touchesCompared
+        ? await guardPublication(tx, req.user!, {
+            next: { title: fields.title ?? existing.title, year: fields.year ?? existing.year, doiUrl: fields.doiUrl ?? existing.doiUrl },
+            previous: { title: existing.title, year: existing.year, doiUrl: existing.doiUrl },
+            excludeId: existing.id,
+            confirm: confirmDuplicate,
+          })
+        : null;
 
       const before = translations?.ja ? await getEntityTranslations(tx, "PUBLICATION", existing.id) : null;
       const row = await tx.publication.update({ where: { id: existing.id }, data: fields });
@@ -244,7 +262,7 @@ router.put(
           action: "PUBLICATION_UPDATED",
           entityType: "PUBLICATION",
           entityId: row.id,
-          details: { title: row.title, changed },
+          details: { title: row.title, changed, ...overrideDetails(overridden) },
         });
       }
       await recordVisibilityChange(tx, req.user!, "PUBLICATION", row.id, existing.visibility, fields.visibility);
@@ -279,5 +297,8 @@ router.delete(
     res.json({ success: true });
   }),
 );
+
+// Lock contention on the duplicate-check write lock (lib/duplicates.ts) answers 503 + Retry-After instead of a generic 500.
+router.use(transientContentionAs503);
 
 export default router;

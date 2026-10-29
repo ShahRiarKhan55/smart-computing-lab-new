@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { teamMemberFields } from "./team.js";
+import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
 
 /**
  * The fields a member may change on their own profile. Category, sort order
@@ -17,6 +18,7 @@ export const updateOwnProfileSchema = z
     googleScholarUrl: teamMemberFields.googleScholarUrl.optional(),
     researchGateUrl: teamMemberFields.researchGateUrl.optional(),
     orcidUrl: teamMemberFields.orcidUrl.optional(),
+    confirmDuplicate: confirmDuplicateField,
   })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
+  .refine(hasUpdateField, "Nothing to update.");
 export type UpdateOwnProfileInput = z.infer<typeof updateOwnProfileSchema>;

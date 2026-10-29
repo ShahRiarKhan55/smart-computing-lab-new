@@ -22,6 +22,8 @@ import {
 import { assertMayChangeVisibility, visibleTo, type Viewer } from "../lib/visibility.js";
 import { toNewsItem } from "../lib/serializers.js";
 import { changedFields, idList, recordAudit, recordVisibilityChange } from "../lib/audit.js";
+import { transientContentionAs503 } from "../lib/dbErrors.js";
+import { guardNews, lockForDuplicateCheck, overrideDetails } from "../lib/duplicates.js";
 import { applyTranslationOverrides, loadTranslations, localize, resolveLocale } from "../lib/translations.js";
 
 const router = Router();
@@ -144,10 +146,13 @@ router.post(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { teamMemberIds, date, translations, ...rest } = parseOrThrow(createNewsItemSchema, req.body);
+    const { teamMemberIds, date, translations, confirmDuplicate, ...rest } = parseOrThrow(createNewsItemSchema, req.body);
     assertMayChangeVisibility(req.user!, rest.visibility);
 
     const created = await prisma.$transaction(async (tx) => {
+      // Duplicate warning (shared/duplicates.ts): same normalised title on the same date. The same title on another date is allowed.
+      await lockForDuplicateCheck(tx, "newsItem");
+      const overridden = await guardNews(tx, req.user!, { next: { title: rest.title, dateLabel: date, sortDate: rest.sortDate }, confirm: confirmDuplicate });
       const row = await tx.newsItem.create({ data: { ...rest, dateLabel: date } });
       await applyTranslationOverrides(tx, "NEWS_ITEM", row.id, translations?.ja);
       let linkedAuthors = 0;
@@ -160,7 +165,7 @@ router.post(
         action: "NEWS_CREATED",
         entityType: "NEWS_ITEM",
         entityId: row.id,
-        details: { title: row.title, visibility: row.visibility, linkedAuthors },
+        details: { title: row.title, visibility: row.visibility, linkedAuthors, ...overrideDetails(overridden) },
       });
       return row;
     });
@@ -177,12 +182,23 @@ router.put(
   requireAuth,
   asyncHandler(async (req, res) => {
     assertValidId(req.params.id);
-    const { teamMemberIds, date, translations, ...rest } = parseOrThrow(updateNewsItemSchema, req.body);
+    const { teamMemberIds, date, translations, confirmDuplicate, ...rest } = parseOrThrow(updateNewsItemSchema, req.body);
     assertMayChangeVisibility(req.user!, rest.visibility);
+    const touchesCompared = rest.title !== undefined || date !== undefined || rest.sortDate !== undefined;
 
     const updated = await prisma.$transaction(async (tx) => {
+      if (touchesCompared) await lockForDuplicateCheck(tx, "newsItem");
       const existing = await tx.newsItem.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new HttpError(404, "Not found");
+      // Only an edit that changes the title or a date is compared; the record itself is excluded.
+      const overridden = touchesCompared
+        ? await guardNews(tx, req.user!, {
+            next: { title: rest.title ?? existing.title, dateLabel: date ?? existing.dateLabel, sortDate: rest.sortDate ?? existing.sortDate },
+            previous: { title: existing.title, dateLabel: existing.dateLabel, sortDate: existing.sortDate },
+            excludeId: existing.id,
+            confirm: confirmDuplicate,
+          })
+        : null;
 
       const data = { ...rest, dateLabel: date };
       const row = await tx.newsItem.update({ where: { id: existing.id }, data });
@@ -198,7 +214,7 @@ router.put(
           action: "NEWS_UPDATED",
           entityType: "NEWS_ITEM",
           entityId: row.id,
-          details: { title: row.title, changed },
+          details: { title: row.title, changed, ...overrideDetails(overridden) },
         });
       }
       await recordVisibilityChange(tx, req.user!, "NEWS_ITEM", row.id, existing.visibility, rest.visibility);
@@ -233,5 +249,8 @@ router.delete(
     res.json({ success: true });
   }),
 );
+
+// Lock contention on the duplicate-check write lock (lib/duplicates.ts) answers 503 + Retry-After instead of a generic 500.
+router.use(transientContentionAs503);
 
 export default router;

@@ -4,6 +4,8 @@ import { createNewsItemSchema, NEWS_TYPES, type NewsItem, type Visibility } from
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { useT } from "../i18n/LocaleContext";
+import { DuplicateConfirm } from "./DuplicateConfirm";
+import { useDuplicateConfirm } from "../hooks/useDuplicateConfirm";
 import { apiErrorMessage } from "../i18n/errorMessages";
 import { useEntityTranslations } from "../hooks/useEntityTranslations";
 
@@ -17,6 +19,8 @@ export interface NewsFormFields {
   description: string;
   visibility?: Visibility;
   translations?: { ja: Record<string, string> };
+  /** Set only after a duplicate warning was explicitly confirmed (lab manager / admin). */
+  confirmDuplicate?: boolean;
 }
 
 interface NewsFormModalProps {
@@ -50,6 +54,7 @@ export function NewsFormModal({ open, title, initial, canLinkSelf, canSetVisibil
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? "PUBLIC");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const dup = useDuplicateConfirm();
   const { values: ja, setField: setJa, base } = useEntityTranslations("NEWS_ITEM", initial?.id, open);
 
   useEffect(() => {
@@ -58,6 +63,7 @@ export function NewsFormModal({ open, title, initial, canLinkSelf, canSetVisibil
       setLinkSelf(false);
       setVisibility(initial?.visibility ?? "PUBLIC");
       setError(null);
+      dup.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
@@ -71,6 +77,7 @@ export function NewsFormModal({ open, title, initial, canLinkSelf, canSetVisibil
 
   function set<K extends keyof ReturnType<typeof toFormState>>(key: K, value: ReturnType<typeof toFormState>[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+    dup.reset(); // a changed field invalidates any earlier duplicate warning and its confirmation
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -89,10 +96,12 @@ export function NewsFormModal({ open, title, initial, canLinkSelf, canSetVisibil
       const payload = {
         ...(canSetVisibility ? { ...fields, visibility } : fields),
         ...(initial ? { translations: { ja } } : {}),
+        ...dup.extra,
       } as NewsFormFields;
       await onSubmit(payload, linkSelf);
       onClose();
     } catch (err) {
+      dup.capture(err);
       setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
@@ -107,6 +116,7 @@ export function NewsFormModal({ open, title, initial, canLinkSelf, canSetVisibil
   return (
     <Modal open={open} onClose={submitting ? () => {} : onClose} title={title}>
       {error && <div className="form-error" role="alert">{error}</div>}
+      <DuplicateConfirm conflict={dup.conflict} confirmed={dup.confirmed} onConfirmedChange={dup.setConfirmed} />
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-row">
           <div className="form-group">

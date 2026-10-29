@@ -2,6 +2,7 @@ import { z } from "zod";
 import { roleSchema, accountCategorySchema } from "./enums.js";
 import { idSchema, utf8ByteLength } from "./common.js";
 import { teamMemberFields } from "./team.js";
+import { confirmDuplicateField } from "../duplicates.js";
 
 export const userSchema = z.object({
   id: z.string(),
@@ -47,6 +48,8 @@ export const createUserSchema = z
     initials: teamMemberFields.initials.optional(),
     memberRole: teamMemberFields.role.optional(),
     category: accountCategorySchema.optional(),
+    /** Explicit confirmation that a flagged same-name profile is a different person (lab manager or admin only). */
+    confirmDuplicate: confirmDuplicateField,
   })
   .superRefine((data, ctx) => {
     const newFieldsGiven = [data.name, data.initials, data.memberRole, data.category].filter((v) => v !== undefined).length;

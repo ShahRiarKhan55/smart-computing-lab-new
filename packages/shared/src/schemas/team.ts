@@ -3,6 +3,7 @@ import { categorySchema } from "./enums.js";
 import { optionalHttpUrl, optionalText, requiredText, sortOrderField } from "./common.js";
 import { translationsField } from "./translations.js";
 import { researchLinkFields } from "./researchLinks.js";
+import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
 
 /** Mirrors the English field length below — see i18n/translatableFields.ts (TEAM_MEMBER). */
 export const TEAM_MEMBER_TRANSLATION_MAX = { bio: 2000 };
@@ -58,6 +59,8 @@ export const createTeamMemberSchema = z.object({
   researchGateUrl: teamMemberFields.researchGateUrl.optional().default(""),
   orcidUrl: teamMemberFields.orcidUrl.optional().default(""),
   sortOrder: sortOrderField.optional().default(0),
+  /** Explicit confirmation that a flagged near-duplicate is a different record (lab manager or admin only; see duplicates.ts). */
+  confirmDuplicate: confirmDuplicateField,
   /** Japanese bio override (Phase 14); see translations.ts. */
   translations: translationsField(TEAM_MEMBER_TRANSLATION_MAX),
 });
@@ -77,8 +80,9 @@ export const updateTeamMemberSchema = z
     orcidUrl: teamMemberFields.orcidUrl.optional(),
     sortOrder: sortOrderField.optional(),
     translations: translationsField(TEAM_MEMBER_TRANSLATION_MAX),
+    confirmDuplicate: confirmDuplicateField,
   })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update.");
+  .refine(hasUpdateField, "Nothing to update.");
 export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>;
 
 /**

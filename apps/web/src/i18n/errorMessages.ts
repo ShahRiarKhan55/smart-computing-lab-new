@@ -1,4 +1,4 @@
-import { ALUMNI_MESSAGES, KNOWLEDGE_CATEGORIES, RESEARCH_LINK_MESSAGES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
+import { ALUMNI_MESSAGES, DUPLICATE_MESSAGES, INVITATION_DUPLICATE_MESSAGE, KNOWLEDGE_CATEGORIES, RESEARCH_LINK_MESSAGES, RESOURCE_TYPES, type TranslationKey } from "@scl/shared";
 import { ApiError } from "../lib/api";
 
 /**
@@ -29,6 +29,13 @@ const KNOWN_MESSAGES: Record<string, TranslationKey> = {
   [ALUMNI_MESSAGES.publicationField]: "error.alumniPublicationField",
   [ALUMNI_MESSAGES.alumniOnlyPublication]: "error.alumniOnlyPublication",
   [ALUMNI_MESSAGES.publicationConflict]: "error.publicationConflict",
+  // Duplicate warnings (shared/duplicates.ts): the fixed message of each duplicate kind.
+  [DUPLICATE_MESSAGES["team-name"]]: "error.duplicateTeamName",
+  [DUPLICATE_MESSAGES["publication-doi"]]: "error.duplicatePublicationDoi",
+  [DUPLICATE_MESSAGES["publication-title-year"]]: "error.duplicatePublicationTitleYear",
+  [DUPLICATE_MESSAGES["news-title-date"]]: "error.duplicateNewsTitleDate",
+  [DUPLICATE_MESSAGES["research-title"]]: "error.duplicateResearchTitle",
+  [INVITATION_DUPLICATE_MESSAGE]: "error.duplicateInvitation",
   // Research profile links (Phase 3C): the fixed messages of the three validators (RESEARCH_LINK_MESSAGES in @scl/shared).
   [RESEARCH_LINK_MESSAGES.googleScholar]: "error.researchLinkGoogleScholar",
   [RESEARCH_LINK_MESSAGES.researchGate]: "error.researchLinkResearchGate",
