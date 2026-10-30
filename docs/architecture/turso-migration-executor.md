@@ -1,7 +1,7 @@
 # Applying the reviewed migrations to Turso (`migrate:turso`)
 
 `prisma migrate deploy` cannot talk to Turso (see the site maintainer guide, "Deployment"). The additive migrations
-that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these five,
+that are applied to Turso are therefore run with a small, reviewed executor. The reviewed set is exactly these six,
 in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 
 | Migration | Creates | Reviewed SHA-256 (CRLF normalised to LF) |
@@ -11,6 +11,7 @@ in this order (`REVIEWED_MIGRATIONS` in `src/lib/tursoMigrate.ts`):
 | `20261012100000_oauth_identity` (Phase 2.2) | `OAuthIdentity` (FK to `User` ON DELETE CASCADE; unique `(provider, subject)` and `(userId, provider)`) | `7803d5ae2f5a02efc308928e56305763344250015721b8253bfa505959822a2e` |
 | `20261020120000_team_member_is_published` (Phase 3B) | one column: `TeamMember.isPublished BOOLEAN NOT NULL DEFAULT true` (see "Column additions" below) | `502f8fc34ad05d596084f980c12908c3b01b09eea5e80bb6fd8841b1bf18ce4b` |
 | `20261027120000_team_member_research_links` (Phase 3C) | three columns: `TeamMember.googleScholarUrl`, `researchGateUrl`, `orcidUrl`, each `TEXT NOT NULL DEFAULT ''` (see "Column additions" below and `phase3c-research-links.md`) | `61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44` |
+| `20261030120000_publication_metadata_fields` (publication metadata) | eight columns on `Publication`: `status`, `listNumber`, `category`, `volume`, `acceptedDate` (each `TEXT NOT NULL DEFAULT ''`) and `startPage`, `endPage`, `month` (each `INTEGER NOT NULL DEFAULT 0`) (see "Column additions" below) | `df2db5062779488ec735b43de48c8710861eedb1ee6f36cf3f29969af0413a18` |
 
 A migration directory that is not in this table is never read or run, a pinned file whose bytes differ (even by a
 trailing space) is refused, and even a file whose hash matches must still consist only of plain additive
