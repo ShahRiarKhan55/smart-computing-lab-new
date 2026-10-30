@@ -21,6 +21,7 @@ it anywhere: applying is a separate, explicitly approved, operator-run step agai
 
 Code: `apps/server/src/lib/tursoMigrate.ts` (core) and `apps/server/scripts/turso-migrate.ts` (command line).
 Tests: `apps/server/scripts/unit-turso-migrate.test.ts` (part of `npm run test:unit -w apps/server`).
+Release notes for the publication metadata migration: [publication-metadata-release.md](publication-metadata-release.md).
 
 ## What it guarantees (and where that is tested)
 

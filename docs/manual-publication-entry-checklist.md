@@ -4,7 +4,7 @@ Prepared on branch `feature/publication-metadata-fields` (the form with the new 
 
 ## Before you start
 
-1. **The Publication Metadata boxes exist only after this feature is released.** The feature needs a database migration (`20261030120000_publication_metadata_fields`) applied **before** the new code is deployed; until then the boxes do not exist and the publication pages would fail. Enter the publications after both steps are done.
+1. **The Publication Metadata boxes exist only after this feature is released.** The feature needs a database migration (`20261030120000_publication_metadata_fields`) applied **before** the new code is deployed; until then the boxes do not exist and the publication pages would fail. Enter the publications only after both steps are done and the release has been checked. The release sequence (backup, explicit authorization for the migration, then separate authorization for deployment) is in `docs/architecture/publication-metadata-release.md`. There is no importer: entry is by hand.
 2. You need a Lab Manager or Admin account to set Visibility. Any signed-in member can add or edit a publication.
 3. Nothing in this document has been verified against the live site or the publishers. See 'How to read this document'.
 
