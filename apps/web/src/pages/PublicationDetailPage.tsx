@@ -20,6 +20,8 @@ import { PublicationFormModal } from "../components/PublicationFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { VisibilityBadge } from "../components/VisibilityField";
+import { PublicationMetaList } from "../components/PublicationMeta";
+import { publicationJsonLd, publicationSeoDescription } from "../lib/publicationSeo";
 import { PROJECT_STATUS_LABEL_KEY } from "../i18n/labels";
 import { useT } from "../i18n/LocaleContext";
 
@@ -97,19 +99,8 @@ export function PublicationDetailPage() {
       <PageHeader
         crumbs={[...crumbsTo, { label: pub.title }]}
         title={pub.title}
-        seoDescription={`${pub.authors} — ${pub.venue} (${pub.year})`}
-        jsonLd={{
-          "@context": "https://schema.org",
-          "@type": "ScholarlyArticle",
-          headline: pub.title,
-          author: pub.authors
-            .split(",")
-            .map((name) => name.trim())
-            .filter(Boolean)
-            .map((name) => ({ "@type": "Person", name })),
-          datePublished: String(pub.year),
-          ...(pub.venue ? { publisher: { "@type": "Organization", name: pub.venue } } : {}),
-        }}
+        seoDescription={publicationSeoDescription(pub)}
+        jsonLd={publicationJsonLd(pub)}
       />
 
       <div className="container">
@@ -145,6 +136,7 @@ export function PublicationDetailPage() {
             </div>
             <p className="pub-detail__authors">{pub.authors}</p>
             <p className="pub-detail__venue">{pub.venue}</p>
+            <PublicationMetaList publication={pub} />
             {links.length > 0 && (
               <div className="pub-item__links">
                 {links.map((l) => (

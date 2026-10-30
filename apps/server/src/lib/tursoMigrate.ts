@@ -5,7 +5,8 @@ import { createClient, type Client, type Transaction } from "@libsql/client";
 
 /**
  * Executor for the REVIEWED additive migrations (the two gallery multi-image migrations, the Phase 2.2 OAuth identity
- * migration and the Phase 3B `TeamMember.isPublished` column) against a libSQL/Turso database.
+ * migration, the Phase 3B `TeamMember.isPublished` column, the Phase 3C research-link columns and the publication-metadata
+ * `Publication` columns) against a libSQL/Turso database.
  *
  * `prisma migrate deploy` cannot talk to Turso (docs/user-guide/en/site-maintainer-guide.md), so these
  * ADDITIVE migrations need a deliberate, repeatable way in. This module is the importable core (no side
@@ -52,6 +53,10 @@ export const REVIEWED_MIGRATIONS: readonly ReviewedMigration[] = [
   // Phase 3C: THREE `ALTER TABLE "TeamMember" ADD COLUMN "<x>Url" TEXT NOT NULL DEFAULT ''` (googleScholarUrl, researchGateUrl, orcidUrl; metadata-only; existing
   // rows read back as ''). Local rehearsal only so far; NOT applied to any remote database. See docs/architecture/phase3c-research-links.md.
   { name: "20261027120000_team_member_research_links", sha256: "61e1bfbe7b159897cdb08c024b515fc8e74e94e978948dc2a4aae92e0cb69a44" },
+  // Publication metadata: EIGHT `ALTER TABLE "Publication" ADD COLUMN "<x>" TEXT NOT NULL DEFAULT ''` / `INTEGER NOT NULL DEFAULT 0` (status, listNumber, category, volume,
+  // startPage, endPage, month, acceptedDate; metadata-only; existing rows read back as '' / 0). Pin computed over the LF-normalised file. Listing it here does NOT apply it
+  // anywhere; it has not been applied to any remote database.
+  { name: "20261030120000_publication_metadata_fields", sha256: "df2db5062779488ec735b43de48c8710861eedb1ee6f36cf3f29969af0413a18" },
 ];
 
 /** Tables that must already exist in the target for it to be this application's database. */

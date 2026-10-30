@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { Publication } from "@scl/shared";
 import { Icon } from "./Icon";
 import { VisibilityBadge } from "./VisibilityField";
+import { PublicationMetaLine } from "./PublicationMeta";
 import { useT } from "../i18n/LocaleContext";
 
 interface PublicationItemProps {
@@ -40,6 +41,7 @@ export function PublicationItem({ publication: p, canEdit, canDelete, onEdit, on
         <p className="pub-item__venue">
           {p.venue}, {p.year}
         </p>
+        <PublicationMetaLine publication={p} />
         {(p.pdfUrl || p.doiUrl || p.extraUrl) && (
           <div className="pub-item__links">
             {p.pdfUrl && <ExternalLink href={p.pdfUrl}>{t("publications.pdf")}</ExternalLink>}

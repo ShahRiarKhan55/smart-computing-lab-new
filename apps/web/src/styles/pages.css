@@ -387,6 +387,40 @@
   overflow-wrap: anywhere;
 }
 
+.pub-item__meta {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.pub-meta {
+  margin: var(--space-4, 1rem) 0;
+}
+
+.pub-meta__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 0 0 var(--space-2, 0.5rem);
+}
+
+.pub-meta__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  margin: 0;
+}
+
+.pub-meta__row dt {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--muted);
+}
+
+.pub-meta__row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .pub-item__links {
   display: flex;
   flex-wrap: wrap;

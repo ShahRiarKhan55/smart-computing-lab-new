@@ -87,4 +87,5 @@ jobs:
           npm run test:profile-photo -w apps/server
           npm run test:research-links -w apps/server
           npm run test:duplicates -w apps/server
+          npm run test:publication-metadata -w apps/server
         timeout-minutes: 5
