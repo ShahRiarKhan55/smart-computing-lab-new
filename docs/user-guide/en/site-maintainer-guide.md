@@ -86,12 +86,14 @@ Dual backend (`lib/storage.ts`): local filesystem in development, Vercel Blob (p
 npm run build                        # shared -> server -> web, in that order
 npm run dev                          # concurrent server (tsx watch) + web (vite)
 npm run migrate -w apps/server       # prisma migrate dev (local)
-npm run migrate:deploy -w apps/server # apply existing migrations to a local database (what CI uses)
-npm run migrate:turso -w apps/server  # Turso migration executor: inspect-only unless --apply (see Deployment)
-npm run seed -w apps/server          # LOCAL DEVELOPMENT ONLY: creates a default admin account (fixed credential in prisma/seed.ts) + sample content if absent; never run it against production
+npm run migrate:deploy -w apps/server # apply migrations to a local DB (CI)
+npm run migrate:turso -w apps/server  # Turso executor, inspect-only by default
+npm run seed -w apps/server          # LOCAL ONLY: default admin + sample content
 npm run test:unit -w apps/server     # pure unit tests, no server/DB
 npm run test:invitations -w apps/server   # spawns a real server against a disposable DB copy
 ```
+
+The seed creates a default administrator account whose credential is fixed in `apps/server/prisma/seed.ts` and adds sample content if absent. It is for local development only; never run it against production. `migrate:turso` is explained under Deployment below.
 
 Most `test:*` scripts in `apps/server/package.json` follow the same pattern: copy `dev.db` to a disposable temp file, spawn the real server against the copy, drive it over real HTTP, discard the copy. **Explicitly clear `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` in your own shell** before running any of these locally if you've also been working against production Turso in the same terminal — several of these scripts spread `...process.env` into the spawned server's environment without clearing those two first, so an ambient Turso credential silently redirects the "local" test server to the real production database for reads (writes inside a failing transaction roll back, but it's still not what the script intends, and it's worth being deliberate about).
 
