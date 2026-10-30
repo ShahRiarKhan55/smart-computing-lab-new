@@ -18,7 +18,7 @@ Click **Log in** in the header, enter your email and password. **Log out** is in
 
 ## 4. Complete your profile
 
-Once signed in, open **Account → My Profile** (`/profile`). Fill in your name, role/title, department, a short bio, and optionally a photo URL. This is what your public team page shows.
+Once signed in, open **Account → My Profile** (`/profile`). Fill in your name, role/title, department and a short bio. You can also upload a photo from that page (JPEG, PNG, WebP or GIF, up to 5 MB) or paste an external photo URL, and add links to your Google Scholar, ResearchGate and ORCID profiles. This is what your public team page shows.
 
 ## 5. Find research
 
@@ -37,7 +37,7 @@ Use the **People** menu for the Team roster and Research Groups. Click any name 
 - **Workspace** — your own projects, groups and research areas in one place.
 - **Messages** / **Notifications** — private conversations and activity addressed to you.
 - **Community → Forum** — post, comment and react in categories you can see.
-- Add publications, news, research areas, events, knowledge docs, resources and gallery items — all start as lab-only until a manager publishes them.
+- Add publications, news, research areas, events, knowledge docs, resources and gallery items. Publications, news and research areas are **public as soon as you save them**; events, knowledge documents, resources and gallery items start lab-only until a manager publishes them.
 
 ## 9. Get help
 

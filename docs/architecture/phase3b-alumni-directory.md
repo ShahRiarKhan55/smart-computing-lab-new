@@ -3,6 +3,8 @@
 Status: implemented and verified **locally** (disposable SQLite files only). Not applied to, or tested against, Turso, Preview or
 Production. Release needs the steps under "Release conditions".
 
+> **Update (later change):** Alumni no longer have their own page. They are the final section of the Team page (`/team`), directly after Research Students, using the same profile cards; `/alumni` now redirects to `/team#alumni`, and the web app loads the section from `GET /api/alumni`. The API, the consent/publication rules and the permissions in this document are unchanged. Where this document says "alumni page" or `/alumni` for the UI, read "the Alumni section of the Team page". Current behavior: [`../content-management/team-and-alumni.md`](../content-management/team-and-alumni.md).
+
 ## What it does
 * `ALUMNI` is a team category (`packages/shared/src/schemas/enums.ts`). It is **not** in `CATEGORY_ORDER` (the team page roster). Alumni
   have their own public page, `/alumni`, linked from the team page, served by `GET /api/alumni` (`routes/alumni.routes.ts`).

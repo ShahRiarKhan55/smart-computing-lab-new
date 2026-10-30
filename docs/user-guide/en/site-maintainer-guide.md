@@ -4,7 +4,7 @@
 **Purpose:** the operational knowledge needed to run, change and deploy this codebase safely.
 **Prerequisites:** Node.js, npm, git; familiarity with Prisma, Express and React is assumed.
 
-This guide documents the repository as it actually exists. For deep implementation history and rationale, see `docs/architecture/*.md` — this guide is the practical operating reference; those are the design record.
+This guide documents the repository as it actually exists. For deep implementation history and rationale, see `docs/architecture/*.md` — this guide is the practical operating reference; those are the design record. The detailed technical reference lives in `docs/technical/` (architecture, project structure, authentication and authorization, role-permission matrix, database and migrations, API reference, file storage, Windows development setup, testing, deployment, troubleshooting); start from `docs/README.md`.
 
 ## Repository structure
 
@@ -49,6 +49,11 @@ Even with the libSQL adapter, Prisma 5.x's native "library" query engine still r
 | `TURSO_DATABASE_URL` | production | `<production value>` |
 | `TURSO_AUTH_TOKEN` | production | `<secret>` |
 | `SESSION_SECRET` | all | `<secret>` — the app refuses to start in production without a real value |
+| `PORT` | local | API port (default 4001 locally) |
+| `STORAGE_DIR` | local | local file-storage directory; ignored when a Blob token is set |
+| `MAX_IMAGE_BYTES`, `MAX_DOCUMENT_BYTES` | optional | override the 5 MB image and 15 MB document upload limits |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | optional | Google sign-in for already-linked accounts; all three must be set and valid, otherwise it is simply not offered |
+| `MIGRATE_TARGET_URL`, `MIGRATE_TARGET_TOKEN` | one shell session | target of `npm run migrate:turso`; never stored in Vercel (see Deployment) |
 | `TRUST_PROXY` | all | `0` (no reverse proxy) / `1` (exactly one trusted hop) — see Trust Proxy below |
 | `NODE_ENV` | all | `development` / `production` |
 | `PUBLIC_BASE_URL` | optional | enables `/sitemap.xml` and gives invitation links an absolute URL; omitted in local dev |
@@ -81,7 +86,9 @@ Dual backend (`lib/storage.ts`): local filesystem in development, Vercel Blob (p
 npm run build                        # shared -> server -> web, in that order
 npm run dev                          # concurrent server (tsx watch) + web (vite)
 npm run migrate -w apps/server       # prisma migrate dev (local)
-npm run seed -w apps/server          # idempotent: creates the admin account + sample content if absent
+npm run migrate:deploy -w apps/server # apply existing migrations to a local database (what CI uses)
+npm run migrate:turso -w apps/server  # Turso migration executor: inspect-only unless --apply (see Deployment)
+npm run seed -w apps/server          # LOCAL DEVELOPMENT ONLY: creates a default admin account (fixed credential in prisma/seed.ts) + sample content if absent; never run it against production
 npm run test:unit -w apps/server     # pure unit tests, no server/DB
 npm run test:invitations -w apps/server   # spawns a real server against a disposable DB copy
 ```
@@ -92,11 +99,13 @@ Most `test:*` scripts in `apps/server/package.json` follow the same pattern: cop
 
 `vercel.json`: `buildCommand` builds `packages/shared` then `apps/web`; a `functions["api/index.ts"]` block ships the Prisma native query engine binary alongside the function (`includeFiles`); rewrites send `/api/*` to the function and everything else to the built SPA. `api/index.ts` sets `PRISMA_QUERY_ENGINE_LIBRARY` explicitly (Vercel's Function runtime is Amazon Linux, not the Debian-based build container, so `prisma/schema.prisma`'s `generator client` block lists `binaryTargets = ["native", "rhel-openssl-3.0.x"]` — `native` for local/CI, `rhel-openssl-3.0.x` for the deployed function; see the extensive comments in both files for the full root-cause history).
 
-**Migrations are never auto-applied to production.** Prisma's own `migrate deploy` does not support Turso's HTTP-based connection; production migrations are applied via an audited one-off script against the real database, run manually and deliberately — never as part of a routine deploy.
+**Migrations are never auto-applied to production.** Prisma's own `migrate deploy` does not support Turso's HTTP-based connection. Production migrations are applied with the reviewed executor, `npm run migrate:turso -w apps/server`, which runs only migrations pinned by SHA-256 in `apps/server/src/lib/tursoMigrate.ts`, only additive statement forms, and refuses partial or divergent states. It inspects by default; `--apply` is a separate, explicitly authorized step with a recorded recovery point. Procedure and gates: `docs/architecture/turso-migration-executor.md`. Example release: `docs/architecture/publication-metadata-release.md`.
+
+**Order:** back up (note a Turso recovery point) → inspect-only → apply the migration → verify → **only then** deploy the code that reads the new columns. Code deployed against a database missing a column fails with "no such column" on every page that loads that table (for example, the Publication metadata release breaks every page listing publications until its migration is applied). Merging to `master` deploys to Production automatically through the Vercel Git integration.
 
 ## Rollback considerations
 
-Vercel keeps previous deployments; redeploying an older one is the fastest rollback for application code. **Database migrations are additive-only by convention in this project** — nothing here has ever dropped a column or table — so rolling back application code while a newer, additive migration remains applied is safe (older code simply doesn't use the new table/columns). Rolling back a migration itself has no automated tooling here; it would be a manually-written, reviewed reverse migration, applied with the same deliberate, audited process as a forward one.
+Vercel keeps previous deployments; redeploying an older one is the fastest rollback for application code. **Database migrations are additive-only by convention in this project** — nothing here has ever dropped a column or table — so rolling back application code while a newer, additive migration remains applied is safe (older code simply doesn't use the new table/columns). Rolling back a migration itself has no automated tooling here: the executor refuses `DROP`, so treat added columns as permanent and roll back application code instead. Use Turso point-in-time recovery only for a real data incident (it also discards every later write).
 
 ## Logging
 
@@ -121,6 +130,10 @@ Standard `npm outdated` / `npm update` workflow; `apps/server`'s `allowScripts` 
 ## Browser testing
 
 `apps/server/scripts/browser-regression.cjs` drives a real headless browser over raw CDP (Chrome DevTools Protocol) — no Playwright/Puppeteer dependency; it spawns the browser binary directly. `BROWSER_PATH` selects the executable (defaults to a Windows Edge path; this container/most Linux CI sets it to a pre-installed Chromium). Supports `ONLY_*` env flags to run just one phase's section.
+
+## Local development on Windows
+
+Step-by-step PowerShell instructions, including how to keep Turso variables out of a test shell, are in `docs/technical/development-setup.md`.
 
 ## Known limitations
 

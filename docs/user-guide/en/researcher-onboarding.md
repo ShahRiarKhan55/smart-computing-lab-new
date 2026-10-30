@@ -24,7 +24,7 @@ Submitting creates your account and signs you in immediately — no separate log
 
 ## 5. Completing your profile
 
-Go to **Account → My Profile** and fill in your name, role/title, department and a short bio (a photo URL is optional). This is what your public team page shows to visitors.
+Go to **Account → My Profile** and fill in your name, role/title, department and a short bio (you can also upload a photo or paste a photo URL; both are optional). This is what your public team page shows to visitors.
 
 ## 6. Adding research information
 
@@ -52,7 +52,7 @@ See the full table in the Researcher/Lab Member Guide. In short: your own profil
 
 - Choose a password you don't reuse elsewhere.
 - Never share it with anyone, including your lab administrator — they will never legitimately ask you for it.
-- If you think your account may be compromised, tell your administrator — they can deactivate the account; you'll need a fresh invitation to reactivate.
+- If you think your account may be compromised, tell your administrator — they can delete the account; you'll need a fresh invitation to regain access.
 - There is currently no self-service "forgot password" option if you're logged out — contact your administrator.
 
 **Related documentation:** Quick Start Guide · Researcher/Lab Member Guide

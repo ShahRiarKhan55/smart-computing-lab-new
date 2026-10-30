@@ -30,7 +30,11 @@ The landing page (`/`) gives a quick overview: a short lab introduction, highlig
 
 ## Team
 
-`/team` is the researcher roster: faculty, PhD/MSc/BSc researchers and other categories, each with a photo (or initials), role and department. Click a name (`/team/:id`) for that researcher's public profile — bio, history, and the publications, news, projects, groups and events they're connected to, all filtered to what is public.
+`/team` ("Our Team") is the lab's people page. Its sections appear in this order, each with a count: **Faculty**, **PhD Students**, **MSc Students**, **BSc Students**, **Research Students** and, last, **Alumni**. Every section uses the same profile card: a photo (or initials), name, role, department and any research profile links. Click a name (`/team/:id`) for that person's public profile — bio, history, and the publications, news, projects, groups and events they're connected to, all filtered to what is public.
+
+### Alumni
+
+**Alumni** — former members who have agreed to be listed — is the final section of the Team page, directly after Research Students. There is no separate Alumni page or menu item. The old `/alumni` address simply takes you to the Alumni section of the Team page (`/team#alumni`). A person appears there only after a lab administrator has published their profile, so if no alumni have been published yet, the Alumni section is not shown at all. No login is needed to see published alumni.
 
 ## Groups
 
@@ -38,7 +42,7 @@ The landing page (`/`) gives a quick overview: a short lab introduction, highlig
 
 ## Publications
 
-`/publications` is a filterable, sortable list of the lab's papers (by year, with search). Each publication's page (`/publications/:id`) shows its full author list (linking to team profiles where available), venue, year, and any available links (PDF, DOI).
+`/publications` is a filterable, sortable list of the lab's papers (by year, with search). Each publication's page (`/publications/:id`) shows its full author list (linking to team profiles where available), venue, year, and any available links (PDF, DOI). Where the lab has recorded them, a **Publication details** list also shows the status (Published, Accepted or Under submission), paper category, journal list number, volume, pages, publication month and date of acceptance; anything that is not stated is simply not shown. A paper that is only accepted or under submission is not presented as published.
 
 ## News
 
@@ -70,7 +74,16 @@ The landing page (`/`) gives a quick overview: a short lab introduction, highlig
 
 ## Contact
 
-`/contact` gives ways to reach the lab.
+`/contact` shows the lab's location (Interdisciplinary Faculty of Science and Engineering, Matsue Campus, Shimane University), email address, office hours and the university website. **The message form on that page is not connected to an email service — nothing you type into it is sent.** Write to the email address shown on the page instead.
+
+## What you can and cannot do without an account
+
+| You can (no login) | You cannot |
+|---|---|
+| Browse the home page, research areas, projects, groups, team and published alumni, publications, news, events, gallery, knowledge, resources and public forum categories | See anything marked lab-only |
+| Search public content and switch between English and Japanese | Post, comment or react in the forum |
+| Read the Quick Start, Public Visitor and Researcher Onboarding guides under **Help & Documentation** (`/docs`) | Create or edit any content, message members, or see unpublished alumni |
+| Open an invitation link you were sent (`/invite/...`) | Register yourself — accounts are created only by an administrator |
 
 ## Signing in
 
