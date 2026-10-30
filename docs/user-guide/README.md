@@ -18,6 +18,10 @@ User-facing documentation for the actual, current Smart Computing Lab website �
 - **In the app**: `/docs` and its subpages render these same guides, with access control matching each guide's audience (public, signed-in, or admin-only — see `apps/web/src/pages/docs/`).
 - **As PDF**: `npm run docs:pdf -w apps/server` generates one PDF per guide, per language, into `apps/server/dist-docs/pdf/` (gitignored build output, not committed — see that script's header for exact paths).
 
+## Technical and content-management documentation
+
+Developer, administrator and maintainer reference material (role-permission matrix, API reference, database, deployment, troubleshooting, and per-content-type pages such as Team and Alumni) is in [`../technical/`](../technical/) and [`../content-management/`](../content-management/); the full index is [`../README.md`](../README.md).
+
 ## Maintaining these guides
 
 This is the single source of truth for both the web `/docs` pages and the generated PDFs — both are produced *from* these Markdown files (`apps/server/scripts/docs-render.mjs`), never maintained as a separate copy. Edit the `.md` source here; the rendered HTML/PDF output regenerates from it.

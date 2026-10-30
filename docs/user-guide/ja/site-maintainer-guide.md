@@ -4,7 +4,7 @@
 **目的：** このコードベースを安全に運用・変更・デプロイするために必要な実務知識をまとめる
 **前提条件：** Node.js、npm、git。Prisma、Express、Reactの基礎知識があることを前提とします。
 
-本ガイドは、実際に存在するリポジトリの内容を説明するものです。実装の経緯や設計根拠については `docs/architecture/*.md` を参照してください — 本ガイドは実務上のリファレンス、`docs/architecture/` は設計の記録という位置づけです。
+本ガイドは、実際に存在するリポジトリの内容を説明するものです。実装の経緯や設計根拠については `docs/architecture/*.md` を参照してください — 本ガイドは実務上のリファレンス、`docs/architecture/` は設計の記録という位置づけです。 詳細な技術リファレンスは `docs/technical/`（アーキテクチャ、プロジェクト構成、認証と認可、ロール別権限表、データベースとマイグレーション、APIリファレンス、ファイルストレージ、Windowsでの開発環境構築、テスト、デプロイ、トラブルシューティング）にあります。`docs/README.md` から参照してください。
 
 ## リポジトリ構成
 
@@ -49,6 +49,11 @@ libSQLアダプターを使っていても、Prisma 5.x のネイティブ「lib
 | `TURSO_DATABASE_URL` | 本番 | `<production value>` |
 | `TURSO_AUTH_TOKEN` | 本番 | `<secret>` |
 | `SESSION_SECRET` | 全環境 | `<secret>` — 本番環境では実際の値がないとアプリは起動を拒否します |
+| `PORT` | ローカル | APIのポート（ローカルの既定は4001） |
+| `STORAGE_DIR` | ローカル | ローカルのファイル保存先。Blobトークンが設定されている場合は無視されます |
+| `MAX_IMAGE_BYTES`, `MAX_DOCUMENT_BYTES` | 任意 | 画像5 MB・文書15 MBというアップロード上限の上書き |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | 任意 | リンク済みアカウント向けのGoogleログイン。3つすべてが設定され有効でない限り、提供されません |
+| `MIGRATE_TARGET_URL`, `MIGRATE_TARGET_TOKEN` | 1回のシェルセッション | `npm run migrate:turso` の対象。Vercelには保存しません（デプロイの節を参照） |
 | `TRUST_PROXY` | 全環境 | `0`（リバースプロキシなし）／`1`（信頼できるホップが1つ）— 下記「Trust Proxy」を参照 |
 | `NODE_ENV` | 全環境 | `development` / `production` |
 | `PUBLIC_BASE_URL` | 任意 | `/sitemap.xml` を有効化し、招待リンクを絶対URLにします。ローカル開発では省略可 |
@@ -76,7 +81,9 @@ bcryptによるパスワードハッシュ化（コスト係数10）。存在し
 npm run build                        # shared -> server -> web の順にビルド
 npm run dev                          # server（tsx watch）と web（vite）を並行起動
 npm run migrate -w apps/server       # prisma migrate dev（ローカル用）
-npm run seed -w apps/server          # べき等：管理者アカウントとサンプルコンテンツを、未作成の場合のみ作成
+npm run migrate:deploy -w apps/server # 既存のマイグレーションをローカルDBに適用（CIが使用）
+npm run migrate:turso -w apps/server  # Tursoマイグレーション実行ツール：--applyを付けない限り検査のみ（デプロイの節を参照）
+npm run seed -w apps/server          # ローカル開発専用：既定の管理者アカウント（認証情報は prisma/seed.ts に固定）とサンプルコンテンツを、未作成の場合のみ作成。本番に対して実行してはいけません
 npm run test:unit -w apps/server     # サーバー・DBを起動しない純粋な単体テスト
 npm run test:invitations -w apps/server   # 使い捨てのDBコピーに対して実サーバーを起動してテスト
 ```
@@ -87,11 +94,13 @@ npm run test:invitations -w apps/server   # 使い捨てのDBコピーに対し�
 
 `vercel.json`：`buildCommand` は `packages/shared` → `apps/web` の順にビルドします。`functions["api/index.ts"]` ブロックが、Prismaのネイティブクエリエンジンのバイナリを関数に同梱します（`includeFiles`）。rewritesにより `/api/*` は関数へ、それ以外はビルド済みのSPAへ転送されます。`api/index.ts` は `PRISMA_QUERY_ENGINE_LIBRARY` を明示的に設定しています（VercelのFunctionランタイムはビルドコンテナ（Debianベース）とは異なりAmazon Linuxであるため、`prisma/schema.prisma` の `generator client` ブロックには `binaryTargets = ["native", "rhel-openssl-3.0.x"]` が指定されています。`native` はローカル／CI用、`rhel-openssl-3.0.x` はデプロイされた関数用です。詳しい経緯は両ファイルのコメントを参照してください）。
 
-**マイグレーションが本番環境に自動適用されることはありません。** PrismaのマイグレーションコマンドはTursoのHTTPベースの接続をサポートしていないため、本番環境のマイグレーションは監査済みの一回限りのスクリプトを使って、実データベースに対して手動かつ意図的に適用します — 通常のデプロイの一部として自動実行されることは決してありません。
+**マイグレーションが本番環境に自動適用されることはありません。** PrismaのマイグレーションコマンドはTursoのHTTPベースの接続をサポートしていません。本番のマイグレーションは、審査済みの実行ツール `npm run migrate:turso -w apps/server` で適用します。このツールは `apps/server/src/lib/tursoMigrate.ts` にSHA-256でピン留めされたマイグレーションだけを、追加型の文だけで実行し、一部適用や不一致の状態では実行を拒否します。既定では検査のみで、`--apply` は明示的に承認された別の手順であり、復旧ポイントを記録して実行します。手順と関門は `docs/architecture/turso-migration-executor.md`、リリース例は `docs/architecture/publication-metadata-release.md` を参照してください。
+
+**順序：** バックアップ（Tursoの復旧ポイントを控える）→ 検査のみ → マイグレーション適用 → 確認 → **その後で**新しいカラムを読むコードをデプロイ。カラムのないデータベースに対してデプロイしたコードは、そのテーブルを読み込むすべてのページで「no such column」エラーになります（例：論文メタデータのリリースでは、そのマイグレーションを適用するまで論文を一覧するすべてのページが壊れます）。`master` へのマージは、VercelのGit連携により本番へ自動デプロイされます。
 
 ## ロールバックに関する考慮事項
 
-Vercelは過去のデプロイを保持しており、以前のデプロイに戻すのがアプリケーションコードの最も迅速なロールバック方法です。**本プロジェクトの慣例として、データベースのマイグレーションは追加のみ**です（カラムやテーブルを削除したことはこれまで一度もありません）。そのため、新しい追加型マイグレーションが適用された状態のままアプリケーションコードだけを古いバージョンに戻しても安全です（古いコードは単に新しいテーブル・カラムを使わないだけです）。マイグレーション自体を取り消すための自動化ツールはなく、必要な場合は、順方向のマイグレーションと同じ慎重かつ監査付きのプロセスで、レビュー済みの逆方向マイグレーションを手動で作成して適用します。
+Vercelは過去のデプロイを保持しており、以前のデプロイに戻すのがアプリケーションコードの最も迅速なロールバック方法です。**本プロジェクトの慣例として、データベースのマイグレーションは追加のみ**です（カラムやテーブルを削除したことはこれまで一度もありません）。そのため、新しい追加型マイグレーションが適用された状態のままアプリケーションコードだけを古いバージョンに戻しても安全です（古いコードは単に新しいテーブル・カラムを使わないだけです）。マイグレーション自体を取り消すための自動化ツールはなく、必要な場合は、順方向のマイグレーションと同じ慎重かつ監査付きのプロセスで、レビュー済みの逆方向マイグレーションを手動で作成して適用します。 なお、実行ツールは `DROP` を拒否するため、追加したカラムは恒久的なものとして扱い、アプリケーションコードをロールバックしてください。Tursoのポイントインタイムリカバリはデータインシデントのときだけ使用してください（それ以降のすべての書き込みも失われます）。
 
 ## ログ
 
@@ -116,6 +125,10 @@ Tursoはホスティングプラットフォーム側でポイントインタイ
 ## ブラウザテスト
 
 `apps/server/scripts/browser-regression.cjs` は、生のCDP（Chrome DevTools Protocol）経由で実際のヘッドレスブラウザを操作します — PlaywrightやPuppeteerへの依存はなく、ブラウザの実行ファイルを直接起動します。`BROWSER_PATH` で実行ファイルを指定します（デフォルトはWindowsのEdgeのパスですが、このコンテナやほとんどのLinux CIでは、あらかじめインストールされたChromiumを指すように設定されています）。`ONLY_*` 環境変数で特定フェーズのセクションのみを実行できます。
+
+## Windowsでのローカル開発
+
+PowerShellでの手順（テスト用シェルにTursoの変数を残さない方法を含む）は `docs/technical/development-setup.md` にあります。
 
 ## 既知の制限事項
 
