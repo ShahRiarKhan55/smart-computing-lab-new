@@ -73,6 +73,8 @@ The four starter-data papers, for reference: (a) *Optimizing FPGA and Wafer Test
 
 Totals: READY 9, VERIFY EXISTING 2, NEEDS CLARIFICATION 8, CONFLICT 4 (= 23). Open questions in total: 28.
 
+**READY records that still have an open question: 14 and 23.** They can be entered, but answer the question first, or enter them as LAB_ONLY and change the visibility afterwards. Record 14: its status is blank and its page range is identical to record 12. Record 23: confirm Status = Accepted and that the stated year (2026) and month (8) should be shown. All other READY records (1, 3, 4, 5, 6, 11, 22) have no open question.
+
 Suggested order: enter the READY records first; resolve the questions for the others, then enter them.
 
 ## The 23 records
