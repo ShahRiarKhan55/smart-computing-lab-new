@@ -222,15 +222,15 @@ try {
   // ============ alumni ============
   const anon = await browser.newContext();
   const ap = await anon.newPage();
-  await ap.goto(BASE + "/alumni");
+  await ap.goto(BASE + "/team");
   await ap.getByRole("heading", { name: "Pub Alumna" }).waitFor();
   const pubCard = ap.locator("article.team-card", { has: ap.getByRole("heading", { name: "Pub Alumna" }) });
   t("alumni card: the published alumna shows three links", (await pubCard.locator(".research-link").count()) === 3);
-  t("alumni page: the unpublished alumnus and their links are absent for a visitor", (await ap.getByText("Hidden Alumnus").count()) === 0 && (await ap.locator(".research-link").count()) === 3);
+  t("alumni page: the unpublished alumnus and their links are absent for a visitor", (await ap.getByText("Hidden Alumnus").count()) === 0 && (await ap.locator("#alumni .research-link").count()) === 3);
   const html = await ap.content();
   t("alumni page HTML never contains the hidden alumnus's name", !html.includes("Hidden Alumnus"));
   const AD = await session("admin@example.org");
-  await AD.page.goto(BASE + "/alumni");
+  await AD.page.goto(BASE + "/team");
   await AD.page.getByRole("heading", { name: "Hidden Alumnus" }).waitFor();
   t("an administrator sees the hidden alumnus (with links) and their unpublished badge", (await AD.page.locator("article.team-card", { has: AD.page.getByRole("heading", { name: "Hidden Alumnus" }) }).locator(".research-link").count()) === 3);
 

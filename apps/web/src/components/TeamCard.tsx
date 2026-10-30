@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { TeamMember } from "@scl/shared";
 import { Avatar } from "./Avatar";
@@ -10,9 +11,11 @@ interface TeamCardProps {
   canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  /** Extra controls under the card (the alumni publish control). Absent for every other section. */
+  children?: ReactNode;
 }
 
-export function TeamCard({ member, canEdit, canDelete, onEdit, onDelete }: TeamCardProps) {
+export function TeamCard({ member, canEdit, canDelete, onEdit, onDelete, children }: TeamCardProps) {
   return (
     <article className="card card--interactive team-card">
       {canEdit && <CardEditControls onEdit={onEdit} onDelete={canDelete ? onDelete : undefined} subject={member.name} />}
@@ -23,6 +26,7 @@ export function TeamCard({ member, canEdit, canDelete, onEdit, onDelete }: TeamC
       <div className="team-card__role">{member.role}</div>
       {member.department && <div className="team-card__dept">{member.department}</div>}
       <ResearchLinks member={member} />
+      {children}
     </article>
   );
 }

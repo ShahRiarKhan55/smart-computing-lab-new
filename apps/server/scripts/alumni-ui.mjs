@@ -81,8 +81,8 @@ const body = (p) => p.locator("body").innerText();
 try {
   // ---- visitor, English ----
   const G = await session(null, "en");
-  await G.page.goto(BASE + "/alumni");
-  await G.page.getByRole("heading", { name: "Alumni", level: 1 }).waitFor();
+  await G.page.goto(BASE + "/team");
+  await G.page.getByRole("heading", { name: /^Alumni/, level: 2 }).waitFor();
   await G.page.getByText("Published Alumna").waitFor();
   let text = await body(G.page);
   t("visitor sees the published alumna", text.includes("Published Alumna"));
@@ -92,23 +92,28 @@ try {
   await G.page.waitForLoadState("networkidle");
   t("visitor opening the unpublished profile's URL gets the not-found state, with no name", !(await body(G.page)).includes("Hidden Alumnus"));
   await G.page.goto(BASE + "/team");
-  await G.page.getByRole("link", { name: /Alumni/ }).first().waitFor();
-  t("the team page links to the alumni directory", (await G.page.getByRole("link", { name: /Alumni/ }).count()) > 0);
-  t("the team roster itself does not list alumni under a group", !(await body(G.page)).includes("Published Alumna"));
+  await G.page.getByText("Published Alumna").waitFor();
+  const h2s = await G.page.locator('section[aria-labelledby^="team-"] h2').allInnerTexts();
+  t("Alumni is the LAST section on the team page", /^alumni/i.test(h2s[h2s.length - 1] ?? "") && h2s.length >= 2, h2s.join(" | "));
+  t("the alumni card sits inside the Alumni section", (await G.page.locator("#alumni").getByText("Published Alumna").count()) === 1);
+  t("no separate alumni link or navigation item exists", (await G.page.getByRole("link", { name: /^Alumni/ }).count()) === 0);
+  await G.page.goto(BASE + "/alumni");
+  await G.page.waitForURL(/\/team#alumni$/);
+  t("the old /alumni address redirects to the Alumni section of the team page", true);
 
   // ---- visitor, Japanese ----
   const J = await session(null, "ja");
-  await J.page.goto(BASE + "/alumni");
-  await J.page.getByRole("heading", { name: "卒業生", level: 1 }).waitFor();
+  await J.page.goto(BASE + "/team");
+  await J.page.getByRole("heading", { name: /^卒業生/, level: 2 }).waitFor();
   await J.page.getByText("Published Alumna").waitFor();
   text = await body(J.page);
-  t("Japanese: localized title and description", text.includes("卒業生") && text.includes("掲載に同意"));
+  t("Japanese: localized section heading", text.includes("卒業生"));
   t("Japanese: published alumna shown, unpublished not", text.includes("Published Alumna") && !text.includes("Hidden Alumnus"));
-  t("Japanese: no English UI strings leak onto the page", !/No alumni|Loading alumni|Not published/.test(text));
+  t("Japanese: no English UI strings leak onto the page", !/Loading alumni|Not published/.test(text));
 
   // ---- lab manager: sees what the public sees, cannot create alumni ----
   const M = await session("manager@example.org");
-  await M.page.goto(BASE + "/alumni");
+  await M.page.goto(BASE + "/team");
   await M.page.getByText("Published Alumna").waitFor();
   text = await body(M.page);
   t("manager sees only published alumni, no admin controls", !text.includes("Hidden Alumnus") && (await M.page.getByRole("button", { name: /Publish|Unpublish|Add alumni profile/ }).count()) === 0);
@@ -120,7 +125,7 @@ try {
   // ---- administrator ----
   const A = await session("admin@example.org");
   const p = A.page;
-  await p.goto(BASE + "/alumni");
+  await p.goto(BASE + "/team");
   await p.getByText("Hidden Alumnus").waitFor();
   text = await body(p);
   t("admin sees both alumni and the consent explanation", text.includes("Published Alumna") && text.includes("Hidden Alumnus") && text.includes("Only publish a profile when the person has agreed to be listed"));
@@ -138,7 +143,7 @@ try {
   await p.waitForFunction(() => document.body.innerText.includes("Unpublish"), null, { timeout: 8000 });
   t("the confirmation names the person and the consent condition", dialogText.includes("Hidden Alumnus") && /agreed to be listed/.test(dialogText));
   t("publishing sets the flag in the database", (await prisma.teamMember.findUnique({ where: { id: hidAl.id } })).isPublished === true);
-  await G.page.goto(BASE + "/alumni");
+  await G.page.goto(BASE + "/team");
   await G.page.getByText("Hidden Alumnus").waitFor();
   t("the visitor now sees the newly published alumnus", true);
   // Unpublish again.
@@ -147,8 +152,9 @@ try {
   await p.waitForFunction(() => document.body.innerText.includes("Not published"), null, { timeout: 8000 });
   t("unpublishing sets the flag back", (await prisma.teamMember.findUnique({ where: { id: hidAl.id } })).isPublished === false);
   // Add an alumni profile: the form is preset to Alumni and creates it UNPUBLISHED.
-  await p.getByRole("button", { name: "+ Add alumni profile" }).click();
-  t("add-alumni form is preset to the Alumni category", (await p.locator("#tm_category").inputValue()) === "ALUMNI");
+  await p.getByRole("button", { name: "+ Add team member" }).click();
+  await p.selectOption("#tm_category", "ALUMNI");
+  t("choosing the Alumni category in the team form works", (await p.locator("#tm_category").inputValue()) === "ALUMNI");
   t("the form explains that alumni are created unpublished", (await body(p)).includes("created unpublished"));
   const adminOptions = await p.locator("#tm_category option").allInnerTexts();
   t("the admin's category list includes Alumni", adminOptions.some((o) => /Alumni/.test(o)));
@@ -159,24 +165,21 @@ try {
   await p.getByText("Brand New Alumnus").waitFor({ timeout: 8000 });
   const created = await prisma.teamMember.findFirst({ where: { name: "Brand New Alumnus" } });
   t("the new alumnus exists, is an alumnus and is unpublished", created?.category === "ALUMNI" && created.isPublished === false);
-  await G.page.goto(BASE + "/alumni");
+  await G.page.goto(BASE + "/team");
   await G.page.getByText("Published Alumna").waitFor();
   t("...and the visitor does not see it", !(await body(G.page)).includes("Brand New Alumnus"));
   // Japanese admin controls
   const AJ = await session("admin@example.org", "ja");
-  await AJ.page.goto(BASE + "/alumni");
+  await AJ.page.goto(BASE + "/team");
   await AJ.page.getByRole("button", { name: /公開する|非公開にする/ }).first().waitFor();
   const jaText = await body(AJ.page);
   t("Japanese admin view: badges and note localized", jaText.includes("未公開") && jaText.includes("公開中") && jaText.includes("管理者のみ"));
 
-  // ---- empty state ----
+  // ---- no alumni: the section is simply absent (like any empty group) ----
   await prisma.teamMember.deleteMany({ where: { category: "ALUMNI" } });
-  await G.page.goto(BASE + "/alumni");
-  await G.page.getByText("No alumni are listed yet.").waitFor();
-  t("no published alumni: friendly empty state", true);
-  await J.page.goto(BASE + "/alumni");
-  await J.page.getByText("掲載中の卒業生はまだいません。").waitFor();
-  t("no published alumni (Japanese): friendly empty state", true);
+  await G.page.goto(BASE + "/team");
+  await G.page.getByRole("heading", { name: /Faculty|Professor/i }).first().waitFor();
+  t("no alumni: no Alumni section and no empty-state text on the team page", (await G.page.locator("#alumni").count()) === 0 && !(await body(G.page)).includes("No alumni"));
 } catch (e) {
   fails.push("test crashed: " + (e?.stack ?? e));
 } finally {

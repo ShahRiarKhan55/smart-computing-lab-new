@@ -2360,9 +2360,6 @@ a.tag:hover {
 }
 
 /* Alumni directory (Phase 3B) */
-.team-alumni-link {
-  margin: 0 0 var(--space-4, 1rem);
-}
 .alumni-publication {
   display: flex;
   flex-direction: column;

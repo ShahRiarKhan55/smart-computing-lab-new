@@ -11,7 +11,6 @@ export const STATIC_PUBLIC_PATHS = [
   "/projects",
   "/groups",
   "/team",
-  "/alumni",
   "/publications",
   "/news",
   "/events",
