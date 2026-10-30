@@ -83,6 +83,14 @@ export function toPublication(
     doiUrl: string;
     extraUrl: string;
     extraLabel: string;
+    status: string;
+    listNumber: string;
+    category: string;
+    volume: string;
+    startPage: number;
+    endPage: number;
+    month: number;
+    acceptedDate: string;
     visibility: string;
   },
   viewer: Viewer,
@@ -97,6 +105,14 @@ export function toPublication(
     doiUrl: row.doiUrl,
     extraUrl: row.extraUrl,
     extraLabel: row.extraLabel,
+    status: row.status,
+    listNumber: row.listNumber,
+    category: row.category,
+    volume: row.volume,
+    startPage: row.startPage,
+    endPage: row.endPage,
+    month: row.month,
+    acceptedDate: row.acceptedDate,
     ...visibilityField(viewer, row.visibility),
   };
 }

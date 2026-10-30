@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { createPublicationSchema, type Publication, type Visibility } from "@scl/shared";
+import { PUBLICATION_STATUSES, createPublicationSchema, type Publication, type TranslationKey, type Visibility } from "@scl/shared";
 import { Modal } from "./Modal";
 import { VisibilityField } from "./VisibilityField";
 import { apiErrorMessage } from "../i18n/errorMessages";
@@ -8,6 +8,7 @@ import { useEntityTranslations } from "../hooks/useEntityTranslations";
 import { useT } from "../i18n/LocaleContext";
 import { DuplicateConfirm } from "./DuplicateConfirm";
 import { useDuplicateConfirm } from "../hooks/useDuplicateConfirm";
+import { numberToField } from "../lib/publicationMeta";
 
 /** What the form hands to the page: the validated, trimmed publication fields. */
 export interface PublicationFormFields {
@@ -19,6 +20,15 @@ export interface PublicationFormFields {
   doiUrl: string;
   extraUrl: string;
   extraLabel: string;
+  /** Optional metadata; "" / 0 mean "not stated". */
+  status: string;
+  listNumber: string;
+  category: string;
+  volume: string;
+  startPage: number;
+  endPage: number;
+  month: number;
+  acceptedDate: string;
   visibility?: Visibility;
   /** Japanese title/venue overrides (Phase 19). An empty box on an existing publication clears that override. */
   translations?: { ja: Record<string, string> };
@@ -35,6 +45,14 @@ interface FormState {
   doiUrl: string;
   extraUrl: string;
   extraLabel: string;
+  status: string;
+  listNumber: string;
+  category: string;
+  volume: string;
+  startPage: string;
+  endPage: string;
+  month: string;
+  acceptedDate: string;
 }
 
 interface PublicationFormModalProps {
@@ -60,6 +78,14 @@ function toFormState(initial?: Publication | null): FormState {
     doiUrl: initial?.doiUrl ?? "",
     extraUrl: initial?.extraUrl ?? "",
     extraLabel: initial?.extraLabel ?? "",
+    status: initial?.status ?? "",
+    listNumber: initial?.listNumber ?? "",
+    category: initial?.category ?? "",
+    volume: initial?.volume ?? "",
+    startPage: numberToField(initial?.startPage ?? 0),
+    endPage: numberToField(initial?.endPage ?? 0),
+    month: numberToField(initial?.month ?? 0),
+    acceptedDate: initial?.acceptedDate ?? "",
   };
 }
 
@@ -216,6 +242,68 @@ export function PublicationFormModal({
           </div>
         </div>
 
+        </fieldset>
+
+        {/* Optional metadata from the lab's publication-list workbook; every box may stay blank. */}
+        <fieldset className="form-fieldset">
+          <legend>{t("publications.form.groupMetadata")}</legend>
+          <p className="text-sm text-muted">{t("publications.form.metadataHint")}</p>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_status">{t("publications.meta.status")}</label>
+              <select id="pub_status" value={values.status} onChange={(e) => set("status", e.target.value)}>
+                <option value="">{t("publications.meta.statusNone")}</option>
+                {PUBLICATION_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {t(`publications.meta.status.${s}` as TranslationKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_category">{t("publications.meta.category")}</label>
+              <input id="pub_category" value={values.category} maxLength={100} onChange={(e) => set("category", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_listNumber">{t("publications.meta.listNumber")}</label>
+              <input id="pub_listNumber" value={values.listNumber} maxLength={100} onChange={(e) => set("listNumber", e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_volume">{t("publications.meta.volume")}</label>
+              <input id="pub_volume" value={values.volume} maxLength={100} onChange={(e) => set("volume", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_startPage">{t("publications.meta.startPage")}</label>
+              <input id="pub_startPage" type="number" inputMode="numeric" min={1} value={values.startPage} onChange={(e) => set("startPage", e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_endPage">{t("publications.meta.endPage")}</label>
+              <input id="pub_endPage" type="number" inputMode="numeric" min={1} value={values.endPage} onChange={(e) => set("endPage", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="pub_month">{t("publications.meta.month")}</label>
+              <input
+                id="pub_month"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={12}
+                value={values.month}
+                placeholder={t("publications.meta.monthPlaceholder")}
+                onChange={(e) => set("month", e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pub_acceptedDate">{t("publications.meta.acceptedDate")}</label>
+              <input id="pub_acceptedDate" type="date" value={values.acceptedDate} onChange={(e) => set("acceptedDate", e.target.value)} />
+            </div>
+          </div>
         </fieldset>
 
         {/* Phase 19: Japanese title/venue, next to the English ones, in the same form (the Phase 14 pattern). */}

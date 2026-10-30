@@ -20,6 +20,7 @@ import { PublicationFormModal } from "../components/PublicationFormModal";
 import { ConfirmDeleteModal } from "../components/ConfirmDeleteModal";
 import { LinkItemsModal } from "../components/LinkItemsModal";
 import { VisibilityBadge } from "../components/VisibilityField";
+import { PublicationMetaList } from "../components/PublicationMeta";
 import { PROJECT_STATUS_LABEL_KEY } from "../i18n/labels";
 import { useT } from "../i18n/LocaleContext";
 
@@ -145,6 +146,7 @@ export function PublicationDetailPage() {
             </div>
             <p className="pub-detail__authors">{pub.authors}</p>
             <p className="pub-detail__venue">{pub.venue}</p>
+            <PublicationMetaList publication={pub} />
             {links.length > 0 && (
               <div className="pub-item__links">
                 {links.map((l) => (

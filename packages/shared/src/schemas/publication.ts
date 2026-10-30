@@ -7,6 +7,9 @@ import type { AreaRef, GroupRef, ProjectRef } from "./project.js";
 import { parseSearchText, SEARCH_MAX_TERMS, SEARCH_QUERY_MAX_LENGTH } from "./search.js";
 import { translationsField } from "./translations.js";
 import { confirmDuplicateField, hasUpdateField } from "../duplicates.js";
+import { MAX_PUBLICATION_PAGE, PUBLICATION_METADATA_TEXT_MAX, PUBLICATION_STATUSES, isIsoDate, isPublicationStatus, pageRangeProblem } from "./publicationMetadata.js";
+
+export * from "./publicationMetadata.js";
 
 export const MIN_PUBLICATION_YEAR = 1900;
 export const MAX_PUBLICATION_YEAR = 2100;
@@ -24,6 +27,17 @@ export const publicationSchema = z.object({
   doiUrl: z.string(),
   extraUrl: z.string(),
   extraLabel: z.string(),
+  /** Optional metadata from the publication-list workbook. "" / 0 mean "not stated". */
+  status: z.string(),
+  listNumber: z.string(),
+  category: z.string(),
+  volume: z.string(),
+  startPage: z.number(),
+  endPage: z.number(),
+  /** 1-12 (the year is `year`). */
+  month: z.number(),
+  /** YYYY-MM-DD. */
+  acceptedDate: z.string(),
   /** Only sent to accounts that may change visibility (lab managers, admins). */
   visibility: visibilitySchema.optional(),
 });
@@ -40,6 +54,31 @@ const yearField = z.preprocess(
     .max(MAX_PUBLICATION_YEAR, `Year must be between ${MIN_PUBLICATION_YEAR} and ${MAX_PUBLICATION_YEAR}.`),
 );
 
+/**
+ * An optional whole number. A blank box, null or 0 mean "not stated" and are stored as 0; anything else must be a whole number in range.
+ * `undefined` is left alone (create: `.default(0)`, update: `.optional()` keeps the stored value).
+ */
+function optionalWhole(label: string, min: number, max: number) {
+  return z.preprocess(
+    (v) => (v === null || (typeof v === "string" && v.trim() === "") ? 0 : typeof v === "string" ? Number(v) : v),
+    z
+      .number({ invalid_type_error: `${label} must be a number.` })
+      .int(`${label} must be a whole number.`)
+      .refine((n) => n === 0 || (n >= min && n <= max), `${label} must be between ${min} and ${max}.`),
+  );
+}
+
+const publicationMetadataFields = {
+  status: z.string().trim().refine((v) => v === "" || isPublicationStatus(v), `Status must be one of: ${PUBLICATION_STATUSES.join(", ")}, or blank.`),
+  listNumber: z.string().trim().max(PUBLICATION_METADATA_TEXT_MAX.listNumber, `Journal list number must be at most ${PUBLICATION_METADATA_TEXT_MAX.listNumber} characters.`),
+  category: z.string().trim().max(PUBLICATION_METADATA_TEXT_MAX.category, `Paper category must be at most ${PUBLICATION_METADATA_TEXT_MAX.category} characters.`),
+  volume: z.string().trim().max(PUBLICATION_METADATA_TEXT_MAX.volume, `Volume must be at most ${PUBLICATION_METADATA_TEXT_MAX.volume} characters.`),
+  startPage: optionalWhole("Starting page", 1, MAX_PUBLICATION_PAGE),
+  endPage: optionalWhole("Ending page", 1, MAX_PUBLICATION_PAGE),
+  month: optionalWhole("Month", 1, 12),
+  acceptedDate: z.string().trim().refine((v) => v === "" || isIsoDate(v), "Date of acceptance must be a real date written YYYY-MM-DD."),
+};
+
 const publicationFields = {
   year: yearField,
   title: requiredText("Title", 500),
@@ -49,6 +88,7 @@ const publicationFields = {
   doiUrl: optionalHttpUrl("DOI URL"),
   extraUrl: optionalHttpUrl("Extra link URL"),
   extraLabel: z.string().trim().max(60, "Extra link label must be at most 60 characters."),
+  ...publicationMetadataFields,
 };
 
 export const createPublicationSchema = z.object({
@@ -60,6 +100,15 @@ export const createPublicationSchema = z.object({
   doiUrl: publicationFields.doiUrl.optional().default(""),
   extraUrl: publicationFields.extraUrl.optional().default(""),
   extraLabel: publicationFields.extraLabel.optional().default(""),
+  // Optional metadata: a request that omits all of it (an older client) is still valid and stores "not stated".
+  status: publicationFields.status.optional().default(""),
+  listNumber: publicationFields.listNumber.optional().default(""),
+  category: publicationFields.category.optional().default(""),
+  volume: publicationFields.volume.optional().default(""),
+  startPage: publicationFields.startPage.optional().default(0),
+  endPage: publicationFields.endPage.optional().default(0),
+  month: publicationFields.month.optional().default(0),
+  acceptedDate: publicationFields.acceptedDate.optional().default(""),
   /** Lab managers and admins only (403 for anyone else); omitted = PUBLIC. */
   visibility: visibilitySchema.optional(),
   /** Optional team members to link as authors, applied in the same transaction as the create. */
@@ -68,6 +117,9 @@ export const createPublicationSchema = z.object({
   translations: translationsField(PUBLICATION_TRANSLATION_MAX),
   /** Explicit confirmation that a flagged near-duplicate is a different record (lab manager or admin only; see duplicates.ts). */
   confirmDuplicate: confirmDuplicateField,
+}).superRefine((v, ctx) => {
+  const problem = pageRangeProblem(v.startPage, v.endPage);
+  if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ["endPage"] });
 });
 export type CreatePublicationInput = z.infer<typeof createPublicationSchema>;
 
@@ -81,6 +133,15 @@ export const updatePublicationSchema = z
     doiUrl: publicationFields.doiUrl.optional(),
     extraUrl: publicationFields.extraUrl.optional(),
     extraLabel: publicationFields.extraLabel.optional(),
+    // Optional metadata: omitted = the stored value is kept; "" / 0 / null clears it.
+    status: publicationFields.status.optional(),
+    listNumber: publicationFields.listNumber.optional(),
+    category: publicationFields.category.optional(),
+    volume: publicationFields.volume.optional(),
+    startPage: publicationFields.startPage.optional(),
+    endPage: publicationFields.endPage.optional(),
+    month: publicationFields.month.optional(),
+    acceptedDate: publicationFields.acceptedDate.optional(),
     /** Lab managers and admins only (403 for anyone else). */
     visibility: visibilitySchema.optional(),
     /** When present, replaces the full set of linked team members (same transaction as the field update). */
@@ -89,7 +150,9 @@ export const updatePublicationSchema = z
     translations: translationsField(PUBLICATION_TRANSLATION_MAX),
     confirmDuplicate: confirmDuplicateField,
   })
-  .refine(hasUpdateField, "Nothing to update.");
+  .refine(hasUpdateField, "Nothing to update.")
+  // Only checked here when BOTH pages are in the request; the route checks the other cases against the stored values.
+  .refine((v) => !pageRangeProblem(v.startPage ?? 0, v.endPage ?? 0), { message: "Ending page must not be before the starting page.", path: ["endPage"] });
 export type UpdatePublicationInput = z.infer<typeof updatePublicationSchema>;
 
 export const setPublicationAuthorsSchema = z.object({ teamMemberIds: teamMemberIdListSchema });

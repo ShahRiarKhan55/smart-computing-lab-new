@@ -216,6 +216,17 @@ model Publication {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Optional bibliographic metadata from the lab's publication-list workbook, each its own field. "" / 0 mean "not stated".
+  // (The workbook's journal name is the existing `venue`; its year is the existing `year`.)
+  status       String @default("") // "" | PUBLISHED | ACCEPTED | SUBMITTED  (workbook 状況)
+  listNumber   String @default("") // journal list number, as supplied: an ISSN, an ISBN or a plain number  (雑誌リスト番号)
+  category     String @default("") // paper category, e.g. "REGULAR PAPER"  (論文カテゴリー)
+  volume       String @default("") // as supplied, e.g. "E-107 A" or "7(2), 21"  (巻)
+  startPage    Int    @default(0) // 0 = not stated  (ページ 始め)
+  endPage      Int    @default(0) // 0 = not stated  (ページ 終り)
+  month        Int    @default(0) // 1-12, 0 = not stated; the year is `year`  (発行年月 月)
+  acceptedDate String @default("") // YYYY-MM-DD, "" = not stated  (受理年月日)
+
   authorLinks  PublicationAuthor[]
   projectLinks ProjectPublication[]
   labResources LabResource[]

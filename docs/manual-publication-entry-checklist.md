@@ -1,32 +1,45 @@
 # Manual-entry checklist: 23 publications from `publicationslist.xlsx`
 
-Prepared on branch `feature/manual-publication-entry` (from `master`). This is a reference document for entering the publications by hand through the website's existing admin form. It adds no code, schema or importer.
+Prepared on branch `feature/publication-metadata-fields` (the form with the new **Publication Metadata** section). This is a reference document for entering the publications by hand through the website's existing admin form. It adds no code.
+
+## Before you start
+
+1. **The Publication Metadata boxes exist only after this feature is released.** The feature needs a database migration (`20261030120000_publication_metadata_fields`) applied **before** the new code is deployed; until then the boxes do not exist and the publication pages would fail. Enter the publications after both steps are done.
+2. You need a Lab Manager or Admin account to set Visibility. Any signed-in member can add or edit a publication.
+3. Nothing in this document has been verified against the live site or the publishers. See 'How to read this document'.
 
 ## How to read this document
 
-- **Source values** are copied from the workbook cells. The only change made is that a line break inside a cell is shown as one space and leading/trailing spaces are trimmed; spelling, punctuation and inner spacing are untouched. They are shown in `code` style so the exact spacing is visible.
-- **Suggested** values (the venue text and the DOI link) are formatting suggestions, always labelled *Suggested*. Nothing is guessed: a detail is only added to the venue text if the source supplies it.
-- **UNKNOWN** means the source does not state it. Nothing has been filled in for those.
-- **Verified** is not claimed for any paper. The spreadsheet's 状況 (status) cell is the *spreadsheet's statement*, not independent verification. A DOI that resolves is not by itself proof of publication status; check the publisher's metadata.
+- **Source values** are copied from the workbook cells. The only change is that a line break inside a cell is shown as one space and leading/trailing spaces are trimmed; spelling, punctuation and inner spacing are untouched. They are shown in `code` style so the exact spacing is visible.
+- **Form entries** say which box to type each value into. They are the same values, only re-formatted where the box needs it (for example the workbook's `2025年　04月　13日` becomes `2025-04-13` in the date box; both are shown). Nothing is guessed: a box is left **blank** when the source does not state it.
+- **UNKNOWN** means the source does not say. **Pending** means a box depends on a question you must answer first.
+- **Verified** is not claimed for any paper. The workbook's 状況 (status) is the *spreadsheet's statement*, not independent verification. A DOI that resolves is not by itself proof of publication status; check the publisher's metadata.
 - The workbook has one sheet (`Sheet1`), 23 blocks of 10 rows (block *n* starts at row `7 + 10×(n−1)`). Its status words: 出版 = published, 受理 = accepted, 投稿中 = under submission; a blank means not stated.
 
-## The existing form (current `master`)
+## The form (with the new section)
 
-| Form box | Limit / rule |
-|---|---|
-| Year | required, whole number 1900–2100 |
-| Venue | required, up to **500** characters |
-| Title | required, up to 500 characters |
-| Authors | required, up to 1000 characters (one line) |
-| PDF link / DOI link / extra link | optional; must start with `http://` or `https://`; extra link also has a label (up to 60 characters) |
-| Japanese title / venue | optional (the source has none, so leave empty) |
-| Visibility | managers and admins only: PUBLIC or LAB_ONLY |
+| Form box | Workbook field | Rule |
+|---|---|---|
+| Year | 発行年月 年 | required, whole number 1900–2100 |
+| Venue (journal / conference) | 雑誌名 (journal name) | required, up to 500 characters; **type the journal name exactly as in the workbook** (volume, pages and so on now have their own boxes) |
+| Title | 題目 | required, up to 500 characters |
+| Authors | 著者 | required, up to 1000 characters |
+| DOI URL | DOI | optional; must start with `http://` or `https://` |
+| PDF URL, extra link and label, Japanese title/venue | not in the workbook | leave empty |
+| **Publication Metadata → Status** | 状況 | Not stated / Published / Accepted / Under submission |
+| Paper category | 論文カテゴリー | optional text, up to 100 characters |
+| Journal list number | 雑誌リスト番号 | optional text, up to 100 characters; type as in the workbook (it may be an ISSN, an ISBN or a plain number) |
+| Volume | 巻 | optional text, up to 100 characters; type as in the workbook |
+| Starting page / Ending page | ページ 始め / 終り | optional whole numbers 1–99999; the end must not be before the start |
+| Publication month | 発行年月 月 | optional, 1–12 |
+| Date of acceptance | 受理年月日 | optional date |
+| Visibility | (not in the workbook) | managers and admins only: Public or Lab only |
 
-There is **no status, volume, pages, month, ISSN/ISBN or category box**; that detail can only go into the Venue text. Duplicates: an identical DOI is refused; the same title and year is refused unless a manager or admin confirms. All 23 suggested venue texts below are within the 500-character limit (lengths are stated).
+Every Publication Metadata box may stay blank. A blank box is stored as *not stated* and is **not displayed**. Duplicates: an identical DOI is refused; the same title and year is refused unless a manager or admin confirms.
 
 ## Existing records: do not assume the starter data matches the live site
 
-The repository's starter data (`apps/server/prisma/seed.ts`) contains four publications. **Nothing here assumes the live (Production) site has them, has them unchanged, or lacks others.** Records marked VERIFY EXISTING or mentioning the starter data must be checked on the live site by you. To check: open the **Publications** page, type a few distinctive title words in the search box (it searches title, authors and venue, not the DOI) and look at the year; or try to add the paper with its DOI link, because the form refuses an identical DOI and names the existing entry. If it exists, edit it (pencil icon) instead of adding a new one.
+The repository's starter data (`apps/server/prisma/seed.ts`) contains four publications. **Nothing here assumes the live (Production) site has them, has them unchanged, or lacks others.** Records marked VERIFY EXISTING or mentioning the starter data must be checked on the live site by you. To check: open the **Publications** page, type a few distinctive title words in the search box (it searches title, authors and venue, not the DOI) and look at the year; or try to add the paper with its DOI link, because the form refuses an identical DOI and names the existing entry. If it exists, edit it (pencil icon) instead of adding a new one; the Publication Metadata boxes can then be filled in on the existing entry.
 
 The four starter-data papers, for reference: (a) *Optimizing FPGA and Wafer Test Coverage with Spatial Sampling and Machine Learning: Analysis of Local Spatial Consistency* (2026, DOI 10.3390/signals7030053); (b) *Enhanced detection of recycled FPGAs using Gaussian process regression with LHS and active sampling* (2026, DOI 10.1145/3765907); (c) *A progressive self-training semi-supervised model to enhance discontinuous change detection* (2025, DOI 10.1016/j.vlsi.2025.102609); (d) *Optimizing FPGA and wafer test coverage with spatial sampling and machine learning* (2025, authors `Wang WeiQuan`, ICECET, DOI 10.48550/arXiv.2506.03556).
 
@@ -83,12 +96,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1587/transfun.2023EAP1115`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (122 of 500 characters): `IEICE Transactions on Fundamentals of Electronics, Communications and Computer Sciences, E-107 A, pp. 1139–1150, Nov. 2023`
-- DOI link box: `https://doi.org/10.1587/transfun.2023EAP1115` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Year: 2023
+- Venue: `IEICE Transactions on Fundamentals of Electronics, Communications and Computer Sciences`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1587/transfun.2023EAP1115` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER 2023EAP1115`
+  - Journal list number: `1745-1337`
+  - Volume: `E-107 A`
+  - Starting page: `1139`
+  - Ending page: `1150`
+  - Publication month: `11`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
 
 **Questions you must answer before entry:**
 
@@ -113,12 +137,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.3390/computers10020017`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text: UNKNOWN until the question below is answered
-- DOI link box: `https://doi.org/10.3390/computers10020017` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED until the venue is known** — The source marks it 出版 (published), but the venue is missing, so it cannot be entered yet.
+- Year: 2021
+- Venue: UNKNOWN until the question below is answered
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.3390/computers10020017` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2073-431X`
+  - Volume: `10`
+  - Starting page: `1`
+  - Ending page: `15`
+  - Publication month: `1`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED until the venue is known** — The source marks it 出版 (published), but the venue is missing, so it cannot be entered yet.
 - Note: Venue cell holds only an ISSN-shaped value; the venue name is MISSING in the source.
 
 **Questions you must answer before entry:**
@@ -144,12 +179,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1109/ITC50571.2021.00018`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (69 of 500 characters): `2021 IEEE International Test Conference (ITC), pp. 103–112, Feb. 2021`
-- DOI link box: `https://doi.org/10.1109/ITC50571.2021.00018` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Year: 2021
+- Venue: `2021 IEEE International Test Conference (ITC)`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1109/ITC50571.2021.00018` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2378-2250`
+  - Volume: leave blank
+  - Starting page: `103`
+  - Ending page: `112`
+  - Publication month: `2`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
 
 **Questions you must answer before entry:**
 
@@ -174,12 +220,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1109/SOCC46988.2019.1570559752`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (85 of 500 characters): `2019 32nd IEEE International System-on-Chip Conference (SOCC), pp. 412–417, Sep. 2019`
-- DOI link box: `https://doi.org/10.1109/SOCC46988.2019.1570559752` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Year: 2019
+- Venue: `2019 32nd IEEE International System-on-Chip Conference (SOCC)`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1109/SOCC46988.2019.1570559752` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2164-1706`
+  - Volume: leave blank
+  - Starting page: `412`
+  - Ending page: `417`
+  - Publication month: `9`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
 - Note: The author text contains a stray `1` and `ShintanI` (capital I) exactly as in the source; enter as-is or correct it yourself if you know the intended spelling.
 
 **Questions you must answer before entry:**
@@ -205,12 +262,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1109/APCCAS.2018.8605711`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (90 of 500 characters): `2018 IEEE Asia Pacific Conference on Circuits and Systems (APCCAS), pp. 239–242, Oct. 2018`
-- DOI link box: `https://doi.org/10.1109/APCCAS.2018.8605711` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure. The list number is shaped like an ISBN, which fits conference proceedings.
+- Year: 2018
+- Venue: `2018 IEEE Asia Pacific Conference on Circuits and Systems (APCCAS)`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1109/APCCAS.2018.8605711` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `978-1-5386-8241-8`
+  - Volume: leave blank
+  - Starting page: `239`
+  - Ending page: `242`
+  - Publication month: `10`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure. The list number is shaped like an ISBN, which fits conference proceedings.
 
 **Questions you must answer before entry:**
 
@@ -235,13 +303,24 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (74 of 500 characters): `IEICE Technical Report; IEICE Tech. Rep., vol. 121, pp. 144–149, Dec. 2021`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
-- Note: No DOI in the source. The list number `277` is not ISSN/ISBN-shaped and its meaning is not stated, so it is left out of the suggested venue text.
+- Year: 2021
+- Venue: `IEICE Technical Report; IEICE Tech. Rep.`
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `Technical Report`
+  - Journal list number: `277`
+  - Volume: `121`
+  - Starting page: `144`
+  - Ending page: `149`
+  - Publication month: `12`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Note: No DOI in the source. The list number `277` is not ISSN/ISBN-shaped and its meaning is not stated by the source; it is typed into the Journal list number box exactly as written, with no interpretation.
 
 **Questions you must answer before entry:**
 
@@ -266,18 +345,29 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1016/j.vlsi.2025.102609`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (32 of 500 characters) (pending your answers): `Integration, pp. 7–11, Mar. 2026`
-- DOI link box: `https://doi.org/10.1016/j.vlsi.2025.102609` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED until the questions are answered** — The source marks it 出版 (published), but the year and volume cells need a decision first.
+- Year: 2026
+- Venue: `Integration` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1016/j.vlsi.2025.102609` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: leave blank
+  - Journal list number: `1872-7522`
+  - Volume: pending — the volume cell holds the category text `REGULAR PAPER`; leave blank until you answer
+  - Starting page: `7`
+  - Ending page: `11`
+  - Publication month: `3`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED until the questions are answered** — The source marks it 出版 (published), but the year and volume cells need a decision first.
 - Note: Checked against starter data only (see 'Existing records').
 
 **Questions you must answer before entry:**
 
 - [ ] The starter data (if it matches the live site) lists this DOI with year 2025; the source says 2026, month 3. Which year is correct?
-- [ ] The volume cell contains `REGULAR PAPER` (which is a category value). Is there a real volume number? Until you answer, the suggested venue text omits the volume.
+- [ ] The volume cell contains `REGULAR PAPER` (which is a category value). Is there a real volume number? Until you answer, leave the Volume box blank.
 - [ ] If a live entry with this DOI exists, edit it rather than adding a new one (the form refuses a duplicate DOI).
 
 ### Record 8 — NEEDS CLARIFICATION
@@ -299,12 +389,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1109/ECACE.2017.7912897`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (103 of 500 characters) (pending your answers): `2017 International Conference on Electrical, Computer and Communication Engineering (ECCE), pp. 152–157`
-- DOI link box: `https://doi.org/10.1109/ECACE.2017.7912897` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED until the year is known** — The source marks it 出版 (published), but the year (required by the form) is not given.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `2017 International Conference on Electrical, Computer and Communication Engineering (ECCE)` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1109/ECACE.2017.7912897` (as in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: leave blank
+  - Journal list number: `978-1-5090-5628-6`
+  - Volume: leave blank
+  - Starting page: `152`
+  - Ending page: `157`
+  - Publication month: leave blank
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED until the year is known** — The source marks it 出版 (published), but the year (required by the form) is not given.
 - Note: Year and month cells are empty.
 
 **Questions you must answer before entry:**
@@ -330,17 +431,28 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1007/s10836-025-06180-8`
 - Status (状況): `投稿中` = 投稿中 (under submission)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (61 of 500 characters) (pending your answers): `Journal of Electronic Testing, Volume 41, Number 3, Feb. 2025`
-- DOI link box: `https://doi.org/10.1007/s10836-025-06180-8` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **LAB_ONLY until resolved** — The source says 投稿中 (under submission) yet gives a DOI; its true status is not established by the source.
+- Year: 2025
+- Venue: `Journal of Electronic Testing` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1007/s10836-025-06180-8` (as in the source)
+- **Publication Metadata:**
+  - Status: pending your decision (the source says Under submission, which conflicts with other data; see the questions)
+  - Paper category: `REGULAR PAPER JETT-D-25-00014R3`
+  - Journal list number: `1573-0727`
+  - Volume: `Volume 41, Number 3`
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: `2`
+  - Date of acceptance: `2025-04-13` (source: `2025年　04月　13日`)
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **LAB_ONLY until resolved** — The source says 投稿中 (under submission) yet gives a DOI; its true status is not established by the source.
 
 **Questions you must answer before entry:**
 
 - [ ] Status is 投稿中 (under submission) but a DOI is given, and the acceptance date is 2025年　04月　13日. Is the paper published or still under submission? Please check the publisher's metadata (a DOI that resolves is not by itself proof of publication status).
-- [ ] If published, what is the volume/number text to use (source: `Volume 41, Number 3`)?
+- [ ] The Volume box can take the source text `Volume 41, Number 3` as written; confirm that is how you want it shown.
 
 ### Record 10 — CONFLICT
 
@@ -361,12 +473,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1088/1755-1315/1582/1/012092`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (42 of 500 characters) (pending your answers): `Earth and Environmental Science, vol. 1651`
-- DOI link box: `https://doi.org/10.1088/1755-1315/1582/1/012092` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **LAB_ONLY until resolved** — The source says 出版 (published) but the title says "(Accepted)"; its true status is not established by the source.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `Earth and Environmental Science` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1088/1755-1315/1582/1/012092` (as in the source)
+- **Publication Metadata:**
+  - Status: pending your decision (the source says Published, which conflicts with other data; see the questions)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `1755-1315`
+  - Volume: `1651`
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: leave blank
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **LAB_ONLY until resolved** — The source says 出版 (published) but the title says "(Accepted)"; its true status is not established by the source.
 - Note: Year and month cells are empty.
 
 **Questions you must answer before entry:**
@@ -395,13 +518,24 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (119 of 500 characters): `International Civil Engineering and Architecture Conference (CEAC 2025),Lecture Notes in Civil Engineering, pp. 358–368`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
-- Note: No DOI in the source. The month cell contains `2025`, which is not a month, so no month is used in the suggested venue text; the year cell (2025) is used as the year.
+- Year: 2025
+- Venue: `International Civil Engineering and Architecture Conference (CEAC 2025),Lecture Notes in Civil Engineering`
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: `358`
+  - Ending page: `368`
+  - Publication month: leave blank (the source cell `2025` is not a month)
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Note: No DOI in the source. The month cell contains `2025`, which is not a month, so the Publication month box is left blank; the year cell (2025) is used as the year.
 
 **Questions you must answer before entry:**
 
@@ -426,12 +560,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.3390/world6020054`
 - Status (状況): `投稿中` = 投稿中 (under submission)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (46 of 500 characters) (pending your answers): `World（MDPI) DICTA 2024, pp. 553–567, Apr. 2025`
-- DOI link box: `https://doi.org/10.3390/world6020054` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **LAB_ONLY until resolved** — The source says 投稿中 (under submission) yet gives a DOI; its true status is not established by the source.
+- Year: 2025
+- Venue: `World（MDPI) DICTA 2024` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.3390/world6020054` (as in the source)
+- **Publication Metadata:**
+  - Status: pending your decision (the source says Under submission, which conflicts with other data; see the questions)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2673-4060`
+  - Volume: leave blank
+  - Starting page: pending — the pages are identical to record 14; confirm first (source: `553`)
+  - Ending page: pending — the pages are identical to record 14; confirm first (source: `567`)
+  - Publication month: `4`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **LAB_ONLY until resolved** — The source says 投稿中 (under submission) yet gives a DOI; its true status is not established by the source.
 - Note: Acceptance-date cell is a blank template (年　月　日).
 
 **Questions you must answer before entry:**
@@ -459,12 +604,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `投稿中` = 投稿中 (under submission)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (86 of 500 characters) (pending your answers): `International Conference on Electrical, Computer and Energy Technologies (ICECET 2025)`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **LAB_ONLY until resolved** — The source says 投稿中 (under submission) with an acceptance date; no year is given.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `International Conference on Electrical, Computer and Energy Technologies (ICECET 2025)` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: pending your decision (the source says Under submission, which conflicts with other data; see the questions)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: leave blank
+  - Date of acceptance: `2025-04-04` (source: `2025年04　月04　日`)
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **LAB_ONLY until resolved** — The source says 投稿中 (under submission) with an acceptance date; no year is given.
 - Note: Year and month cells are empty; no DOI.
 
 **Questions you must answer before entry:**
@@ -492,12 +648,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1109/DICTA63115.2024.00086`
 - Status (状況): blank (not stated)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (85 of 500 characters): `Digital Image Computing: Techniques & Applications DICTA 2024, pp. 553–567, Oct. 2024`
-- DOI link box: `https://doi.org/10.1109/DICTA63115.2024.00086` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **LAB_ONLY until you confirm it is published** — The status cell is blank, so the source does not say whether it is published.
+- Year: 2024
+- Venue: `Digital Image Computing: Techniques & Applications DICTA 2024`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1109/DICTA63115.2024.00086` (as in the source)
+- **Publication Metadata:**
+  - Status: Not stated (the source is blank)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `979-8-3503-7903-7`
+  - Volume: leave blank
+  - Starting page: pending — the pages are identical to record 12; confirm first (source: `553`)
+  - Ending page: pending — the pages are identical to record 12; confirm first (source: `567`)
+  - Publication month: `10`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **LAB_ONLY until you confirm it is published** — The status cell is blank, so the source does not say whether it is published.
 
 **Questions you must answer before entry:**
 
@@ -523,12 +690,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.1145/3765907`
 - Status (状況): blank (not stated)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (87 of 500 characters): `ACM Transactions on Design Automation of Electronic Systems, 31(4), pp. 1–21, Mar. 2026`
-- DOI link box: `https://doi.org/10.1145/3765907` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **keep the existing entry's visibility; if you add it, UNDECIDED (status is blank)** — The status cell is blank, so the source does not say whether it is published.
+- Year: 2026
+- Venue: `ACM Transactions on Design Automation of Electronic Systems,`  (the source value ends with a comma; typed as in the source)
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.1145/3765907` (as in the source)
+- **Publication Metadata:**
+  - Status: Not stated (the source is blank)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `1084-4309`
+  - Volume: `31(4)`
+  - Starting page: `1`
+  - Ending page: `21`
+  - Publication month: `3`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **keep the existing entry's visibility; if you add it, UNDECIDED (status is blank)** — The status cell is blank, so the source does not say whether it is published.
 - Note: Same DOI as a starter-data record; whether the LIVE site has it is unknown.
 
 **Questions you must answer before entry:**
@@ -554,12 +732,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `https://doi.org/10.12792/iciae2026.012`
 - Status (状況): blank (not stated)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (77 of 500 characters) (pending your answers): `14th IIAE International Conference on Industrial Application Engineering 2026`
-- DOI link box: `https://doi.org/10.12792/iciae2026.012` (as in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED until the status and year are known** — The status cell is blank and there is no year.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `14th IIAE International Conference on Industrial Application Engineering 2026` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.12792/iciae2026.012` (as in the source)
+- **Publication Metadata:**
+  - Status: Not stated (the source is blank)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: leave blank
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED until the status and year are known** — The status cell is blank and there is no year.
 - Note: Year and month cells are empty; status blank; no pages.
 
 **Questions you must answer before entry:**
@@ -586,12 +775,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `受理` = 受理 (accepted)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (106 of 500 characters) (pending your answers): `2026 IEEE International Conference on Signal Processing, Information, Communication and Systems (SPICSCON)`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED (accepted, not published)** — The source marks it 受理 (accepted), not published; it has no publication year.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `2026 IEEE International Conference on Signal Processing, Information, Communication and Systems (SPICSCON)` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: Accepted (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: leave blank
+  - Date of acceptance: `2026-07-29` (source: `2026-07-29`)
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED (accepted, not published)** — The source marks it 受理 (accepted), not published; it has no publication year.
 - Note: No DOI, no pages.
 
 **Questions you must answer before entry:**
@@ -617,12 +817,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `受理` = 受理 (accepted)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (86 of 500 characters) (pending your answers): `2026 IEEE International Conference on Future Machine Learning And Data Science (FMLDS)`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED (accepted, not published)** — The source marks it 受理 (accepted), not published; it has no publication year.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `2026 IEEE International Conference on Future Machine Learning And Data Science (FMLDS)` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: Accepted (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: leave blank
+  - Date of acceptance: `2026-07-15` (source: `2026-07-15`)
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED (accepted, not published)** — The source marks it 受理 (accepted), not published; it has no publication year.
 - Note: No DOI, no pages.
 
 **Questions you must answer before entry:**
@@ -648,12 +859,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `受理` = 受理 (accepted)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (86 of 500 characters) (pending your answers): `2026 IEEE International Conference on Future Machine Learning And Data Science (FMLDS)`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED (accepted, not published)** — The source marks it 受理 (accepted), not published; it has no publication year.
+- Year: UNKNOWN — the form requires a year (see the questions)
+- Venue: `2026 IEEE International Conference on Future Machine Learning And Data Science (FMLDS)` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: Accepted (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: leave blank
+  - Date of acceptance: `2026-07-15` (source: `2026-07-15`)
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED (accepted, not published)** — The source marks it 受理 (accepted), not published; it has no publication year.
 - Note: No DOI, no pages.
 
 **Questions you must answer before entry:**
@@ -679,12 +901,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `10.3390/world7020021`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (43 of 500 characters) (pending your answers): `World（MDPI) DICTA 2024, 7(2), 21, Jan. 2026`
-- DOI link box: `https://doi.org/10.3390/world7020021` (the source has no `https://doi.org/` prefix; added)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **UNDECIDED until the venue is confirmed** — The source marks it 出版 (published), but the venue text looks unreliable.
+- Year: 2026
+- Venue: `World（MDPI) DICTA 2024` — *pending your answers*
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.3390/world7020021` (the source has no `https://doi.org/` prefix; only the prefix is added)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2673-4060`
+  - Volume: `7(2), 21`
+  - Starting page: leave blank
+  - Ending page: leave blank
+  - Publication month: `1`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **UNDECIDED until the venue is confirmed** — The source marks it 出版 (published), but the venue text looks unreliable.
 - Note: The DOI is written without `https://doi.org/` in the source.
 
 **Questions you must answer before entry:**
@@ -710,17 +943,28 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `10.3390/signals7030053`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (38 of 500 characters): `Signals, 7(3), 53, pp. 1–27, Jun. 2026`
-- DOI link box: `https://doi.org/10.3390/signals7030053` (the source has no `https://doi.org/` prefix; added)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **keep the existing entry's visibility; if you add it, PUBLIC after confirming on the publisher's page** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Year: 2026
+- Venue: `Signals`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.3390/signals7030053` (the source has no `https://doi.org/` prefix; only the prefix is added)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2624-6120`
+  - Volume: `7(3), 53`
+  - Starting page: `1`
+  - Ending page: `27`
+  - Publication month: `6`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **keep the existing entry's visibility; if you add it, PUBLIC after confirming on the publisher's page** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
 - Note: Same DOI, title and authors as a starter-data record; whether the LIVE site has it is unknown. The DOI is written without `https://doi.org/` in the source.
 
 **Questions you must answer before entry:**
 
-- [ ] Search the live site for this paper. If it exists, skip it, or edit its venue text to add the volume/pages.
+- [ ] Search the live site for this paper. If it exists, skip it, or edit it and fill in its Publication Metadata boxes (volume, pages, month, list number, category, status).
 
 ### Record 22 — READY
 
@@ -741,12 +985,23 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: `10.3390/signals7040075`
 - Status (状況): `出版` = 出版 (published)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (38 of 500 characters): `Signals, 7(4), 75, pp. 1–17, Aug. 2026`
-- DOI link box: `https://doi.org/10.3390/signals7040075` (the source has no `https://doi.org/` prefix; added)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
+- Year: 2026
+- Venue: `Signals`
+- Title / Authors: exactly as in the source values above
+- DOI URL: `https://doi.org/10.3390/signals7040075` (the source has no `https://doi.org/` prefix; only the prefix is added)
+- **Publication Metadata:**
+  - Status: Published (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: `2624-6120`
+  - Volume: `7(4), 75`
+  - Starting page: `1`
+  - Ending page: `17`
+  - Publication month: `8`
+  - Date of acceptance: leave blank
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **PUBLIC** — The source marks it 出版 (published). That is the spreadsheet's statement, not independent verification; confirm on the publisher's page, and choose LAB_ONLY if you are unsure.
 - Note: The DOI is written without `https://doi.org/` in the source.
 
 **Questions you must answer before entry:**
@@ -772,20 +1027,37 @@ Suggested order: enter the READY records first; resolve the questions for the ot
 - DOI / URL: none in the source
 - Status (状況): `受理` = 受理 (accepted)
 
-**Suggested for the form (formatting only):**
+**Enter into the form (same values, re-formatted only where a box needs it):**
 
-- Venue text (107 of 500 characters): `2026 IEEE International Conference on Future Machine Learning And Data Science (FMLDS), pp. 1–17, Aug. 2026`
-- DOI link box: leave empty (no DOI in the source)
-- PDF link, extra link, Japanese title/venue: leave empty (not in the source)
-- Recommended visibility: **LAB_ONLY (accepted, not yet published)** — The source marks it 受理 (accepted), not published.
+- Year: 2026
+- Venue: `2026 IEEE International Conference on Future Machine Learning And Data Science (FMLDS)`
+- Title / Authors: exactly as in the source values above
+- DOI URL: leave empty (no DOI in the source)
+- **Publication Metadata:**
+  - Status: Accepted (as stated in the spreadsheet)
+  - Paper category: `REGULAR PAPER`
+  - Journal list number: leave blank
+  - Volume: leave blank
+  - Starting page: `1`
+  - Ending page: `17`
+  - Publication month: `8`
+  - Date of acceptance: `2026-07-15` (source: `15-Jul-26`)
+- PDF URL, extra link, Japanese title/venue: leave empty (not in the source)
+- Visibility: **LAB_ONLY (accepted, not yet published)** — The source marks it 受理 (accepted), not published.
 - Note: No DOI. The acceptance date cell is `15-Jul-26`. The year (2026) and month (8) cells are filled.
 
 **Questions you must answer before entry:**
 
-- [ ] Do you want the site to say it is accepted? If so, add `(accepted)` to the venue text; the form has no status field.
+- [ ] Confirm Status = Accepted (the source says 受理, acceptance date 2026-07-15). Note the Year (2026) and Publication month (8) are the source's stated values for this accepted, not-yet-published paper; confirm you want them shown.
+
+## Cosmetic oddities in the source author lists (typed as-is unless you decide to tidy them)
+
+- Records 2 and 4: `Riaz-ul-haque Mian 1,Michihiro ShintanI , and ...` has a stray `1` and a capital `I` in `ShintanI`.
+- Record 9: `Riaz-ul-haque Mian  *,...`; record 10: `M S Osmani1, R H Main, ...`; record 16: the list ends with a comma.
+These are source values; correct them only if you know the intended text.
 
 ## After entering
 
-1. Open each new entry and check the DOI link opens the right paper, the author order is as above, and the year is right.
+1. Open each new entry and check the DOI link opens the right paper, the author order is as above, the year is right, and the Publication details list shows exactly the values you typed (blank boxes show nothing).
 2. View the Publications page signed out: only PUBLIC entries should appear.
 3. Tick off the records here as you go.

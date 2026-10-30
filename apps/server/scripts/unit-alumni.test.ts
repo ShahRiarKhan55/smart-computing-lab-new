@@ -56,7 +56,7 @@ const migDir = path.join(SERVER, "prisma", "migrations");
 const names = readdirSync(migDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 const MIG = "20261020120000_team_member_is_published";
 // Phase 3C added one later, separately reviewed migration; the state "before this migration" is every migration that sorts earlier.
-t("the migration directory exists and only the Phase 3C research-links migration follows it", names.includes(MIG) && names.slice(names.indexOf(MIG) + 1).join(",") === "20261027120000_team_member_research_links");
+t("the migration directory exists and only the Phase 3C research-links and the publication-metadata migrations follow it", names.includes(MIG) && names.slice(names.indexOf(MIG) + 1).join(",") === "20261027120000_team_member_research_links,20261030120000_publication_metadata_fields");
 const migSql = readFileSync(path.join(migDir, MIG, "migration.sql"), "utf8");
 const statements = migSql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").split(";").map((s) => s.trim()).filter(Boolean);
 t("the migration is ONE plain ALTER TABLE ADD COLUMN (no DROP, no table copy, no data rewrite)", statements.length === 1 && /^ALTER TABLE "TeamMember" ADD COLUMN "isPublished" BOOLEAN NOT NULL DEFAULT true$/.test(statements[0]) && !/\b(DROP|INSERT|UPDATE|DELETE|CREATE|PRAGMA)\b/i.test(statements[0]));

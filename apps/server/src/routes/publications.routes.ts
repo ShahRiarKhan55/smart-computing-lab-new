@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import {
   canChangeVisibility,
   canDeleteContent,
+  pageRangeProblem,
   createPublicationSchema,
   publicationListQuerySchema,
   updatePublicationSchema,
@@ -32,7 +33,7 @@ import { guardPublication, lockForDuplicateCheck, overrideDetails } from "../lib
 
 const router = Router();
 
-const AUDITED_FIELDS = ["year", "title", "authors", "venue", "pdfUrl", "doiUrl", "extraUrl", "extraLabel", "visibility"] as const;
+const AUDITED_FIELDS = ["year", "title", "authors", "venue", "pdfUrl", "doiUrl", "extraUrl", "extraLabel", "status", "listNumber", "category", "volume", "startPage", "endPage", "month", "acceptedDate", "visibility"] as const;
 
 /** Field NAMES whose Japanese override differs between two snapshots (never the text: audit convention). */
 async function auditTranslationChange(
@@ -236,6 +237,9 @@ router.put(
       if (touchesCompared) await lockForDuplicateCheck(tx, "publication");
       const existing = await tx.publication.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new HttpError(404, "Not found");
+      // A page range is checked against the STORED page when the request changes only one end of it.
+      const rangeProblem = pageRangeProblem(fields.startPage ?? existing.startPage, fields.endPage ?? existing.endPage);
+      if (rangeProblem) throw new HttpError(400, rangeProblem);
       // Only an edit that changes the title, year or DOI is compared; the record itself is excluded, and an existing duplicate never
       // blocks an unrelated edit.
       const overridden = touchesCompared

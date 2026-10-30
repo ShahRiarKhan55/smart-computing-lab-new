@@ -59,3 +59,13 @@ export function formatBytes(bytes: number, locale: Locale): string {
 export function formatDate(iso: string, locale: Locale): string {
   return new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric" });
 }
+
+/** "Jul 29, 2026" from a "YYYY-MM-DD" date. Read and shown as UTC so the day never shifts with the viewer's time zone. */
+export function formatCalendarDate(iso: string, locale: Locale): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+/** "Mar 2026" from a year and a 1-12 month (no time-zone shift). */
+export function formatYearMonth(year: number, month: number, locale: Locale): string {
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(INTL_LOCALE[locale], { month: "short", year: "numeric", timeZone: "UTC" });
+}
