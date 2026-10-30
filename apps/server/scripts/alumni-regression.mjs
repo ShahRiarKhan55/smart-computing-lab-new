@@ -152,7 +152,7 @@ async function main() {
 
     // ---- sitemap, translations, admin browser ----------------------------------------------------------------------------------
     const sm = await guest.req("GET", "/sitemap.xml", undefined, true);
-    t("sitemap lists published members but not unpublished alumni", sm.status === 200 && sm.text.includes(`/team/${X}`) && !sm.text.includes(A) && !sm.text.includes(B) && sm.text.includes("/alumni"));
+    t("sitemap lists published members, not unpublished alumni, and no separate /alumni page", sm.status === 200 && sm.text.includes(`/team/${X}`) && !sm.text.includes(A) && !sm.text.includes(B) && !sm.text.includes("/alumni"));
     t("translations endpoint: member gets 404 for an unpublished profile", (await member.get(`/api/translations/TEAM_MEMBER/${A}`)).status === 404);
     t("translations endpoint: manager gets 404 for an unpublished profile", (await mgr.get(`/api/translations/TEAM_MEMBER/${A}`)).status === 404);
     t("translations endpoint: admin can read it", (await admin.get(`/api/translations/TEAM_MEMBER/${A}`)).status === 200);
