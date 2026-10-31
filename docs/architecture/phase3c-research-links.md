@@ -60,13 +60,13 @@ of about 10:1. The own-profile page and the admin modal have a "Research profile
 kept on an error, and on an edit a link is sent only if the form changed it.
 
 ### Icons
-Neutral text marks (`GS`, `RG`, `iD`) are used, not logos. ORCID's brand guidelines limit the iD icon and logos to ORCID members and service providers and require
-unaltered use; nothing in them addresses an icon-only link, and for Google Scholar and ResearchGate no licence for these marks was obtained or could be verified. The
-component is the single place to change if permission is obtained later.
+**Update:** the links now show each service's own mark instead of the neutral text marks (`GS`, `RG`, `iD`) used when this phase shipped: `apps/web/src/components/BrandIcons.tsx` holds the three single-colour logos as inline SVG (paths from Simple Icons v13.21.0, whose files are CC0-1.0; no icon package was added), painted in the brand colours by `.research-link--<service>` in `styles/components.css` (Google Scholar `#4285F4`, ResearchGate `#00CCBB`, ORCID `#A6CE39`). The SVGs are decorative (`aria-hidden`, not focusable); the link keeps its `aria-label` and `title`.
+
+**Brand-use caveat (unchanged from the original decision):** the marks remain trademarks of Google LLC, ResearchGate GmbH and ORCID, Inc. ORCID's brand guidelines limit the iD icon and logos to ORCID members and service providers and require unaltered use; no licence for the Google Scholar or ResearchGate marks was obtained or could be verified. The logos were adopted at the site owner's request, so confirm that this use is acceptable to you. `ResearchLinks.tsx` and `BrandIcons.tsx` are the only places to change if it is not.
 
 ## Tests
 `unit-research-links.test.ts` (validators, http/https normalisation, host evidence and schemas, 351 checks), `research-links-regression.ts` (HTTP: create/edit/self-edit, authorisation, publication,
-corrupted-value read defence, 60 checks), `research-links-ui.mjs` (Chromium: forms, links, cards, EN/JA, keyboard, size/contrast, alumni, 37 checks), and the migration
+corrupted-value read defence, 60 checks), `research-links-ui.mjs` (Chromium: forms, links, cards, EN/JA, keyboard, size, brand logos, alumni, 39 checks), and the migration
 checks in `unit-turso-migrate.test.ts`.
 
 ## Limitations
