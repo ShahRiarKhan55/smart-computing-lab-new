@@ -1871,8 +1871,9 @@ button.notification-item--plain {
 }
 
 /* ------------------------------------------------------------
-   Research profile links (Phase 3C): circular, neutral text marks (GS / RG / iD), no third-party logos.
-   44px square meets the touch-target minimum; the focus ring comes from the global :focus-visible rule.
+   Research profile links (Phase 3C): circular links showing each service's own mark (components/BrandIcons.tsx), painted in its brand colour.
+   44px square meets the touch-target minimum; the focus ring comes from the global :focus-visible rule. The border uses --border-strong
+   (>= 3:1 on the surface) so the control is identifiable even where a pale logo colour (ResearchGate) is used.
    ------------------------------------------------------------ */
 .research-links {
   display: flex;
@@ -1885,28 +1886,43 @@ button.notification-item--plain {
 }
 
 .research-link {
+  --brand: var(--green-800);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 44px;
   height: 44px;
   box-sizing: border-box;
-  font-family: var(--font-heading);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
   text-decoration: none;
-  color: var(--green-800);
-  background: var(--green-50);
-  border: 1px solid var(--green-600);
+  color: var(--brand);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 50%;
+  transition: background var(--dur-base), border-color var(--dur-base), box-shadow var(--dur-base);
+}
+
+.research-link svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+/* Official brand colours: Google Scholar blue, ResearchGate teal, ORCID green. */
+.research-link--googleScholar {
+  --brand: #4285f4;
+}
+.research-link--researchGate {
+  --brand: #00ccbb;
+}
+.research-link--orcid {
+  --brand: #a6ce39;
 }
 
 .research-link:hover {
-  color: #fff;
-  background: var(--green-800);
-  border-color: var(--green-800);
+  background: var(--surface-alt);
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+  border-color: var(--brand);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 .team-card .research-links {
