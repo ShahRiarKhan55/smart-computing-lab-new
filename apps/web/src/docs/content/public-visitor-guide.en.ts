@@ -19,11 +19,13 @@ export const html = `<h1>Public Visitor Guide</h1>
 <h2>Projects</h2>
 <p><code>/projects</code> lists concrete research projects, each showing its status (planned, active, completed, or archived) and the research group running it. A project&#39;s own page (<code>/projects/:id</code>) lists its members, the research areas and publications it is linked to, and any public events tied to it.</p>
 <h2>Team</h2>
-<p><code>/team</code> is the researcher roster: faculty, PhD/MSc/BSc researchers and other categories, each with a photo (or initials), role and department. Click a name (<code>/team/:id</code>) for that researcher&#39;s public profile — bio, history, and the publications, news, projects, groups and events they&#39;re connected to, all filtered to what is public.</p>
+<p><code>/team</code> (&quot;Our Team&quot;) is the lab&#39;s people page. Its sections appear in this order, each with a count: <strong>Faculty</strong>, <strong>PhD Students</strong>, <strong>MSc Students</strong>, <strong>BSc Students</strong>, <strong>Research Students</strong> and, last, <strong>Alumni</strong>. Every section uses the same profile card: a photo (or initials), name, role, department and any research profile links. Click a name (<code>/team/:id</code>) for that person&#39;s public profile — bio, history, and the publications, news, projects, groups and events they&#39;re connected to, all filtered to what is public.</p>
+<h3>Alumni</h3>
+<p><strong>Alumni</strong> — former members who have agreed to be listed — is the final section of the Team page, directly after Research Students. There is no separate Alumni page or menu item. The old <code>/alumni</code> address simply takes you to the Alumni section of the Team page (<code>/team#alumni</code>). A person appears there only after a lab administrator has published their profile, so if no alumni have been published yet, the Alumni section is not shown at all. No login is needed to see published alumni.</p>
 <h2>Groups</h2>
 <p><code>/groups</code> lists the lab&#39;s research groups; each group&#39;s page (<code>/groups/:id</code>) shows its description and its public projects and members.</p>
 <h2>Publications</h2>
-<p><code>/publications</code> is a filterable, sortable list of the lab&#39;s papers (by year, with search). Each publication&#39;s page (<code>/publications/:id</code>) shows its full author list (linking to team profiles where available), venue, year, and any available links (PDF, DOI).</p>
+<p><code>/publications</code> is a filterable, sortable list of the lab&#39;s papers (by year, with search). Each publication&#39;s page (<code>/publications/:id</code>) shows its full author list (linking to team profiles where available), venue, year, and any available links (PDF, DOI). Where the lab has recorded them, a <strong>Publication details</strong> list also shows the status (Published, Accepted or Under submission), paper category, journal list number, volume, pages, publication month and date of acceptance; anything that is not stated is simply not shown. A paper that is only accepted or under submission is not presented as published.</p>
 <h2>News</h2>
 <p><code>/news</code> lists lab announcements and updates — awards, accepted papers, open positions and similar — newest first, each optionally linked to the project it&#39;s about.</p>
 <h2>Events</h2>
@@ -39,7 +41,32 @@ export const html = `<h1>Public Visitor Guide</h1>
 <h2>Search</h2>
 <p><code>/search</code> searches across the site&#39;s public content — projects, publications, team members, news, research areas and more — in one place.</p>
 <h2>Contact</h2>
-<p><code>/contact</code> gives ways to reach the lab.</p>
+<p><code>/contact</code> shows the lab&#39;s location (Interdisciplinary Faculty of Science and Engineering, Matsue Campus, Shimane University), email address, office hours and the university website. <strong>The message form on that page is not connected to an email service — nothing you type into it is sent.</strong> Write to the email address shown on the page instead.</p>
+<h2>What you can and cannot do without an account</h2>
+<table>
+<thead>
+<tr>
+<th>You can (no login)</th>
+<th>You cannot</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Browse the home page, research areas, projects, groups, team and published alumni, publications, news, events, gallery, knowledge, resources and public forum categories</td>
+<td>See anything marked lab-only</td>
+</tr>
+<tr>
+<td>Search public content and switch between English and Japanese</td>
+<td>Post, comment or react in the forum</td>
+</tr>
+<tr>
+<td>Read the Quick Start, Public Visitor and Researcher Onboarding guides under <strong>Help &amp; Documentation</strong> (<code>/docs</code>)</td>
+<td>Create or edit any content, message members, or see unpublished alumni</td>
+</tr>
+<tr>
+<td>Open an invitation link you were sent (<code>/invite/...</code>)</td>
+<td>Register yourself — accounts are created only by an administrator</td>
+</tr>
+</tbody></table>
 <h2>Signing in</h2>
 <p>The <strong>Log in</strong> link in the header is for existing lab accounts only — see the Researcher Guide. This site does not offer public self-registration; a lab administrator creates every account (see the Administrator Guide).</p>
 <h2>Common questions</h2>

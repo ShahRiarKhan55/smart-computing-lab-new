@@ -81,12 +81,14 @@ bcryptによるパスワードハッシュ化（コスト係数10）。存在し
 npm run build                        # shared -> server -> web の順にビルド
 npm run dev                          # server（tsx watch）と web（vite）を並行起動
 npm run migrate -w apps/server       # prisma migrate dev（ローカル用）
-npm run migrate:deploy -w apps/server # 既存のマイグレーションをローカルDBに適用（CIが使用）
-npm run migrate:turso -w apps/server  # Tursoマイグレーション実行ツール：--applyを付けない限り検査のみ（デプロイの節を参照）
-npm run seed -w apps/server          # ローカル開発専用：既定の管理者アカウント（認証情報は prisma/seed.ts に固定）とサンプルコンテンツを、未作成の場合のみ作成。本番に対して実行してはいけません
+npm run migrate:deploy -w apps/server # ローカルDBにマイグレーション適用（CI）
+npm run migrate:turso -w apps/server  # Turso実行ツール（既定は検査のみ）
+npm run seed -w apps/server          # ローカル専用：既定の管理者とサンプル
 npm run test:unit -w apps/server     # サーバー・DBを起動しない純粋な単体テスト
 npm run test:invitations -w apps/server   # 使い捨てのDBコピーに対して実サーバーを起動してテスト
 ```
+
+シードは、認証情報が `apps/server/prisma/seed.ts` に固定された既定の管理者アカウントを作成し、未作成の場合はサンプルコンテンツを追加します。ローカル開発専用であり、本番に対して実行してはいけません。`migrate:turso` については下の「デプロイ」で説明します。
 
 `apps/server/package.json` の `test:*` スクリプトの多くは同じパターンに従います：`dev.db` を使い捨ての一時ファイルにコピーし、そのコピーに対して実サーバーを起動し、実際のHTTP経由で操作し、終了後にコピーを破棄します。**同じターミナルで本番のTursoに対する作業も行っている場合は、これらをローカルで実行する前に、必ずご自身のシェルで `TURSO_DATABASE_URL`／`TURSO_AUTH_TOKEN` を明示的にクリアしてください。** これらのスクリプトの一部は、起動するサーバーの環境変数に `...process.env` を展開する際、この2つの変数を先にクリアしていないため、Tursoの認証情報が環境に残っていると、「ローカル」のはずのテストサーバーが実際の本番データベースに読み取り接続されてしまいます（書き込みは失敗したトランザクション内でロールバックされますが、スクリプトの意図とは異なる動作になるため、明示的にクリアしておくのが安全です）。
 

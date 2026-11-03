@@ -7,12 +7,15 @@ export const html = `<h1>Researcher / Lab Member Guide</h1>
 <p>If your invitation link has expired or was already used, ask your administrator for a new one — your old link cannot be reused or extended.</p>
 <h2>Logging in and out</h2>
 <p>Use <strong>Log in</strong> in the header (<code>/login</code>) with your email and password. <strong>Log out</strong> is in the Account menu once you&#39;re signed in. Sessions last about a week of inactivity; logging in again is always safe.</p>
+<p>If the lab has switched on Google sign-in, the login page also offers it, but only for an account you have already linked: open <strong>My Profile</strong> while signed in with your password and connect your Google account there. Google can never create an account for you.</p>
 <h2>Changing your password</h2>
-<p>On your <strong>Profile</strong> page (<code>/profile</code>), the <strong>Password</strong> section lets you change your own password at any time: enter your current password and your new one. This never involves the administrator — only you can change your own password this way, and only by first proving you know the current one. There is currently no self-service &quot;forgot password&quot; flow if you&#39;re logged out and don&#39;t remember your password — ask your administrator, who can deactivate the old account and send a fresh invitation.</p>
+<p>On your <strong>Profile</strong> page (<code>/profile</code>), the <strong>Password</strong> section lets you change your own password at any time: enter your current password and your new one. This never involves the administrator — only you can change your own password this way, and only by first proving you know the current one. There is currently no self-service &quot;forgot password&quot; flow if you&#39;re logged out and don&#39;t remember your password — ask your administrator, who can delete the old account and send a fresh invitation (your team profile and the content you created are kept).</p>
 <h2>Your profile</h2>
 <p><code>/profile</code> shows your own team profile (if one is linked to your account — ask your admin if you don&#39;t have one yet) with an edit form for:</p>
 <ul>
-<li>Full name, initials, role/title, department, short bio, photo URL</li>
+<li>Full name, initials, role/title, department, short bio</li>
+<li>A photo: upload an image (JPEG, PNG, WebP or GIF, up to 5 MB; photo metadata is removed automatically) or paste an external photo URL</li>
+<li>Links to your Google Scholar, ResearchGate and ORCID profiles (all optional)</li>
 </ul>
 <p><strong>Category</strong> (e.g. Faculty/PhD/MSc/BSc/Research) and your position in listings are set by a manager or admin, not by you — this keeps the roster&#39;s organization consistent. Your public profile (<code>/team/:id</code>) is visible to everyone, including guests, except for anything your profile links to that is itself marked lab-only.</p>
 <h2>What you can edit vs. what needs an administrator</h2>
@@ -32,12 +35,20 @@ export const html = `<h1>Researcher / Lab Member Guide</h1>
 <td>Create or delete accounts</td>
 </tr>
 <tr>
-<td>Create publications, news, research areas</td>
-<td>Delete most content, or change its visibility (public/lab-only)</td>
+<td>Create or edit publications, news, research areas</td>
+<td>Delete them, or change visibility (public/lab-only), or confirm a duplicate warning</td>
 </tr>
 <tr>
-<td>Create events, knowledge documents, lab resources, gallery items you own, and edit/delete your own</td>
+<td>Create events, knowledge documents, lab resources and gallery items, and edit/delete your own</td>
 <td>Edit or delete another member&#39;s owned content</td>
+</tr>
+<tr>
+<td>Edit a project or group only if you are its lead</td>
+<td>Create projects or groups, change their settings, or edit other people&#39;s profiles</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Add, edit or publish <strong>alumni</strong> profiles (administrators only)</td>
 </tr>
 <tr>
 <td>Post, comment and react in the forum</td>
@@ -51,7 +62,7 @@ export const html = `<h1>Researcher / Lab Member Guide</h1>
 <p>A <strong>lab manager</strong> has all of the above plus broader content management (visibility, deletion, project/group settings, moderation, the admin dashboard) — but never account/role management, which stays admin-only.</p>
 <h2>Research &amp; collaboration</h2>
 <ul>
-<li><strong>Projects &amp; Groups</strong> (<code>/projects</code>, <code>/groups</code>): any member can create a new project or group; a project or group <strong>lead</strong> can manage its own membership.</li>
+<li><strong>Projects &amp; Groups</strong> (<code>/projects</code>, <code>/groups</code>): a lab manager or administrator creates them; a project or group <strong>lead</strong> can edit it and manage its own membership.</li>
 <li><strong>Workspace</strong> (<code>/workspace</code>, signed-in only): a personal view of the projects, groups and research areas you&#39;re connected to.</li>
 <li><strong>Publications, News, Research Areas</strong>: any signed-in member can add one.</li>
 <li><strong>Knowledge</strong> (<code>/knowledge</code>): add documentation; edit or delete your own, or anything once you&#39;re a manager.</li>
@@ -59,7 +70,10 @@ export const html = `<h1>Researcher / Lab Member Guide</h1>
 <li><strong>Events</strong> (<code>/events</code>): create events; edit/delete your own.</li>
 <li><strong>Gallery</strong> (<code>/gallery</code>): add photos; edit/delete your own.</li>
 </ul>
-<p>New content you create defaults to <strong>lab-only</strong> visibility (visible to signed-in members, not to guests) unless a manager publishes it — this is deliberate: nothing you post is public by accident.</p>
+<p><strong>Check visibility before you save.</strong> Publications, news items and research areas are <strong>public immediately</strong> (visible to guests); you cannot choose a different visibility, but a manager can change it afterwards. Events, knowledge documents, lab resources and gallery items start <strong>lab-only</strong> (visible to signed-in members only) until a manager or administrator publishes them.</p>
+<p><strong>Duplicates.</strong> When you add a publication, news item or research area that already exists (same DOI, or the same title and year), the site stops you with a duplicate warning. Search for the existing record and edit it instead. Only a manager or administrator can confirm that a near-duplicate is genuinely different; an identical DOI is always refused.</p>
+<p><strong>Publications.</strong> The Add/Edit Publication form has an optional <strong>Publication Metadata</strong> section (Status, Paper category, Journal list number, Volume, Starting page, Ending page, Publication month, Date of acceptance). Leave a box blank when the paper does not state it; blank values are not shown. Details: the Administrator Guide.</p>
+<p><strong>Schedule.</strong> Signed-in members also see <strong>Schedule</strong> in the header (<code>/schedule</code>), the lab&#39;s shared calendar.</p>
 <h2>Community</h2>
 <ul>
 <li><strong>Forum</strong> (<code>/community/forum</code>): post topics, comment, and react in any category you can see. Editing your own post or comment is always available while it&#39;s yours; a manager may hide, lock, pin, move or delete content as part of moderation.</li>
@@ -75,7 +89,8 @@ export const html = `<h1>Researcher / Lab Member Guide</h1>
 <h2>Common problems</h2>
 <ul>
 <li><strong>&quot;No team profile is linked to your account yet.&quot;</strong> Your login exists but isn&#39;t connected to a researcher profile — ask your administrator to link or create one.</li>
-<li><strong>A page says Forbidden (403).</strong> You&#39;re logged in, but the action needs manager or admin permission.</li>
+<li><strong>A page says Forbidden (403).</strong> You&#39;re logged in, but the action needs manager or admin permission (for example creating a project, or anything about alumni).</li>
+<li><strong>&quot;Duplicate&quot; warning when saving a publication.</strong> It already exists; search for it and edit that record.</li>
 <li><strong>My invitation link doesn&#39;t work.</strong> It has either already been used or has expired (7 days) — ask your administrator for a new one.</li>
 </ul>
 <p><strong>Related documentation:</strong> Quick Start Guide · Researcher Onboarding Guide · Public Visitor Guide</p>

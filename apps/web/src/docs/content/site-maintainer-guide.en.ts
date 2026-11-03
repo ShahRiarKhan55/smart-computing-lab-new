@@ -2,7 +2,7 @@
 export const title = "Site Owner / Maintainer Guide";
 export const html = `<h1>Site Owner / Maintainer Guide</h1>
 <p><strong>Audience:</strong> the technical maintainer of the Smart Computing Lab website.<br><strong>Purpose:</strong> the operational knowledge needed to run, change and deploy this codebase safely.<br><strong>Prerequisites:</strong> Node.js, npm, git; familiarity with Prisma, Express and React is assumed.</p>
-<p>This guide documents the repository as it actually exists. For deep implementation history and rationale, see <code>docs/architecture/*.md</code> — this guide is the practical operating reference; those are the design record.</p>
+<p>This guide documents the repository as it actually exists. For deep implementation history and rationale, see <code>docs/architecture/*.md</code> — this guide is the practical operating reference; those are the design record. The detailed technical reference lives in <code>docs/technical/</code> (architecture, project structure, authentication and authorization, role-permission matrix, database and migrations, API reference, file storage, Windows development setup, testing, deployment, troubleshooting); start from <code>docs/README.md</code>.</p>
 <h2>Repository structure</h2>
 <p>An npm-workspaces monorepo:</p>
 <pre><code>apps/server/    Express + Prisma API (TypeScript, ESM)
@@ -55,6 +55,31 @@ docs/           This guide, the other user guides, and docs/architecture/ (imple
 <td><code>&lt;secret&gt;</code> — the app refuses to start in production without a real value</td>
 </tr>
 <tr>
+<td><code>PORT</code></td>
+<td>local</td>
+<td>API port (default 4001 locally)</td>
+</tr>
+<tr>
+<td><code>STORAGE_DIR</code></td>
+<td>local</td>
+<td>local file-storage directory; ignored when a Blob token is set</td>
+</tr>
+<tr>
+<td><code>MAX_IMAGE_BYTES</code>, <code>MAX_DOCUMENT_BYTES</code></td>
+<td>optional</td>
+<td>override the 5 MB image and 15 MB document upload limits</td>
+</tr>
+<tr>
+<td><code>GOOGLE_OAUTH_CLIENT_ID</code>, <code>GOOGLE_OAUTH_CLIENT_SECRET</code>, <code>GOOGLE_OAUTH_REDIRECT_URI</code></td>
+<td>optional</td>
+<td>Google sign-in for already-linked accounts; all three must be set and valid, otherwise it is simply not offered</td>
+</tr>
+<tr>
+<td><code>MIGRATE_TARGET_URL</code>, <code>MIGRATE_TARGET_TOKEN</code></td>
+<td>one shell session</td>
+<td>target of <code>npm run migrate:turso</code>; never stored in Vercel (see Deployment)</td>
+</tr>
+<tr>
 <td><code>TRUST_PROXY</code></td>
 <td>all</td>
 <td><code>0</code> (no reverse proxy) / <code>1</code> (exactly one trusted hop) — see Trust Proxy below</td>
@@ -70,9 +95,14 @@ docs/           This guide, the other user guides, and docs/architecture/ (imple
 <td>enables <code>/sitemap.xml</code> and gives invitation links an absolute URL; omitted in local dev</td>
 </tr>
 <tr>
+<td><code>LAB_BLOB_READ_WRITE_TOKEN</code></td>
+<td>production</td>
+<td><code>&lt;token of the PRIVATE Vercel Blob store&gt;</code> — preferred; see Storage below</td>
+</tr>
+<tr>
 <td><code>BLOB_READ_WRITE_TOKEN</code></td>
 <td>production</td>
-<td><code>&lt;provisioned automatically when Vercel Blob storage is attached&gt;</code></td>
+<td><code>&lt;provisioned automatically when Vercel Blob storage is attached&gt;</code> — fallback, used only when <code>LAB_BLOB_READ_WRITE_TOKEN</code> is unset or blank</td>
 </tr>
 </tbody></table>
 <p>Never commit real values for any secret-marked variable — see <code>apps/server/.env.example</code> for the full annotated list.</p>
@@ -82,21 +112,27 @@ docs/           This guide, the other user guides, and docs/architecture/ (imple
 <p>bcrypt password hashing (cost 10); a fixed dummy hash is compared against for an unknown email so timing can&#39;t distinguish &quot;no such account&quot; from &quot;wrong password&quot;; an in-memory, per-process login rate limiter (<code>lib/loginRateLimit.ts</code>) guards <code>/api/auth/login</code> and <code>/api/auth/password</code>. Researcher onboarding (<code>routes/invitations.routes.ts</code>) issues single-use, 7-day, SHA-256-hashed invitation tokens — the admin never sees or sets the researcher&#39;s password; see the Administrator Guide.</p>
 <p><strong>Known limitation</strong>: the login/invitation rate limiter is in-memory per process. On Vercel, each function instance has its own, so the guard&#39;s effectiveness degrades across cold starts/multiple instances — a real request still requires the correct password/token regardless.</p>
 <h2>Storage</h2>
-<p>Dual backend (<code>lib/storage.ts</code>): local filesystem in development, Vercel Blob (private access) in production, selected automatically by whether <code>BLOB_READ_WRITE_TOKEN</code> is set. Files are addressed by an opaque, server-generated <code>storageKey</code> — never a user-supplied name or path. <code>npm run storage:reconcile -w apps/server</code> finds and reports orphaned blobs/rows.</p>
+<p>Dual backend (<code>lib/storage.ts</code>): local filesystem in development, Vercel Blob (private access) in production, selected automatically by whether a Blob token is set (<code>LAB_BLOB_READ_WRITE_TOKEN</code>, else <code>BLOB_READ_WRITE_TOKEN</code>). Files are addressed by an opaque, server-generated <code>storageKey</code> — never a user-supplied name or path. <code>npm run storage:reconcile -w apps/server</code> finds and reports orphaned blobs/rows.</p>
+<p><strong>Vercel uploads need Blob.</strong> A Vercel function&#39;s filesystem is read-only (and <code>/tmp</code> is ephemeral), so it is never persistent storage. Production (and Preview) uploads therefore require the Vercel Blob backend: attach a <strong>Private</strong> Blob store to the project so a Blob token is set. Without a token, <code>POST /api/gallery</code> and <code>POST /api/files</code> return a controlled <code>503</code> (&quot;File storage is not available right now…&quot;) instead of trying to write to the local disk; the rest of the site keeps working. Setting <code>STORAGE_DIR</code> on Vercel does not make that filesystem persistent and does not bypass this guard. Outside Vercel (local development, self-hosted servers) the local-disk backend is unchanged.</p>
+<p><strong>Which token, and why a Private store.</strong> The app writes every file with <code>access: &quot;private&quot;</code> and streams it to browsers itself through <code>GET /api/files/:id</code>, which enforces Public / Lab-only visibility; the Blob URL is never sent to a client. That only works against a <strong>Private</strong> Blob store (a Public store rejects it with &quot;Cannot use private access on a public store&quot;). The token is chosen by <code>resolveBlobToken</code> in <code>lib/storage.ts</code>: <code>LAB_BLOB_READ_WRITE_TOKEN</code> (trimmed) if set and not blank, otherwise <code>BLOB_READ_WRITE_TOKEN</code>. The selected token is passed explicitly to every Blob call (put, get, head, delete), so it takes priority over Vercel&#39;s OIDC / <code>BLOB_STORE_ID</code> lookup. Use the <code>LAB_</code> variable when the project also has another (for example an older Public) store connected, because that store owns the default <code>BLOB_READ_WRITE_TOKEN</code>. Never print or log either value. Changing a variable only affects new deployments.</p>
 <h2>Build, test, seed, migrate</h2>
 <pre><code>npm run build                        # shared -&gt; server -&gt; web, in that order
 npm run dev                          # concurrent server (tsx watch) + web (vite)
 npm run migrate -w apps/server       # prisma migrate dev (local)
-npm run seed -w apps/server          # idempotent: creates the admin account + sample content if absent
+npm run migrate:deploy -w apps/server # apply migrations to a local DB (CI)
+npm run migrate:turso -w apps/server  # Turso executor, inspect-only by default
+npm run seed -w apps/server          # LOCAL ONLY: default admin + sample content
 npm run test:unit -w apps/server     # pure unit tests, no server/DB
 npm run test:invitations -w apps/server   # spawns a real server against a disposable DB copy
 </code></pre>
+<p>The seed creates a default administrator account whose credential is fixed in <code>apps/server/prisma/seed.ts</code> and adds sample content if absent. It is for local development only; never run it against production. <code>migrate:turso</code> is explained under Deployment below.</p>
 <p>Most <code>test:*</code> scripts in <code>apps/server/package.json</code> follow the same pattern: copy <code>dev.db</code> to a disposable temp file, spawn the real server against the copy, drive it over real HTTP, discard the copy. <strong>Explicitly clear <code>TURSO_DATABASE_URL</code>/<code>TURSO_AUTH_TOKEN</code> in your own shell</strong> before running any of these locally if you&#39;ve also been working against production Turso in the same terminal — several of these scripts spread <code>...process.env</code> into the spawned server&#39;s environment without clearing those two first, so an ambient Turso credential silently redirects the &quot;local&quot; test server to the real production database for reads (writes inside a failing transaction roll back, but it&#39;s still not what the script intends, and it&#39;s worth being deliberate about).</p>
 <h2>Deployment (Vercel + Turso)</h2>
 <p><code>vercel.json</code>: <code>buildCommand</code> builds <code>packages/shared</code> then <code>apps/web</code>; a <code>functions[&quot;api/index.ts&quot;]</code> block ships the Prisma native query engine binary alongside the function (<code>includeFiles</code>); rewrites send <code>/api/*</code> to the function and everything else to the built SPA. <code>api/index.ts</code> sets <code>PRISMA_QUERY_ENGINE_LIBRARY</code> explicitly (Vercel&#39;s Function runtime is Amazon Linux, not the Debian-based build container, so <code>prisma/schema.prisma</code>&#39;s <code>generator client</code> block lists <code>binaryTargets = [&quot;native&quot;, &quot;rhel-openssl-3.0.x&quot;]</code> — <code>native</code> for local/CI, <code>rhel-openssl-3.0.x</code> for the deployed function; see the extensive comments in both files for the full root-cause history).</p>
-<p><strong>Migrations are never auto-applied to production.</strong> Prisma&#39;s own <code>migrate deploy</code> does not support Turso&#39;s HTTP-based connection; production migrations are applied via an audited one-off script against the real database, run manually and deliberately — never as part of a routine deploy.</p>
+<p><strong>Migrations are never auto-applied to production.</strong> Prisma&#39;s own <code>migrate deploy</code> does not support Turso&#39;s HTTP-based connection. Production migrations are applied with the reviewed executor, <code>npm run migrate:turso -w apps/server</code>, which runs only migrations pinned by SHA-256 in <code>apps/server/src/lib/tursoMigrate.ts</code>, only additive statement forms, and refuses partial or divergent states. It inspects by default; <code>--apply</code> is a separate, explicitly authorized step with a recorded recovery point. Procedure and gates: <code>docs/architecture/turso-migration-executor.md</code>. Example release: <code>docs/architecture/publication-metadata-release.md</code>.</p>
+<p><strong>Order:</strong> back up (note a Turso recovery point) → inspect-only → apply the migration → verify → <strong>only then</strong> deploy the code that reads the new columns. Code deployed against a database missing a column fails with &quot;no such column&quot; on every page that loads that table (for example, the Publication metadata release breaks every page listing publications until its migration is applied). Merging to <code>master</code> deploys to Production automatically through the Vercel Git integration.</p>
 <h2>Rollback considerations</h2>
-<p>Vercel keeps previous deployments; redeploying an older one is the fastest rollback for application code. <strong>Database migrations are additive-only by convention in this project</strong> — nothing here has ever dropped a column or table — so rolling back application code while a newer, additive migration remains applied is safe (older code simply doesn&#39;t use the new table/columns). Rolling back a migration itself has no automated tooling here; it would be a manually-written, reviewed reverse migration, applied with the same deliberate, audited process as a forward one.</p>
+<p>Vercel keeps previous deployments; redeploying an older one is the fastest rollback for application code. <strong>Database migrations are additive-only by convention in this project</strong> — nothing here has ever dropped a column or table — so rolling back application code while a newer, additive migration remains applied is safe (older code simply doesn&#39;t use the new table/columns). Rolling back a migration itself has no automated tooling here: the executor refuses <code>DROP</code>, so treat added columns as permanent and roll back application code instead. Use Turso point-in-time recovery only for a real data incident (it also discards every later write).</p>
 <h2>Logging</h2>
 <p>Server errors are logged via <code>console.error</code> in the central error handler (<code>app.ts</code>); nothing beyond that is currently wired to an external log aggregator — stdout/stderr on whatever host runs the process (Vercel&#39;s own function logs in production).</p>
 <h2>Security configuration</h2>
@@ -109,6 +145,8 @@ npm run test:invitations -w apps/server   # spawns a real server against a dispo
 <p>Standard <code>npm outdated</code> / <code>npm update</code> workflow; <code>apps/server</code>&#39;s <code>allowScripts</code> entries in the root <code>package.json</code> are an explicit allow-list for packages with install scripts (<code>@prisma/client</code>, <code>@prisma/engines</code>, <code>esbuild</code>, <code>prisma</code>) — review before adding to it.</p>
 <h2>Browser testing</h2>
 <p><code>apps/server/scripts/browser-regression.cjs</code> drives a real headless browser over raw CDP (Chrome DevTools Protocol) — no Playwright/Puppeteer dependency; it spawns the browser binary directly. <code>BROWSER_PATH</code> selects the executable (defaults to a Windows Edge path; this container/most Linux CI sets it to a pre-installed Chromium). Supports <code>ONLY_*</code> env flags to run just one phase&#39;s section.</p>
+<h2>Local development on Windows</h2>
+<p>Step-by-step PowerShell instructions, including how to keep Turso variables out of a test shell, are in <code>docs/technical/development-setup.md</code>.</p>
 <h2>Known limitations</h2>
 <ul>
 <li>No self-service &quot;forgot password&quot; flow for a logged-out user (would require email delivery, deliberately not introduced — see the Administrator Guide&#39;s workaround: a fresh invitation).</li>

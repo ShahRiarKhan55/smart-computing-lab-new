@@ -2,7 +2,7 @@
 export const title = "サイトオーナー/運用者向けガイド";
 export const html = `<h1>サイトオーナー/運用者向けガイド</h1>
 <p><strong>対象者：</strong> Smart Computing Labウェブサイトの技術的な運用担当者<br><strong>目的：</strong> このコードベースを安全に運用・変更・デプロイするために必要な実務知識をまとめる<br><strong>前提条件：</strong> Node.js、npm、git。Prisma、Express、Reactの基礎知識があることを前提とします。</p>
-<p>本ガイドは、実際に存在するリポジトリの内容を説明するものです。実装の経緯や設計根拠については <code>docs/architecture/*.md</code> を参照してください — 本ガイドは実務上のリファレンス、<code>docs/architecture/</code> は設計の記録という位置づけです。</p>
+<p>本ガイドは、実際に存在するリポジトリの内容を説明するものです。実装の経緯や設計根拠については <code>docs/architecture/*.md</code> を参照してください — 本ガイドは実務上のリファレンス、<code>docs/architecture/</code> は設計の記録という位置づけです。 詳細な技術リファレンスは <code>docs/technical/</code>（アーキテクチャ、プロジェクト構成、認証と認可、ロール別権限表、データベースとマイグレーション、APIリファレンス、ファイルストレージ、Windowsでの開発環境構築、テスト、デプロイ、トラブルシューティング）にあります。<code>docs/README.md</code> から参照してください。</p>
 <h2>リポジトリ構成</h2>
 <p>npm workspacesによるモノレポ構成です。</p>
 <pre><code>apps/server/    Express + Prisma によるAPI（TypeScript、ESM）
@@ -55,6 +55,31 @@ docs/           本ガイド、その他のユーザーガイド、docs/architec
 <td><code>&lt;secret&gt;</code> — 本番環境では実際の値がないとアプリは起動を拒否します</td>
 </tr>
 <tr>
+<td><code>PORT</code></td>
+<td>ローカル</td>
+<td>APIのポート（ローカルの既定は4001）</td>
+</tr>
+<tr>
+<td><code>STORAGE_DIR</code></td>
+<td>ローカル</td>
+<td>ローカルのファイル保存先。Blobトークンが設定されている場合は無視されます</td>
+</tr>
+<tr>
+<td><code>MAX_IMAGE_BYTES</code>, <code>MAX_DOCUMENT_BYTES</code></td>
+<td>任意</td>
+<td>画像5 MB・文書15 MBというアップロード上限の上書き</td>
+</tr>
+<tr>
+<td><code>GOOGLE_OAUTH_CLIENT_ID</code>, <code>GOOGLE_OAUTH_CLIENT_SECRET</code>, <code>GOOGLE_OAUTH_REDIRECT_URI</code></td>
+<td>任意</td>
+<td>リンク済みアカウント向けのGoogleログイン。3つすべてが設定され有効でない限り、提供されません</td>
+</tr>
+<tr>
+<td><code>MIGRATE_TARGET_URL</code>, <code>MIGRATE_TARGET_TOKEN</code></td>
+<td>1回のシェルセッション</td>
+<td><code>npm run migrate:turso</code> の対象。Vercelには保存しません（デプロイの節を参照）</td>
+</tr>
+<tr>
 <td><code>TRUST_PROXY</code></td>
 <td>全環境</td>
 <td><code>0</code>（リバースプロキシなし）／<code>1</code>（信頼できるホップが1つ）— 下記「Trust Proxy」を参照</td>
@@ -87,16 +112,20 @@ docs/           本ガイド、その他のユーザーガイド、docs/architec
 <pre><code>npm run build                        # shared -&gt; server -&gt; web の順にビルド
 npm run dev                          # server（tsx watch）と web（vite）を並行起動
 npm run migrate -w apps/server       # prisma migrate dev（ローカル用）
-npm run seed -w apps/server          # べき等：管理者アカウントとサンプルコンテンツを、未作成の場合のみ作成
+npm run migrate:deploy -w apps/server # ローカルDBにマイグレーション適用（CI）
+npm run migrate:turso -w apps/server  # Turso実行ツール（既定は検査のみ）
+npm run seed -w apps/server          # ローカル専用：既定の管理者とサンプル
 npm run test:unit -w apps/server     # サーバー・DBを起動しない純粋な単体テスト
 npm run test:invitations -w apps/server   # 使い捨てのDBコピーに対して実サーバーを起動してテスト
 </code></pre>
+<p>シードは、認証情報が <code>apps/server/prisma/seed.ts</code> に固定された既定の管理者アカウントを作成し、未作成の場合はサンプルコンテンツを追加します。ローカル開発専用であり、本番に対して実行してはいけません。<code>migrate:turso</code> については下の「デプロイ」で説明します。</p>
 <p><code>apps/server/package.json</code> の <code>test:*</code> スクリプトの多くは同じパターンに従います：<code>dev.db</code> を使い捨ての一時ファイルにコピーし、そのコピーに対して実サーバーを起動し、実際のHTTP経由で操作し、終了後にコピーを破棄します。<strong>同じターミナルで本番のTursoに対する作業も行っている場合は、これらをローカルで実行する前に、必ずご自身のシェルで <code>TURSO_DATABASE_URL</code>／<code>TURSO_AUTH_TOKEN</code> を明示的にクリアしてください。</strong> これらのスクリプトの一部は、起動するサーバーの環境変数に <code>...process.env</code> を展開する際、この2つの変数を先にクリアしていないため、Tursoの認証情報が環境に残っていると、「ローカル」のはずのテストサーバーが実際の本番データベースに読み取り接続されてしまいます（書き込みは失敗したトランザクション内でロールバックされますが、スクリプトの意図とは異なる動作になるため、明示的にクリアしておくのが安全です）。</p>
 <h2>デプロイ（Vercel + Turso）</h2>
 <p><code>vercel.json</code>：<code>buildCommand</code> は <code>packages/shared</code> → <code>apps/web</code> の順にビルドします。<code>functions[&quot;api/index.ts&quot;]</code> ブロックが、Prismaのネイティブクエリエンジンのバイナリを関数に同梱します（<code>includeFiles</code>）。rewritesにより <code>/api/*</code> は関数へ、それ以外はビルド済みのSPAへ転送されます。<code>api/index.ts</code> は <code>PRISMA_QUERY_ENGINE_LIBRARY</code> を明示的に設定しています（VercelのFunctionランタイムはビルドコンテナ（Debianベース）とは異なりAmazon Linuxであるため、<code>prisma/schema.prisma</code> の <code>generator client</code> ブロックには <code>binaryTargets = [&quot;native&quot;, &quot;rhel-openssl-3.0.x&quot;]</code> が指定されています。<code>native</code> はローカル／CI用、<code>rhel-openssl-3.0.x</code> はデプロイされた関数用です。詳しい経緯は両ファイルのコメントを参照してください）。</p>
-<p><strong>マイグレーションが本番環境に自動適用されることはありません。</strong> PrismaのマイグレーションコマンドはTursoのHTTPベースの接続をサポートしていないため、本番環境のマイグレーションは監査済みの一回限りのスクリプトを使って、実データベースに対して手動かつ意図的に適用します — 通常のデプロイの一部として自動実行されることは決してありません。</p>
+<p><strong>マイグレーションが本番環境に自動適用されることはありません。</strong> PrismaのマイグレーションコマンドはTursoのHTTPベースの接続をサポートしていません。本番のマイグレーションは、審査済みの実行ツール <code>npm run migrate:turso -w apps/server</code> で適用します。このツールは <code>apps/server/src/lib/tursoMigrate.ts</code> にSHA-256でピン留めされたマイグレーションだけを、追加型の文だけで実行し、一部適用や不一致の状態では実行を拒否します。既定では検査のみで、<code>--apply</code> は明示的に承認された別の手順であり、復旧ポイントを記録して実行します。手順と関門は <code>docs/architecture/turso-migration-executor.md</code>、リリース例は <code>docs/architecture/publication-metadata-release.md</code> を参照してください。</p>
+<p><strong>順序：</strong> バックアップ（Tursoの復旧ポイントを控える）→ 検査のみ → マイグレーション適用 → 確認 → <strong>その後で</strong>新しいカラムを読むコードをデプロイ。カラムのないデータベースに対してデプロイしたコードは、そのテーブルを読み込むすべてのページで「no such column」エラーになります（例：論文メタデータのリリースでは、そのマイグレーションを適用するまで論文を一覧するすべてのページが壊れます）。<code>master</code> へのマージは、VercelのGit連携により本番へ自動デプロイされます。</p>
 <h2>ロールバックに関する考慮事項</h2>
-<p>Vercelは過去のデプロイを保持しており、以前のデプロイに戻すのがアプリケーションコードの最も迅速なロールバック方法です。<strong>本プロジェクトの慣例として、データベースのマイグレーションは追加のみ</strong>です（カラムやテーブルを削除したことはこれまで一度もありません）。そのため、新しい追加型マイグレーションが適用された状態のままアプリケーションコードだけを古いバージョンに戻しても安全です（古いコードは単に新しいテーブル・カラムを使わないだけです）。マイグレーション自体を取り消すための自動化ツールはなく、必要な場合は、順方向のマイグレーションと同じ慎重かつ監査付きのプロセスで、レビュー済みの逆方向マイグレーションを手動で作成して適用します。</p>
+<p>Vercelは過去のデプロイを保持しており、以前のデプロイに戻すのがアプリケーションコードの最も迅速なロールバック方法です。<strong>本プロジェクトの慣例として、データベースのマイグレーションは追加のみ</strong>です（カラムやテーブルを削除したことはこれまで一度もありません）。そのため、新しい追加型マイグレーションが適用された状態のままアプリケーションコードだけを古いバージョンに戻しても安全です（古いコードは単に新しいテーブル・カラムを使わないだけです）。マイグレーション自体を取り消すための自動化ツールはなく、必要な場合は、順方向のマイグレーションと同じ慎重かつ監査付きのプロセスで、レビュー済みの逆方向マイグレーションを手動で作成して適用します。 なお、実行ツールは <code>DROP</code> を拒否するため、追加したカラムは恒久的なものとして扱い、アプリケーションコードをロールバックしてください。Tursoのポイントインタイムリカバリはデータインシデントのときだけ使用してください（それ以降のすべての書き込みも失われます）。</p>
 <h2>ログ</h2>
 <p>サーバーエラーは中央のエラーハンドラー（<code>app.ts</code>）で <code>console.error</code> によって記録されます。それ以外に外部のログ集約サービスへの接続は現時点ではありません — 標準出力／標準エラー出力は、プロセスを実行しているホスト（本番環境ではVercelの関数ログ）に出力されます。</p>
 <h2>セキュリティ設定</h2>
@@ -109,6 +138,8 @@ npm run test:invitations -w apps/server   # 使い捨てのDBコピーに対し�
 <p>通常の <code>npm outdated</code> / <code>npm update</code> の流れで行います。ルートの <code>package.json</code> の <code>allowScripts</code> 項目（<code>@prisma/client</code>、<code>@prisma/engines</code>、<code>esbuild</code>、<code>prisma</code>）は、インストールスクリプトを持つパッケージを明示的に許可するリストです。追加する前によく確認してください。</p>
 <h2>ブラウザテスト</h2>
 <p><code>apps/server/scripts/browser-regression.cjs</code> は、生のCDP（Chrome DevTools Protocol）経由で実際のヘッドレスブラウザを操作します — PlaywrightやPuppeteerへの依存はなく、ブラウザの実行ファイルを直接起動します。<code>BROWSER_PATH</code> で実行ファイルを指定します（デフォルトはWindowsのEdgeのパスですが、このコンテナやほとんどのLinux CIでは、あらかじめインストールされたChromiumを指すように設定されています）。<code>ONLY_*</code> 環境変数で特定フェーズのセクションのみを実行できます。</p>
+<h2>Windowsでのローカル開発</h2>
+<p>PowerShellでの手順（テスト用シェルにTursoの変数を残さない方法を含む）は <code>docs/technical/development-setup.md</code> にあります。</p>
 <h2>既知の制限事項</h2>
 <ul>
 <li>ログアウト状態のユーザー向けの自己解決型「パスワードをお忘れですか」機能はありません（メール送信が必要になるため、意図的に導入していません — 管理者ガイドの回避策（新しい招待の発行）を参照）。</li>

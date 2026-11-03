@@ -9,7 +9,7 @@ export const html = `<h1>Quick Start Guide</h1>
 <h2>3. Log in</h2>
 <p>Click <strong>Log in</strong> in the header, enter your email and password. <strong>Log out</strong> is in the Account menu once signed in.</p>
 <h2>4. Complete your profile</h2>
-<p>Once signed in, open <strong>Account → My Profile</strong> (<code>/profile</code>). Fill in your name, role/title, department, a short bio, and optionally a photo URL. This is what your public team page shows.</p>
+<p>Once signed in, open <strong>Account → My Profile</strong> (<code>/profile</code>). Fill in your name, role/title, department and a short bio. You can also upload a photo from that page (JPEG, PNG, WebP or GIF, up to 5 MB) or paste an external photo URL, and add links to your Google Scholar, ResearchGate and ORCID profiles. This is what your public team page shows.</p>
 <h2>5. Find research</h2>
 <p>Use the <strong>Research</strong> menu for Research Areas, Projects, Publications, Knowledge documents and lab Resources.</p>
 <h2>6. Find researchers</h2>
@@ -21,7 +21,7 @@ export const html = `<h1>Quick Start Guide</h1>
 <li><strong>Workspace</strong> — your own projects, groups and research areas in one place.</li>
 <li><strong>Messages</strong> / <strong>Notifications</strong> — private conversations and activity addressed to you.</li>
 <li><strong>Community → Forum</strong> — post, comment and react in categories you can see.</li>
-<li>Add publications, news, research areas, events, knowledge docs, resources and gallery items — all start as lab-only until a manager publishes them.</li>
+<li>Add publications, news, research areas, events, knowledge docs, resources and gallery items. Publications, news and research areas are <strong>public as soon as you save them</strong>; events, knowledge documents, resources and gallery items start lab-only until a manager publishes them.</li>
 </ul>
 <h2>9. Get help</h2>
 <p>See the fuller <strong>Public Visitor Guide</strong> or <strong>Researcher/Lab Member Guide</strong>, or use <strong>Contact</strong> in the header to reach the lab directly.</p>

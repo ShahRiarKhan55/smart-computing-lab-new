@@ -14,7 +14,7 @@ export const html = `<h1>Researcher Onboarding Guide</h1>
 <h2>4. Activation</h2>
 <p>Submitting creates your account and signs you in immediately — no separate login step needed right after activating.</p>
 <h2>5. Completing your profile</h2>
-<p>Go to <strong>Account → My Profile</strong> and fill in your name, role/title, department and a short bio (a photo URL is optional). This is what your public team page shows to visitors.</p>
+<p>Go to <strong>Account → My Profile</strong> and fill in your name, role/title, department and a short bio (you can also upload a photo or paste a photo URL; both are optional). This is what your public team page shows to visitors.</p>
 <h2>6. Adding research information</h2>
 <p>Once your profile exists, you can:</p>
 <ul>
@@ -33,7 +33,7 @@ export const html = `<h1>Researcher Onboarding Guide</h1>
 <ul>
 <li>Choose a password you don&#39;t reuse elsewhere.</li>
 <li>Never share it with anyone, including your lab administrator — they will never legitimately ask you for it.</li>
-<li>If you think your account may be compromised, tell your administrator — they can deactivate the account; you&#39;ll need a fresh invitation to reactivate.</li>
+<li>If you think your account may be compromised, tell your administrator — they can delete the account; you&#39;ll need a fresh invitation to regain access.</li>
 <li>There is currently no self-service &quot;forgot password&quot; option if you&#39;re logged out — contact your administrator.</li>
 </ul>
 <p><strong>Related documentation:</strong> Quick Start Guide · Researcher/Lab Member Guide</p>
